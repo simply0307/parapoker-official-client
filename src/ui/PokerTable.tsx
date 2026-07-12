@@ -218,21 +218,25 @@ function ActionControl({
 function describeEvent(event: LocalSinglePlayerSnapshot['heroView']['events'][number]): string {
   switch (event.type) {
     case 'handStarted':
-      return `Hand ${event.handId} started; button is ${event.dealerSeatId}.`
+      return `Hand ${event.handId} started; button is ${event.payload.dealerSeatId}.`
     case 'blindPosted':
-      return `${event.seatId} posted ${event.blind} blind for ${event.amount}.`
+      return `${event.payload.seatId} posted ${event.payload.blind} blind for ${event.payload.amount}.`
     case 'holeCardsDealt':
-      return `Your hole cards: ${event.cards.map(cardToString).join(' ')}.`
+      return `Your hole cards: ${event.payload.cards.map(cardToString).join(' ')}.`
     case 'actionApplied':
-      return `${event.seatId} ${event.action} ${event.amount ? `for ${event.amount}` : ''}.`
+      return `${event.payload.seatId} ${event.payload.action} ${
+        event.payload.amount ? `for ${event.payload.amount}` : ''
+      }.`
     case 'streetAdvanced':
-      return `${event.street} dealt.`
+      return `${event.payload.street} dealt.`
     case 'showdown':
-      return `Showdown: ${Object.keys(event.revealedCards).join(', ')} revealed.`
+      return `Showdown: ${Object.keys(event.payload.revealedCards).join(', ')} revealed.`
     case 'potAwarded':
-      return `Pot awarded to ${event.winners.map((winner) => `${winner.seatId} (${winner.amount})`).join(', ')}.`
+      return `Pot awarded to ${event.payload.winners
+        .map((winner) => `${winner.seatId} (${winner.amount})`)
+        .join(', ')}.`
     case 'matchComplete':
-      return `${event.winnerSeatId} wins the match.`
+      return `${event.payload.winnerSeatId} wins the match.`
   }
 }
 

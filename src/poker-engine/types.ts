@@ -106,12 +106,12 @@ export type LegalAction =
   | { type: 'allIn'; amount: number; targetContribution: number }
 
 export type EngineCommand =
-  | { type: 'fold'; seatId: SeatId; source?: PlayerKind }
-  | { type: 'check'; seatId: SeatId; source?: PlayerKind }
-  | { type: 'call'; seatId: SeatId; source?: PlayerKind }
-  | { type: 'bet'; seatId: SeatId; amount: number; source?: PlayerKind }
-  | { type: 'raise'; seatId: SeatId; amount: number; source?: PlayerKind }
-  | { type: 'allIn'; seatId: SeatId; source?: PlayerKind }
+  | { type: 'fold'; seatId: SeatId; source?: PlayerKind; commandId?: string }
+  | { type: 'check'; seatId: SeatId; source?: PlayerKind; commandId?: string }
+  | { type: 'call'; seatId: SeatId; source?: PlayerKind; commandId?: string }
+  | { type: 'bet'; seatId: SeatId; amount: number; source?: PlayerKind; commandId?: string }
+  | { type: 'raise'; seatId: SeatId; amount: number; source?: PlayerKind; commandId?: string }
+  | { type: 'allIn'; seatId: SeatId; source?: PlayerKind; commandId?: string }
 
 export type IllegalActionReason =
   | 'NO_ACTIVE_HAND'
@@ -134,61 +134,50 @@ export type EngineResult<T> =
   | { ok: true; state: T; events: HandHistoryEvent[] }
   | { ok: false; state: T; error: EngineError }
 
-export type HandHistoryEvent =
-  | {
-      type: 'handStarted'
-      handId: number
-      dealerSeatId: SeatId
-      visibility: 'public'
-    }
-  | {
-      type: 'blindPosted'
-      handId: number
-      seatId: SeatId
-      blind: 'small' | 'big'
-      amount: number
-      visibility: 'public'
-    }
-  | {
-      type: 'holeCardsDealt'
-      handId: number
-      seatId: SeatId
-      cards: Card[]
-      visibility: SeatId
-    }
+export type EventSchemaVersion = 'poker-event-v1'
+
+export type HandHistoryPayload =
+  | { type: 'handStarted'; dealerSeatId: SeatId }
+  | { type: 'blindPosted'; seatId: SeatId; blind: 'small' | 'big'; amount: number }
+  | { type: 'holeCardsDealt'; seatId: SeatId; cards: Card[] }
   | {
       type: 'actionApplied'
-      handId: number
       seatId: SeatId
       action: EngineCommand['type']
       amount: number
       targetContribution: number
-      visibility: 'public'
     }
-  | {
-      type: 'streetAdvanced'
-      handId: number
-      street: Street
-      communityCards: Card[]
-      visibility: 'public'
-    }
-  | {
-      type: 'potAwarded'
-      handId: number
-      winners: ShowdownResult['winners']
-      visibility: 'public'
-    }
-  | {
-      type: 'showdown'
-      handId: number
-      revealedCards: Record<SeatId, Card[]>
-      visibility: 'public'
-    }
-  | {
-      type: 'matchComplete'
-      winnerSeatId: SeatId
-      visibility: 'public'
-    }
+  | { type: 'streetAdvanced'; street: Street; communityCards: Card[] }
+  | { type: 'potAwarded'; winners: ShowdownResult['winners'] }
+  | { type: 'showdown'; revealedCards: Record<SeatId, Card[]> }
+  | { type: 'matchComplete'; winnerSeatId: SeatId }
+
+type EventEnvelope<TPayload extends HandHistoryPayload> = {
+  schemaVersion: EventSchemaVersion
+  eventId: string
+  sequenceNumber: number
+  handId: number
+  commandId?: string
+  visibility: 'public' | SeatId
+  type: TPayload['type']
+  payload: Omit<TPayload, 'type'>
+}
+
+export type HandHistoryEvent =
+  | EventEnvelope<{ type: 'handStarted'; dealerSeatId: SeatId }>
+  | EventEnvelope<{ type: 'blindPosted'; seatId: SeatId; blind: 'small' | 'big'; amount: number }>
+  | EventEnvelope<{ type: 'holeCardsDealt'; seatId: SeatId; cards: Card[] }>
+  | EventEnvelope<{
+      type: 'actionApplied'
+      seatId: SeatId
+      action: EngineCommand['type']
+      amount: number
+      targetContribution: number
+    }>
+  | EventEnvelope<{ type: 'streetAdvanced'; street: Street; communityCards: Card[] }>
+  | EventEnvelope<{ type: 'potAwarded'; winners: ShowdownResult['winners'] }>
+  | EventEnvelope<{ type: 'showdown'; revealedCards: Record<SeatId, Card[]> }>
+  | EventEnvelope<{ type: 'matchComplete'; winnerSeatId: SeatId }>
 
 export interface PublicSeatView {
   id: SeatId

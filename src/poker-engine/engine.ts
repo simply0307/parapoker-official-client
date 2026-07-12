@@ -7,6 +7,7 @@ import type {
   EngineResult,
   GameState,
   HandHistoryEvent,
+  HandHistoryPayload,
   HandState,
   LegalAction,
   MatchConfig,
@@ -104,17 +105,11 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
     totalContributions: emptyContributionMap(nextState.seats),
     pendingSeatId: smallBlindSeatId,
     status: 'active',
-    history: [
-      {
-        type: 'handStarted',
-        handId: nextState.handNumber,
-        dealerSeatId,
-        visibility: 'public',
-      },
-    ],
+    history: [],
   }
 
   nextState.hand = hand
+  appendEvent(hand, { type: 'handStarted', dealerSeatId }, 'public')
   postBlind(nextState, smallBlindSeatId, nextState.config.smallBlind, 'small')
   postBlind(nextState, bigBlindSeatId, nextState.config.bigBlind, 'big')
   dealHoleCards(nextState)
@@ -217,16 +212,18 @@ export function applyAction(state: GameState, command: EngineCommand): EngineRes
 
   updateBettingRoundAfterAction(nextState, command.seatId, targetContribution, previousBet)
 
-  const actionEvent: HandHistoryEvent = {
-    type: 'actionApplied',
-    handId: nextHand.id,
-    seatId: command.seatId,
-    action: command.type,
-    amount: command.type === 'fold' || command.type === 'check' ? 0 : committed,
-    targetContribution,
-    visibility: 'public',
-  }
-  nextHand.history.push(actionEvent)
+  appendEvent(
+    nextHand,
+    {
+      type: 'actionApplied',
+      seatId: command.seatId,
+      action: command.type,
+      amount: command.type === 'fold' || command.type === 'check' ? 0 : committed,
+      targetContribution,
+    },
+    'public',
+    command.commandId,
+  )
 
   const eventsBeforeProgress = nextHand.history.length
   progressHand(nextState, command.seatId)
@@ -338,13 +335,7 @@ function advanceStreetOrSettle(state: GameState): void {
   hand.actedThisRound = []
   hand.streetContributions = emptyContributionMap(state.seats)
   dealCommunityToStreet(hand)
-  hand.history.push({
-    type: 'streetAdvanced',
-    handId: hand.id,
-    street: hand.street,
-    communityCards: hand.communityCards,
-    visibility: 'public',
-  })
+  appendEvent(hand, { type: 'streetAdvanced', street: hand.street, communityCards: hand.communityCards }, 'public')
 
   if (state.seats.filter((seat) => seat.status !== 'folded' && seat.status !== 'out').every((seat) => !canSeatAct(seat))) {
     runoutAndSettle(state)
@@ -363,13 +354,7 @@ function runoutAndSettle(state: GameState): void {
   while (hand.street !== 'river') {
     hand.street = nextStreet(hand.street)
     dealCommunityToStreet(hand)
-    hand.history.push({
-      type: 'streetAdvanced',
-      handId: hand.id,
-      street: hand.street,
-      communityCards: hand.communityCards,
-      visibility: 'public',
-    })
+    appendEvent(hand, { type: 'streetAdvanced', street: hand.street, communityCards: hand.communityCards }, 'public')
   }
   settleShowdown(state)
 }
@@ -386,12 +371,7 @@ function settleUncontested(state: GameState, winnerSeatId: SeatId): void {
     pots: [{ amount, eligibleSeatIds: [winnerSeatId] }],
     revealedCards: {},
   }
-  hand.history.push({
-    type: 'potAwarded',
-    handId: hand.id,
-    winners: hand.result.winners,
-    visibility: 'public',
-  })
+  appendEvent(hand, { type: 'potAwarded', winners: hand.result.winners }, 'public')
   finishHand(state)
 }
 
@@ -419,8 +399,8 @@ function settleShowdown(state: GameState): void {
   hand.status = 'settled'
   hand.street = 'showdown'
   hand.result = result
-  hand.history.push({ type: 'showdown', handId: hand.id, revealedCards, visibility: 'public' })
-  hand.history.push({ type: 'potAwarded', handId: hand.id, winners: awards, visibility: 'public' })
+  appendEvent(hand, { type: 'showdown', revealedCards }, 'public')
+  appendEvent(hand, { type: 'potAwarded', winners: awards }, 'public')
   finishHand(state)
 }
 
@@ -533,11 +513,7 @@ function finishHand(state: GameState): void {
     state.status = 'complete'
     const winner = fundedSeats[0]
     if (winner && state.hand) {
-      state.hand.history.push({
-        type: 'matchComplete',
-        winnerSeatId: winner.id,
-        visibility: 'public',
-      })
+      appendEvent(state.hand, { type: 'matchComplete', winnerSeatId: winner.id }, 'public')
     }
   } else {
     state.status = 'waitingForHand'
@@ -623,7 +599,7 @@ function postBlind(state: GameState, seatId: SeatId, blindAmount: number, blind:
   hand.streetContributions[seatId] = amount
   hand.totalContributions[seatId] = amount
   hand.currentBet = Math.max(hand.currentBet, amount)
-  hand.history.push({ type: 'blindPosted', handId: hand.id, seatId, blind, amount, visibility: 'public' })
+  appendEvent(hand, { type: 'blindPosted', seatId, blind, amount }, 'public')
 }
 
 function dealHoleCards(state: GameState): void {
@@ -635,13 +611,7 @@ function dealHoleCards(state: GameState): void {
     }
   }
   for (const seat of order) {
-    hand.history.push({
-      type: 'holeCardsDealt',
-      handId: hand.id,
-      seatId: seat.id,
-      cards: seat.holeCards,
-      visibility: seat.id,
-    })
+    appendEvent(hand, { type: 'holeCardsDealt', seatId: seat.id, cards: seat.holeCards }, seat.id)
   }
 }
 
@@ -788,6 +758,29 @@ function requireSeat(state: GameState, seatId: SeatId): SeatState {
     throw new Error(`Unknown seat ${seatId}.`)
   }
   return seat
+}
+
+function appendEvent(
+  hand: HandState,
+  payload: HandHistoryPayload,
+  visibility: 'public' | SeatId,
+  commandId?: string,
+): HandHistoryEvent {
+  const sequenceNumber = hand.history.length + 1
+  const { type, ...eventPayload } = payload
+  const event = {
+    schemaVersion: 'poker-event-v1',
+    eventId: `hand-${hand.id}-event-${sequenceNumber}`,
+    sequenceNumber,
+    handId: hand.id,
+    ...(commandId ? { commandId } : {}),
+    visibility,
+    type,
+    payload: eventPayload,
+  } as HandHistoryEvent
+
+  hand.history.push(event)
+  return event
 }
 
 function error<T extends GameState>(

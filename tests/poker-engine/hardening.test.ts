@@ -221,7 +221,17 @@ function customBettingState({
     totalContributions: { ...streetContributions },
     pendingSeatId,
     status: 'active',
-    history: [{ type: 'handStarted', handId: 1, dealerSeatId: 'human', visibility: 'public' }],
+    history: [
+      {
+        schemaVersion: 'poker-event-v1',
+        eventId: 'hand-1-event-1',
+        sequenceNumber: 1,
+        handId: 1,
+        visibility: 'public',
+        type: 'handStarted',
+        payload: { dealerSeatId: 'human' },
+      },
+    ],
   }
 
   return {
