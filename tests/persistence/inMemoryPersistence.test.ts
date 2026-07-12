@@ -124,10 +124,10 @@ describe('in-memory persistence stores', () => {
     await store.appendEvents(createEventRecordDrafts('match-1', 'table-1', state.hand?.history ?? []))
 
     const firstRead = await store.listPublicEvents('match-1')
-    firstRead[0].event.payload = { dealerSeatId: 'mutated' }
+    firstRead[0].event.payload = { dealerSeatId: 'mutated', participantSeatIds: [] }
 
     const secondRead = await store.listPublicEvents('match-1')
-    expect(secondRead[0].event.payload).toEqual({ dealerSeatId: 'human' })
+    expect(secondRead[0].event.payload).toEqual({ dealerSeatId: 'human', participantSeatIds: ['human', 'npc-1'] })
   })
 
   it('stores command records separately from replay events for database-ready export metadata', async () => {
@@ -224,14 +224,15 @@ describe('in-memory persistence stores', () => {
     await store.appendEvents(createEventRecordDrafts('match-1', 'table-1', allEvents))
 
     const snapshots = await statsStore.updateFromVerifiedEvents('match-1')
-    const human = await statsStore.getPlayerStats('human')
-    const npc = await statsStore.getPlayerStats('npc-1')
+    const human = await statsStore.getMatchSeatStats('match-1', 'human')
+    const npc = await statsStore.getMatchSeatStats('match-1', 'npc-1')
 
     expect(snapshots.map((snapshot) => snapshot.seatId).sort()).toEqual(['human', 'npc-1'])
     expect(human).toEqual(
       expect.objectContaining({
         matchId: 'match-1',
         seatId: 'human',
+        handsPlayed: 1,
         handsStarted: 1,
         actions: 1,
         folds: 1,
@@ -242,10 +243,11 @@ describe('in-memory persistence stores', () => {
       expect.objectContaining({
         matchId: 'match-1',
         seatId: 'npc-1',
+        handsPlayed: 1,
         handsStarted: 1,
         actions: 0,
         potsWon: 1,
-        chipsWon: 3,
+        chipsAwarded: 3,
       }),
     )
     expect(JSON.stringify(snapshots)).not.toContain('holeCards')

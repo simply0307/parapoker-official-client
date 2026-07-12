@@ -150,6 +150,7 @@ export interface ProfileStore {
 export interface DerivedStatsSnapshot {
   matchId: string
   seatId: SeatId
+  handsPlayed: number
   handsStarted: number
   actions: number
   folds: number
@@ -159,10 +160,12 @@ export interface DerivedStatsSnapshot {
   raises: number
   allIns: number
   potsWon: number
-  chipsWon: number
+  /** Gross awarded pot chips, not profit after blinds, bets, calls, or raises. */
+  chipsAwarded: number
 }
 
 export interface StatsStore {
   updateFromVerifiedEvents(matchId: string): Promise<DerivedStatsSnapshot[]>
-  getPlayerStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined>
+  getMatchSeatStats(matchId: string, seatId: SeatId): Promise<DerivedStatsSnapshot | undefined>
+  listMatchStats(matchId: string): Promise<DerivedStatsSnapshot[]>
 }

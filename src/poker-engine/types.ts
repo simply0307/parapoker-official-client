@@ -137,7 +137,7 @@ export type EngineResult<T> =
 export type EventSchemaVersion = 'poker-event-v1'
 
 export type HandHistoryPayload =
-  | { type: 'handStarted'; dealerSeatId: SeatId }
+  | { type: 'handStarted'; dealerSeatId: SeatId; participantSeatIds: SeatId[] }
   | { type: 'blindPosted'; seatId: SeatId; blind: 'small' | 'big'; amount: number }
   | { type: 'holeCardsDealt'; seatId: SeatId; cards: Card[] }
   | {
@@ -164,7 +164,7 @@ type EventEnvelope<TPayload extends HandHistoryPayload> = {
 }
 
 export type HandHistoryEvent =
-  | EventEnvelope<{ type: 'handStarted'; dealerSeatId: SeatId }>
+  | EventEnvelope<{ type: 'handStarted'; dealerSeatId: SeatId; participantSeatIds: SeatId[] }>
   | EventEnvelope<{ type: 'blindPosted'; seatId: SeatId; blind: 'small' | 'big'; amount: number }>
   | EventEnvelope<{ type: 'holeCardsDealt'; seatId: SeatId; cards: Card[] }>
   | EventEnvelope<{

@@ -10,9 +10,12 @@ describe('local single-player controller', () => {
     const firstSnapshot = controller.getSnapshot()
 
     expect(firstSnapshot.publicView.pendingSeatId).toBe('human')
-    controller.submitHumanAction({ type: 'call' })
+    const transition = controller.submitHumanAction({ type: 'call' })
     const snapshot = controller.getSnapshot()
 
+    expect(transition.ok).toBe(true)
+    expect(transition.events.some((event) => event.type === 'actionApplied' && event.payload.seatId === 'human')).toBe(true)
+    expect(new Set(transition.events.map((event) => event.eventId)).size).toBe(transition.events.length)
     expect(snapshot.publicView.pendingSeatId === 'human' || snapshot.publicView.status !== 'handInProgress').toBe(true)
     expect(JSON.stringify(snapshot.heroView)).not.toContain('deck')
     expect(controller.getCanonicalStateForTests().hand?.deck.length).toBeGreaterThan(0)

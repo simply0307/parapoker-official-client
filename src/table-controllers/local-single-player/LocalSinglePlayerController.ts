@@ -12,8 +12,10 @@ import {
   getSeatView,
   startNextHand,
   type EngineCommand,
+  type EngineError,
   type EngineResult,
   type GameState,
+  type HandHistoryEvent,
   type MatchConfig,
   type PrivateSeatView,
   type PublicTableView,
@@ -26,6 +28,12 @@ export interface LocalSinglePlayerSnapshot {
   heroView: PrivateSeatView
   canonicalStatus: GameState['status']
   lastError?: string
+}
+
+export interface LocalSinglePlayerTransition extends LocalSinglePlayerSnapshot {
+  ok: boolean
+  events: HandHistoryEvent[]
+  error?: EngineError
 }
 
 interface NpcSeatController {
@@ -54,6 +62,7 @@ export class LocalSinglePlayerController {
   private readonly humanSeatId: SeatId
   private readonly npcControllers: Map<SeatId, NpcSeatController>
   private lastError?: string
+  private initialTransition: LocalSinglePlayerTransition
 
   constructor(config: Partial<MatchConfig> = {}, npcPolicy: NpcPolicy = new BasicNpcPolicy()) {
     this.state = createGame(config)
@@ -70,7 +79,7 @@ export class LocalSinglePlayerController {
           },
         ]),
     )
-    this.startNextHand()
+    this.initialTransition = this.startNextHand()
   }
 
   getSnapshot(): LocalSinglePlayerSnapshot {
@@ -82,29 +91,36 @@ export class LocalSinglePlayerController {
     }
   }
 
-  submitHumanAction(command: Omit<EngineCommand, 'seatId' | 'source'>): EngineResult<GameState> {
+  consumeInitialTransition(): LocalSinglePlayerTransition {
+    const transition = this.initialTransition
+    this.initialTransition = {
+      ...this.getSnapshot(),
+      ok: true,
+      events: [],
+    }
+    return transition
+  }
+
+  submitHumanAction(command: Omit<EngineCommand, 'seatId' | 'source'>): LocalSinglePlayerTransition {
+    const eventCursor = this.visibleHeroEventCount()
     const result = applyAction(this.state, {
       ...command,
       seatId: this.humanSeatId,
       source: 'human',
     } as EngineCommand)
-    return this.acceptResult(result)
+    return this.acceptResult(result, eventCursor)
   }
 
-  startNextHand(): EngineResult<GameState> {
+  startNextHand(): LocalSinglePlayerTransition {
     const result = startNextHand(this.state)
-    const accepted = this.acceptResult(result)
-    if (accepted.ok) {
-      this.runNpcTurns()
-    }
-    return accepted
+    return this.acceptResult(result, 0)
   }
 
   getCanonicalStateForTests(): GameState {
     return JSON.parse(JSON.stringify(this.state)) as GameState
   }
 
-  private acceptResult(result: EngineResult<GameState>): EngineResult<GameState> {
+  private acceptResult(result: EngineResult<GameState>, eventCursor: number): LocalSinglePlayerTransition {
     if (result.ok) {
       this.state = result.state
       this.lastError = undefined
@@ -112,7 +128,7 @@ export class LocalSinglePlayerController {
     } else {
       this.lastError = result.error.message
     }
-    return result
+    return this.transition(result.ok, eventCursor, result.ok ? undefined : result.error)
   }
 
   private runNpcTurns(): void {
@@ -138,5 +154,19 @@ export class LocalSinglePlayerController {
       }
       this.state = result.state
     }
+  }
+
+  private transition(ok: boolean, eventCursor: number, error?: EngineError): LocalSinglePlayerTransition {
+    const snapshot = this.getSnapshot()
+    return {
+      ...snapshot,
+      ok,
+      events: snapshot.heroView.events.slice(eventCursor),
+      ...(error ? { error } : {}),
+    }
+  }
+
+  private visibleHeroEventCount(): number {
+    return getSeatView(this.state, this.humanSeatId).events.length
   }
 }

@@ -48,7 +48,7 @@ describe('event schema v1', () => {
 
     expect(events).toHaveLength(5)
     expectEnvelope(events[0], 1, 'handStarted')
-    expect(events[0].payload).toEqual({ dealerSeatId: 'human' })
+    expect(events[0].payload).toEqual({ dealerSeatId: 'human', participantSeatIds: ['human', 'npc-1'] })
     expectEnvelope(events[1], 2, 'blindPosted')
     expect(events[1].payload).toEqual({ seatId: 'human', blind: 'small', amount: 1 })
     expectEnvelope(events[3], 4, 'holeCardsDealt')

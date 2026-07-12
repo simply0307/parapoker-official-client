@@ -1,38 +1,46 @@
-import { useMemo, useRef, useState, type WheelEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
 import {
-  createSixMaxSoloConfig,
-  LocalSinglePlayerController,
-  type LocalSinglePlayerSnapshot,
-} from '../table-controllers/local-single-player/LocalSinglePlayerController'
-
-type SoloMode = 'heads-up' | 'six-max'
+  createRandomLocalSeed,
+  defaultLocalSoloSessionConfig,
+  LocalSoloSession,
+  type LocalSoloSessionConfig,
+  type LocalSoloSessionSnapshot,
+} from '../table-controllers/local-single-player/LocalSoloSession'
+import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 
 export function PokerTable() {
-  const [mode, setMode] = useState<SoloMode>('heads-up')
-  const controllerRef = useRef<LocalSinglePlayerController | null>(null)
-  if (!controllerRef.current) {
-    controllerRef.current = createControllerForMode(mode)
-  }
-
-  const [snapshot, setSnapshot] = useState<LocalSinglePlayerSnapshot>(() => controllerRef.current!.getSnapshot())
+  const sessionRef = useRef<LocalSoloSession | null>(null)
+  const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
+  const [useRandomSeed, setUseRandomSeed] = useState(false)
+  const [snapshot, setSnapshot] = useState<LocalSoloSessionSnapshot | null>(null)
   const [amounts, setAmounts] = useState<Record<string, number>>({})
 
-  const heroSeat = snapshot.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
-  const opponentSeats = snapshot.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId)
-  const pendingSeat = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
-  const canStartNextHand = snapshot.canonicalStatus === 'waitingForHand'
-  const matchWinner = snapshot.publicView.status === 'complete'
+  useEffect(() => {
+    void LocalSoloSession.create(defaultLocalSoloSessionConfig()).then((session) => {
+      sessionRef.current = session
+      setSnapshot(session.getSnapshot())
+    })
+  }, [])
+
+  const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
+  const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
+  const pendingSeat = snapshot?.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
+  const canStartNextHand = snapshot?.canonicalStatus === 'waitingForHand'
+  const matchWinner = snapshot?.publicView.status === 'complete'
     ? snapshot.publicView.seats.find((seat) => seat.stack > 0)
     : undefined
-  const toCall = heroSeat && snapshot.publicView.pendingSeatId === heroSeat.id
+  const toCall = snapshot && heroSeat && snapshot.publicView.pendingSeatId === heroSeat.id
     ? Math.max(0, snapshot.publicView.currentBet - heroSeat.streetContribution)
     : 0
-  const stackLead = getStackLead(snapshot.publicView.seats, snapshot.heroView.heroSeatId)
-  const lastResult = getLastResultText(snapshot)
-  const tableTitle = mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
+  const stackLead = snapshot ? getStackLead(snapshot.publicView.seats, snapshot.heroView.heroSeatId) : 'Even'
+  const lastResult = snapshot ? getLastResultText(snapshot) : undefined
+  const tableTitle = snapshot?.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
 
   const statusText = useMemo(() => {
+    if (!snapshot) {
+      return 'Starting match'
+    }
     if (matchWinner) {
       return `${matchWinner.name} wins the match`
     }
@@ -41,32 +49,50 @@ export function PokerTable() {
     }
     const pending = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
     return pending ? `${pending.name} to act` : 'Resolving hand'
-  }, [matchWinner, snapshot.publicView.pendingSeatId, snapshot.publicView.seats, snapshot.publicView.status])
+  }, [matchWinner, snapshot])
 
-  function refresh() {
-    setSnapshot(controllerRef.current!.getSnapshot())
-  }
-
-  function submit(command: HumanCommand) {
-    controllerRef.current!.submitHumanAction(command)
-    refresh()
-  }
-
-  function startNext() {
-    controllerRef.current!.startNextHand()
+  async function startSession(config: LocalSoloSessionConfig) {
+    const nextConfig = {
+      ...config,
+      seed: useRandomSeed ? createRandomLocalSeed() : config.seed,
+    }
+    const session = await LocalSoloSession.create(nextConfig)
+    sessionRef.current = session
     setAmounts({})
-    refresh()
+    setSnapshot(session.getSnapshot())
   }
 
-  function switchMode(nextMode: SoloMode) {
-    if (nextMode === mode) {
+  async function submit(command: HumanCommand) {
+    const session = sessionRef.current
+    if (!session) {
       return
     }
-    const controller = createControllerForMode(nextMode)
-    controllerRef.current = controller
-    setMode(nextMode)
+    setSnapshot(await session.submitHumanAction(command))
+  }
+
+  async function startNext() {
+    const session = sessionRef.current
+    if (!session) {
+      return
+    }
     setAmounts({})
-    setSnapshot(controller.getSnapshot())
+    setSnapshot(await session.startNextHand())
+  }
+
+  function updateSetup<TField extends keyof LocalSoloSessionConfig>(field: TField, value: LocalSoloSessionConfig[TField]) {
+    setSetup((current) => ({ ...current, [field]: value }))
+  }
+
+  if (!snapshot) {
+    return (
+      <main className="table-shell">
+        <section className="felt" aria-label="Poker table">
+          <div className="board">
+            <div className="pot">Starting local match</div>
+          </div>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -83,7 +109,7 @@ export function PokerTable() {
         </ol>
       </section>
 
-      <section className={`felt ${mode === 'six-max' ? 'six-max-table' : ''}`} aria-label="Poker table">
+      <section className={`felt ${snapshot.mode === 'six-max' ? 'six-max-table' : ''}`} aria-label="Poker table">
         <div className="opponents">
           {opponentSeats.map((seat) => (
             <SeatPanel
@@ -114,32 +140,56 @@ export function PokerTable() {
             label="Hero seat"
             active={pendingSeat?.id === heroSeat.id}
           />
-          )}
-        </section>
+        )}
+      </section>
 
       <aside className="right-rail" aria-label="Table controls">
-        <section className="scoreboard" aria-label="Match state">
+        <section className="scoreboard" aria-label="Match setup and state">
           <div className="title-block">
             <p className="eyebrow">ParaPoker Play Money</p>
             <h1>{tableTitle}</h1>
-            <div className="mode-switch" aria-label="Solo mode">
+            <div className="mode-switch" aria-label="Solo mode setup">
               <button
                 type="button"
-                className={mode === 'heads-up' ? 'selected' : ''}
-                aria-pressed={mode === 'heads-up'}
-                onClick={() => switchMode('heads-up')}
+                className={setup.mode === 'heads-up' ? 'selected' : ''}
+                aria-pressed={setup.mode === 'heads-up'}
+                onClick={() => updateSetup('mode', 'heads-up')}
               >
                 Heads-up
               </button>
               <button
                 type="button"
-                className={mode === 'six-max' ? 'selected' : ''}
-                aria-pressed={mode === 'six-max'}
-                onClick={() => switchMode('six-max')}
+                className={setup.mode === 'six-max' ? 'selected' : ''}
+                aria-pressed={setup.mode === 'six-max'}
+                onClick={() => updateSetup('mode', 'six-max')}
               >
                 Six-max
               </button>
             </div>
+          </div>
+          <div className="setup-grid" aria-label="Local match setup">
+            <NumberField label="Stack" value={setup.startingStack} onChange={(value) => updateSetup('startingStack', value)} />
+            <NumberField label="SB" value={setup.smallBlind} onChange={(value) => updateSetup('smallBlind', value)} />
+            <NumberField label="BB" value={setup.bigBlind} onChange={(value) => updateSetup('bigBlind', value)} />
+            <label className="seed-field">
+              <span>Seed</span>
+              <input
+                value={String(setup.seed)}
+                disabled={useRandomSeed}
+                onChange={(event) => updateSetup('seed', event.target.value)}
+              />
+            </label>
+            <label className="toggle-field">
+              <input
+                type="checkbox"
+                checked={useRandomSeed}
+                onChange={(event) => setUseRandomSeed(event.target.checked)}
+              />
+              <span>Random local seed</span>
+            </label>
+            <button type="button" className="primary" onClick={() => void startSession(setup)}>
+              Start new match
+            </button>
           </div>
           <div className="match-summary">
             <div className="status-pill">{statusText}</div>
@@ -170,27 +220,66 @@ export function PokerTable() {
                 action={action}
                 amount={amounts[action.type]}
                 setAmount={(amount) => setAmounts((current) => ({ ...current, [action.type]: amount }))}
-                submit={submit}
+                submit={(command) => void submit(command)}
               />
             ))}
             {canStartNextHand && (
-              <button type="button" className="primary" onClick={startNext}>
+              <button type="button" className="primary" onClick={() => void startNext()}>
                 Next hand
               </button>
             )}
           </div>
           {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
         </section>
+
+        {snapshot.summary && <SessionResult summary={snapshot.summary} />}
       </aside>
     </main>
   )
 }
 
-function createControllerForMode(mode: SoloMode): LocalSinglePlayerController {
-  if (mode === 'six-max') {
-    return new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'six-max-solo' }))
-  }
-  return new LocalSinglePlayerController({ seed: 'heads-up-solo' })
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="number-field">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={1}
+        step={1}
+        value={value}
+        onChange={(event) => onChange(Math.max(1, Math.round(Number(event.target.value) || 1)))}
+      />
+    </label>
+  )
+}
+
+function SessionResult({ summary }: { summary: NonNullable<LocalSoloSessionSnapshot['summary']> }) {
+  return (
+    <section className="session-result" aria-label="Session result">
+      <div className="controls-header">
+        <div>
+          <h2>Session result</h2>
+          <p>{summary.winnerName ?? summary.winnerSeatId ?? 'No winner'} wins</p>
+        </div>
+        <span className="round-pill">{summary.mode}</span>
+      </div>
+      <dl className="result-grid">
+        <Metric label="Hands" value={summary.handsPlayed} />
+        <Metric label="Seed" value={String(summary.seed)} />
+      </dl>
+      <div className="stats-list" aria-label="Per-seat stats">
+        {summary.stats.map((stat) => (
+          <div key={stat.seatId}>
+            <strong>{stat.seatId}</strong>
+            <span>
+              {stat.actions} actions, {stat.potsWon} pots, {stat.chipsAwarded} awarded
+            </span>
+            <span>Stack {summary.finalStacks[stat.seatId] ?? 0}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function SeatPanel({

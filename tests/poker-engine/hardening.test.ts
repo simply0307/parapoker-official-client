@@ -229,7 +229,7 @@ function customBettingState({
         handId: 1,
         visibility: 'public',
         type: 'handStarted',
-        payload: { dealerSeatId: 'human' },
+        payload: { dealerSeatId: 'human', participantSeatIds: ['human', 'npc-1', 'npc-2'] },
       },
     ],
   }

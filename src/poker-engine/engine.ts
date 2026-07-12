@@ -112,7 +112,11 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
   }
 
   nextState.hand = hand
-  appendEvent(hand, { type: 'handStarted', dealerSeatId }, 'public')
+  appendEvent(
+    hand,
+    { type: 'handStarted', dealerSeatId, participantSeatIds: activeSeats.map((seat) => seat.id) },
+    'public',
+  )
   postBlind(nextState, smallBlindSeatId, nextState.config.smallBlind, 'small')
   postBlind(nextState, bigBlindSeatId, nextState.config.bigBlind, 'big')
   dealHoleCards(nextState)

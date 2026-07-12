@@ -155,7 +155,7 @@ export class InMemoryProfileStore implements ProfileStore {
 }
 
 export class InMemoryStatsStore implements StatsStore {
-  private readonly snapshots = new Map<SeatId, DerivedStatsSnapshot>()
+  private readonly snapshots = new Map<string, DerivedStatsSnapshot>()
   private readonly eventStore: EventRecordStore
 
   constructor(eventStore: EventRecordStore) {
@@ -165,6 +165,7 @@ export class InMemoryStatsStore implements StatsStore {
   async updateFromVerifiedEvents(matchId: string): Promise<DerivedStatsSnapshot[]> {
     const records = await this.eventStore.listPublicEvents(matchId)
     const snapshots = new Map<SeatId, DerivedStatsSnapshot>()
+    const countedHands = new Set<string>()
 
     function ensureSeat(seatId: SeatId): DerivedStatsSnapshot {
       const existing = snapshots.get(seatId)
@@ -174,6 +175,7 @@ export class InMemoryStatsStore implements StatsStore {
       const created: DerivedStatsSnapshot = {
         matchId,
         seatId,
+        handsPlayed: 0,
         handsStarted: 0,
         actions: 0,
         folds: 0,
@@ -183,7 +185,7 @@ export class InMemoryStatsStore implements StatsStore {
         raises: 0,
         allIns: 0,
         potsWon: 0,
-        chipsWon: 0,
+        chipsAwarded: 0,
       }
       snapshots.set(seatId, created)
       return created
@@ -191,8 +193,16 @@ export class InMemoryStatsStore implements StatsStore {
 
     for (const record of records) {
       const { event } = record
-      if (event.type === 'blindPosted') {
-        ensureSeat(event.payload.seatId).handsStarted += 1
+      if (event.type === 'handStarted') {
+        for (const seatId of event.payload.participantSeatIds) {
+          const key = `${event.handId}:${seatId}`
+          if (!countedHands.has(key)) {
+            countedHands.add(key)
+            const snapshot = ensureSeat(seatId)
+            snapshot.handsPlayed += 1
+            snapshot.handsStarted += 1
+          }
+        }
       }
       if (event.type === 'actionApplied') {
         const snapshot = ensureSeat(event.payload.seatId)
@@ -222,21 +232,29 @@ export class InMemoryStatsStore implements StatsStore {
         for (const winner of event.payload.winners) {
           const snapshot = ensureSeat(winner.seatId)
           snapshot.potsWon += 1
-          snapshot.chipsWon += winner.amount
+          snapshot.chipsAwarded += winner.amount
         }
       }
     }
 
     for (const [seatId, snapshot] of snapshots) {
-      this.snapshots.set(seatId, clone(snapshot))
+      this.snapshots.set(snapshotKey(matchId, seatId), clone(snapshot))
     }
 
     return clone(Array.from(snapshots.values()).sort((left, right) => left.seatId.localeCompare(right.seatId)))
   }
 
-  async getPlayerStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined> {
-    const snapshot = this.snapshots.get(seatId)
+  async getMatchSeatStats(matchId: string, seatId: SeatId): Promise<DerivedStatsSnapshot | undefined> {
+    const snapshot = this.snapshots.get(snapshotKey(matchId, seatId))
     return snapshot ? clone(snapshot) : undefined
+  }
+
+  async listMatchStats(matchId: string): Promise<DerivedStatsSnapshot[]> {
+    return clone(
+      Array.from(this.snapshots.values())
+        .filter((snapshot) => snapshot.matchId === matchId)
+        .sort((left, right) => left.seatId.localeCompare(right.seatId)),
+    )
   }
 }
 
@@ -284,6 +302,10 @@ function compareEventRecords(left: EventRecord, right: EventRecord): number {
     return left.handId - right.handId
   }
   return left.sequenceNumber - right.sequenceNumber
+}
+
+function snapshotKey(matchId: string, seatId: SeatId): string {
+  return `${matchId}:${seatId}`
 }
 
 function clone<T>(value: T): T {
