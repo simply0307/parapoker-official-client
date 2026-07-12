@@ -38,4 +38,16 @@ describe('PokerTable', () => {
     expect(raiseSlider).toHaveValue('12')
     expect(screen.getByRole('button', { name: 'Raise 12' })).toBeInTheDocument()
   })
+
+  it('can start a six-max solo table with one hero and five NPC seats', () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Six-max' }))
+
+    expect(screen.getByText("Six-Max No-Limit Hold'em")).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
+    expect(screen.getByText('ParaBot 5')).toBeInTheDocument()
+    expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
+    expect(screen.getByLabelText('Player actions')).toHaveTextContent(/Call|Check|Raise|Bet|Waiting/)
+  })
 })

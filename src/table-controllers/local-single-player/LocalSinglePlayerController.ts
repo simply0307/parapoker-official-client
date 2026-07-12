@@ -35,6 +35,20 @@ interface NpcSeatController {
   memory: NpcTableMemory
 }
 
+export function createSixMaxSoloConfig(config: Partial<MatchConfig> = {}): Partial<MatchConfig> {
+  return {
+    ...config,
+    seats: config.seats ?? [
+      { id: 'human', name: 'You', kind: 'human' },
+      { id: 'npc-1', name: 'ParaBot 1', kind: 'npc' },
+      { id: 'npc-2', name: 'ParaBot 2', kind: 'npc' },
+      { id: 'npc-3', name: 'ParaBot 3', kind: 'npc' },
+      { id: 'npc-4', name: 'ParaBot 4', kind: 'npc' },
+      { id: 'npc-5', name: 'ParaBot 5', kind: 'npc' },
+    ],
+  }
+}
+
 export class LocalSinglePlayerController {
   private state: GameState
   private readonly humanSeatId: SeatId
@@ -103,7 +117,7 @@ export class LocalSinglePlayerController {
 
   private runNpcTurns(): void {
     let safety = 0
-    while (this.state.status === 'handInProgress' && safety < 50) {
+    while (this.state.status === 'handInProgress' && safety < 200) {
       safety += 1
       const pendingSeatId = this.state.hand?.pendingSeatId
       if (!pendingSeatId || pendingSeatId === this.humanSeatId) {

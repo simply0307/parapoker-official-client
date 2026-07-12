@@ -79,7 +79,7 @@ button.danger {
 .title-block {
   display: grid;
   align-content: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .eyebrow {
@@ -99,6 +99,26 @@ p {
 h1 {
   font-size: 22px;
   line-height: 1.15;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.mode-switch button {
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: #c8d2cc;
+  background: #f4f7f0;
+  font-size: 13px;
+}
+
+.mode-switch button.selected {
+  border-color: #174b38;
+  background: #174b38;
+  color: #ffffff;
 }
 
 h2 {
@@ -171,6 +191,34 @@ h2 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+
+.six-max-table {
+  grid-template-rows: minmax(240px, auto) 1fr minmax(142px, auto);
+  gap: 10px;
+}
+
+.six-max-table .opponents {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.six-max-table .opponents .seat {
+  padding: 8px;
+  gap: 6px;
+}
+
+.six-max-table .opponents .badges span,
+.six-max-table .opponents .contribution {
+  font-size: 12px;
+}
+
+.six-max-table .opponents .card {
+  width: clamp(38px, 3.4vw, 50px);
+}
+
+.six-max-table .board {
+  gap: 10px;
 }
 
 .seat {
@@ -428,6 +476,10 @@ h2 {
 
   .amount-control {
     width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .six-max-table .opponents {
     grid-template-columns: 1fr;
   }
 

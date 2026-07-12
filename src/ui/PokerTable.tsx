@@ -1,14 +1,18 @@
 import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
 import {
+  createSixMaxSoloConfig,
   LocalSinglePlayerController,
   type LocalSinglePlayerSnapshot,
 } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 
+type SoloMode = 'heads-up' | 'six-max'
+
 export function PokerTable() {
+  const [mode, setMode] = useState<SoloMode>('heads-up')
   const controllerRef = useRef<LocalSinglePlayerController | null>(null)
   if (!controllerRef.current) {
-    controllerRef.current = new LocalSinglePlayerController()
+    controllerRef.current = createControllerForMode(mode)
   }
 
   const [snapshot, setSnapshot] = useState<LocalSinglePlayerSnapshot>(() => controllerRef.current!.getSnapshot())
@@ -26,6 +30,7 @@ export function PokerTable() {
     : 0
   const stackLead = getStackLead(snapshot.publicView.seats, snapshot.heroView.heroSeatId)
   const lastResult = getLastResultText(snapshot)
+  const tableTitle = mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
 
   const statusText = useMemo(() => {
     if (matchWinner) {
@@ -53,6 +58,17 @@ export function PokerTable() {
     refresh()
   }
 
+  function switchMode(nextMode: SoloMode) {
+    if (nextMode === mode) {
+      return
+    }
+    const controller = createControllerForMode(nextMode)
+    controllerRef.current = controller
+    setMode(nextMode)
+    setAmounts({})
+    setSnapshot(controller.getSnapshot())
+  }
+
   return (
     <main className="table-shell">
       <section className="history" aria-label="Hand history">
@@ -67,7 +83,7 @@ export function PokerTable() {
         </ol>
       </section>
 
-      <section className="felt" aria-label="Poker table">
+      <section className={`felt ${mode === 'six-max' ? 'six-max-table' : ''}`} aria-label="Poker table">
         <div className="opponents">
           {opponentSeats.map((seat) => (
             <SeatPanel
@@ -105,7 +121,25 @@ export function PokerTable() {
         <section className="scoreboard" aria-label="Match state">
           <div className="title-block">
             <p className="eyebrow">ParaPoker Play Money</p>
-            <h1>Heads-Up No-Limit Hold&apos;em</h1>
+            <h1>{tableTitle}</h1>
+            <div className="mode-switch" aria-label="Solo mode">
+              <button
+                type="button"
+                className={mode === 'heads-up' ? 'selected' : ''}
+                aria-pressed={mode === 'heads-up'}
+                onClick={() => switchMode('heads-up')}
+              >
+                Heads-up
+              </button>
+              <button
+                type="button"
+                className={mode === 'six-max' ? 'selected' : ''}
+                aria-pressed={mode === 'six-max'}
+                onClick={() => switchMode('six-max')}
+              >
+                Six-max
+              </button>
+            </div>
           </div>
           <div className="match-summary">
             <div className="status-pill">{statusText}</div>
@@ -150,6 +184,13 @@ export function PokerTable() {
       </aside>
     </main>
   )
+}
+
+function createControllerForMode(mode: SoloMode): LocalSinglePlayerController {
+  if (mode === 'six-max') {
+    return new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'six-max-solo' }))
+  }
+  return new LocalSinglePlayerController({ seed: 'heads-up-solo' })
 }
 
 function SeatPanel({
@@ -301,15 +342,20 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function getStackLead(seats: PublicSeatView[], heroSeatId: string): string {
   const hero = seats.find((seat) => seat.id === heroSeatId)
-  const opponent = seats.find((seat) => seat.id !== heroSeatId)
-  if (!hero || !opponent) {
+  if (!hero || seats.length < 2) {
     return 'Even'
   }
-  const difference = hero.stack - opponent.stack
+  const orderedByStack = [...seats].sort((left, right) => right.stack - left.stack)
+  const leader = orderedByStack[0]
+  const comparisonSeat = leader.id === heroSeatId ? orderedByStack[1] : leader
+  if (!comparisonSeat) {
+    return 'Even'
+  }
+  const difference = hero.stack - comparisonSeat.stack
   if (difference === 0) {
     return 'Even'
   }
-  return difference > 0 ? `You +${difference}` : `${opponent.name} +${Math.abs(difference)}`
+  return difference > 0 ? `You +${difference}` : `${comparisonSeat.name} +${Math.abs(difference)}`
 }
 
 function getLastResultText(snapshot: LocalSinglePlayerSnapshot): string | undefined {
