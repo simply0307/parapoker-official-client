@@ -3,6 +3,7 @@ import type {
   CommandRecord,
   CommandRecordDraft,
   CommandRecordStore,
+  DerivedStatsSnapshot,
   EventPrivacyClass,
   EventRecord,
   EventRecordDraft,
@@ -12,7 +13,11 @@ import type {
   MatchRecordDraft,
   MatchRecordStore,
   MatchResultDraft,
+  NpcProfile,
+  PlayerProfile,
+  ProfileStore,
   SeatHandHistoryExport,
+  StatsStore,
 } from './types'
 
 export class InMemoryMatchRecordStore implements MatchRecordStore {
@@ -121,6 +126,117 @@ export class InMemoryCommandRecordStore implements CommandRecordStore {
     return clone(
       this.commands.filter((command) => command.matchId === matchId && command.status === 'rejected'),
     )
+  }
+}
+
+export class InMemoryProfileStore implements ProfileStore {
+  private readonly playerProfiles = new Map<string, PlayerProfile>()
+  private readonly npcProfiles = new Map<string, NpcProfile>()
+
+  async upsertPlayerProfile(profile: PlayerProfile): Promise<PlayerProfile> {
+    this.playerProfiles.set(profile.playerId, clone(profile))
+    return clone(profile)
+  }
+
+  async getPlayerProfile(playerId: string): Promise<PlayerProfile | undefined> {
+    const profile = this.playerProfiles.get(playerId)
+    return profile ? clone(profile) : undefined
+  }
+
+  async upsertNpcProfile(profile: NpcProfile): Promise<NpcProfile> {
+    this.npcProfiles.set(profile.npcId, clone(profile))
+    return clone(profile)
+  }
+
+  async getNpcProfile(npcId: string): Promise<NpcProfile | undefined> {
+    const profile = this.npcProfiles.get(npcId)
+    return profile ? clone(profile) : undefined
+  }
+}
+
+export class InMemoryStatsStore implements StatsStore {
+  private readonly snapshots = new Map<SeatId, DerivedStatsSnapshot>()
+  private readonly eventStore: EventRecordStore
+
+  constructor(eventStore: EventRecordStore) {
+    this.eventStore = eventStore
+  }
+
+  async updateFromVerifiedEvents(matchId: string): Promise<DerivedStatsSnapshot[]> {
+    const records = await this.eventStore.listPublicEvents(matchId)
+    const snapshots = new Map<SeatId, DerivedStatsSnapshot>()
+
+    function ensureSeat(seatId: SeatId): DerivedStatsSnapshot {
+      const existing = snapshots.get(seatId)
+      if (existing) {
+        return existing
+      }
+      const created: DerivedStatsSnapshot = {
+        matchId,
+        seatId,
+        handsStarted: 0,
+        actions: 0,
+        folds: 0,
+        checks: 0,
+        calls: 0,
+        bets: 0,
+        raises: 0,
+        allIns: 0,
+        potsWon: 0,
+        chipsWon: 0,
+      }
+      snapshots.set(seatId, created)
+      return created
+    }
+
+    for (const record of records) {
+      const { event } = record
+      if (event.type === 'blindPosted') {
+        ensureSeat(event.payload.seatId).handsStarted += 1
+      }
+      if (event.type === 'actionApplied') {
+        const snapshot = ensureSeat(event.payload.seatId)
+        snapshot.actions += 1
+        switch (event.payload.action) {
+          case 'fold':
+            snapshot.folds += 1
+            break
+          case 'check':
+            snapshot.checks += 1
+            break
+          case 'call':
+            snapshot.calls += 1
+            break
+          case 'bet':
+            snapshot.bets += 1
+            break
+          case 'raise':
+            snapshot.raises += 1
+            break
+          case 'allIn':
+            snapshot.allIns += 1
+            break
+        }
+      }
+      if (event.type === 'potAwarded') {
+        for (const winner of event.payload.winners) {
+          const snapshot = ensureSeat(winner.seatId)
+          snapshot.potsWon += 1
+          snapshot.chipsWon += winner.amount
+        }
+      }
+    }
+
+    for (const [seatId, snapshot] of snapshots) {
+      this.snapshots.set(seatId, clone(snapshot))
+    }
+
+    return clone(Array.from(snapshots.values()).sort((left, right) => left.seatId.localeCompare(right.seatId)))
+  }
+
+  async getPlayerStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined> {
+    const snapshot = this.snapshots.get(seatId)
+    return snapshot ? clone(snapshot) : undefined
   }
 }
 

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { createGame, startNextHand, type GameState, type HandHistoryEvent } from '../../src/poker-engine'
+import { applyAction, createGame, startNextHand, type GameState, type HandHistoryEvent } from '../../src/poker-engine'
 import {
   createCommandRecordDraft,
   createEventRecordDrafts,
   InMemoryCommandRecordStore,
   InMemoryEventRecordStore,
   InMemoryMatchRecordStore,
+  InMemoryProfileStore,
+  InMemoryStatsStore,
   type MatchRecordDraft,
 } from '../../src/persistence'
 
@@ -168,5 +170,86 @@ describe('in-memory persistence stores', () => {
     expect(rejected[0]).toEqual(expect.objectContaining({ commandId: 'cmd-bad', rejectionReason: 'NOT_PENDING_ACTOR' }))
     expect(JSON.stringify(records)).not.toContain('deck')
     expect(JSON.stringify(records)).not.toContain('rngState')
+  })
+
+  it('stores player and NPC profiles without coupling identity metadata to poker rules', async () => {
+    const store = new InMemoryProfileStore()
+
+    await store.upsertPlayerProfile({
+      playerId: 'player-human',
+      displayName: 'Human Player',
+      visibility: 'public',
+      settings: {
+        recapStorage: 'enabled',
+        handHistoryExport: 'enabled',
+      },
+    })
+    await store.upsertNpcProfile({
+      npcId: 'npc-1',
+      displayName: 'ParaBot',
+      archetype: 'balanced',
+      difficulty: 'standard',
+      flavor: {
+        tagline: 'Steady table regular',
+      },
+    })
+
+    const player = await store.getPlayerProfile('player-human')
+    const npc = await store.getNpcProfile('npc-1')
+
+    expect(player?.displayName).toBe('Human Player')
+    expect(npc?.archetype).toBe('balanced')
+    expect(JSON.stringify(npc)).not.toContain('holeCards')
+    expect(JSON.stringify(npc)).not.toContain('deck')
+
+    if (player) {
+      player.displayName = 'Mutated'
+    }
+    expect((await store.getPlayerProfile('player-human'))?.displayName).toBe('Human Player')
+  })
+
+  it('derives player statistics from verified public events without private cards or live secrets', async () => {
+    let state = mustStart(createGame({ seed: 'stats-events' }))
+    const startedEvents = state.hand?.history ?? []
+    const foldResult = applyAction(state, { type: 'fold', seatId: 'human', source: 'human', commandId: 'cmd-fold' })
+    expect(foldResult.ok).toBe(true)
+    if (!foldResult.ok) {
+      throw new Error(foldResult.error.message)
+    }
+    state = foldResult.state
+    const allEvents = [...startedEvents, ...foldResult.events]
+    const store = new InMemoryEventRecordStore()
+    const statsStore = new InMemoryStatsStore(store)
+
+    await store.appendEvents(createEventRecordDrafts('match-1', 'table-1', allEvents))
+
+    const snapshots = await statsStore.updateFromVerifiedEvents('match-1')
+    const human = await statsStore.getPlayerStats('human')
+    const npc = await statsStore.getPlayerStats('npc-1')
+
+    expect(snapshots.map((snapshot) => snapshot.seatId).sort()).toEqual(['human', 'npc-1'])
+    expect(human).toEqual(
+      expect.objectContaining({
+        matchId: 'match-1',
+        seatId: 'human',
+        handsStarted: 1,
+        actions: 1,
+        folds: 1,
+        potsWon: 0,
+      }),
+    )
+    expect(npc).toEqual(
+      expect.objectContaining({
+        matchId: 'match-1',
+        seatId: 'npc-1',
+        handsStarted: 1,
+        actions: 0,
+        potsWon: 1,
+        chipsWon: 3,
+      }),
+    )
+    expect(JSON.stringify(snapshots)).not.toContain('holeCards')
+    expect(JSON.stringify(snapshots)).not.toContain('deck')
+    expect(JSON.stringify(snapshots)).not.toContain('rngState')
   })
 })

@@ -113,3 +113,56 @@ export interface CommandRecordStore {
   listCommandsForMatch(matchId: string): Promise<CommandRecord[]>
   listRejectedCommands(matchId: string): Promise<CommandRecord[]>
 }
+
+export type ProfileVisibility = 'public' | 'private'
+export type RecapStorageSetting = 'enabled' | 'disabled'
+export type HandHistoryExportSetting = 'enabled' | 'disabled'
+
+export interface PlayerSettings {
+  recapStorage: RecapStorageSetting
+  handHistoryExport: HandHistoryExportSetting
+}
+
+export interface PlayerProfile {
+  playerId: string
+  displayName: string
+  visibility: ProfileVisibility
+  settings: PlayerSettings
+}
+
+export interface NpcProfile {
+  npcId: string
+  displayName: string
+  archetype: string
+  difficulty: string
+  flavor: {
+    tagline?: string
+  }
+}
+
+export interface ProfileStore {
+  upsertPlayerProfile(profile: PlayerProfile): Promise<PlayerProfile>
+  getPlayerProfile(playerId: string): Promise<PlayerProfile | undefined>
+  upsertNpcProfile(profile: NpcProfile): Promise<NpcProfile>
+  getNpcProfile(npcId: string): Promise<NpcProfile | undefined>
+}
+
+export interface DerivedStatsSnapshot {
+  matchId: string
+  seatId: SeatId
+  handsStarted: number
+  actions: number
+  folds: number
+  checks: number
+  calls: number
+  bets: number
+  raises: number
+  allIns: number
+  potsWon: number
+  chipsWon: number
+}
+
+export interface StatsStore {
+  updateFromVerifiedEvents(matchId: string): Promise<DerivedStatsSnapshot[]>
+  getPlayerStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined>
+}
