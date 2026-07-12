@@ -1,9 +1,11 @@
 import type { Rng } from '../shared/rng'
+import { evaluateBestHand } from '../poker-engine'
 import type { Card, EngineCommand, LegalAction, PrivateSeatView, Rank, SeatId } from '../poker-engine'
 
 export interface NpcPolicyConfig {
   preflopAggression: number
   preflopLooseness: number
+  postflopAggression: number
   pressureRaiseMultiplier: number
 }
 
@@ -26,6 +28,7 @@ export interface NpcPolicy {
 export const DEFAULT_NPC_POLICY_CONFIG: NpcPolicyConfig = {
   preflopAggression: 0.62,
   preflopLooseness: 0.34,
+  postflopAggression: 0.55,
   pressureRaiseMultiplier: 3,
 }
 
@@ -47,6 +50,13 @@ const RANK_VALUES: Record<Rank, number> = {
 
 type PreflopTier = 'premium' | 'strong' | 'playable' | 'speculative' | 'trash'
 
+interface PostflopAssessment {
+  madeStrength: number
+  hasStrongDraw: boolean
+  hasAnyDraw: boolean
+  boardWetness: number
+}
+
 export function createNpcDecisionContext(
   view: PrivateSeatView,
   rng: Rng,
@@ -66,6 +76,9 @@ export class BasicNpcPolicy implements NpcPolicy {
   chooseAction(context: NpcDecisionContext): EngineCommand {
     if (context.view.street === 'preflop' && context.view.holeCards.length === 2) {
       return choosePreflopAction(context)
+    }
+    if (context.view.holeCards.length === 2 && context.view.communityCards.length >= 3) {
+      return choosePostflopAction(context)
     }
 
     return chooseFallbackAction(context)
@@ -136,6 +149,64 @@ function choosePreflopAction(context: NpcDecisionContext): EngineCommand {
   throw new Error('NPC was asked to act with no legal actions.')
 }
 
+function choosePostflopAction(context: NpcDecisionContext): EngineCommand {
+  const { view, legalActions } = context
+  const seatId = view.heroSeatId
+  const assessment = assessPostflop(view)
+  const call = findAction(legalActions, 'call')
+  const fold = findAction(legalActions, 'fold')
+  const check = findAction(legalActions, 'check')
+  const bet = findAction(legalActions, 'bet')
+  const raise = findAction(legalActions, 'raise')
+  const allIn = findAction(legalActions, 'allIn')
+
+  if (call) {
+    const callPrice = call.amount / Math.max(1, view.pot + call.amount)
+    const stackPressure = call.amount / getEffectiveStack(view)
+
+    if (assessment.madeStrength >= 0.72) {
+      if (raise && callPrice <= 0.34 && context.rng.next() < context.config.postflopAggression) {
+        return pressureCommand(raise, seatId, context)
+      }
+      return { type: 'call', seatId, source: 'npc' }
+    }
+
+    if (assessment.hasStrongDraw && callPrice <= 0.36 && stackPressure <= 0.22) {
+      return { type: 'call', seatId, source: 'npc' }
+    }
+
+    if (assessment.madeStrength >= 0.45 && callPrice <= 0.28 && stackPressure <= 0.16) {
+      return { type: 'call', seatId, source: 'npc' }
+    }
+
+    if (assessment.hasAnyDraw && callPrice <= 0.22 && stackPressure <= 0.1) {
+      return { type: 'call', seatId, source: 'npc' }
+    }
+
+    if (fold) {
+      return { type: 'fold', seatId, source: 'npc' }
+    }
+  }
+
+  if (check && bet) {
+    if (assessment.madeStrength >= 0.58) {
+      return { type: 'bet', seatId, amount: postflopBetAmount(bet, context, assessment), source: 'npc' }
+    }
+    if (assessment.hasStrongDraw && assessment.boardWetness >= 2 && context.rng.next() < context.config.postflopAggression * 0.35) {
+      return { type: 'bet', seatId, amount: postflopBetAmount(bet, context, assessment), source: 'npc' }
+    }
+  }
+
+  if (check) {
+    return { type: 'check', seatId, source: 'npc' }
+  }
+  if (allIn) {
+    return { type: 'allIn', seatId, source: 'npc' }
+  }
+
+  throw new Error('NPC was asked to act with no legal actions.')
+}
+
 function chooseFallbackAction(context: NpcDecisionContext): EngineCommand {
   const legal = context.legalActions
   const seatId = context.view.heroSeatId
@@ -171,6 +242,106 @@ function chooseFallbackAction(context: NpcDecisionContext): EngineCommand {
   }
 
   throw new Error('NPC was asked to act with no legal actions.')
+}
+
+function assessPostflop(view: PrivateSeatView): PostflopAssessment {
+  const allCards = [...view.holeCards, ...view.communityCards]
+  const handValue = evaluateBestHand(allCards)
+  const madeStrength = madeHandStrength(handValue.category, handValue.tiebreakers)
+  const flushDraw = hasFlushDraw(allCards) && handValue.category < 5
+  const straightDraw = getStraightDrawStrength(allCards)
+  const boardWetness = getBoardWetness(view.communityCards)
+
+  return {
+    madeStrength,
+    hasStrongDraw: flushDraw || straightDraw === 'openEnded',
+    hasAnyDraw: flushDraw || straightDraw !== 'none',
+    boardWetness,
+  }
+}
+
+function madeHandStrength(category: number, tiebreakers: number[]): number {
+  if (category >= 5) {
+    return 0.95
+  }
+  if (category === 4) {
+    return 0.9
+  }
+  if (category === 3) {
+    return 0.82
+  }
+  if (category === 2) {
+    return 0.74
+  }
+  if (category === 1) {
+    const pairRank = tiebreakers[0] ?? 0
+    if (pairRank >= RANK_VALUES.Q) {
+      return 0.56
+    }
+    if (pairRank >= RANK_VALUES['8']) {
+      return 0.42
+    }
+    return 0.3
+  }
+  return 0.12
+}
+
+function hasFlushDraw(cards: Card[]): boolean {
+  const suitCounts = new Map<Card['suit'], number>()
+  for (const card of cards) {
+    suitCounts.set(card.suit, (suitCounts.get(card.suit) ?? 0) + 1)
+  }
+  return Array.from(suitCounts.values()).some((count) => count >= 4)
+}
+
+function getStraightDrawStrength(cards: Card[]): 'none' | 'gutshot' | 'openEnded' {
+  const ranks = uniqueStraightRanks(cards)
+  let gutshot = false
+
+  for (let low = 1; low <= 10; low += 1) {
+    const window = [low, low + 1, low + 2, low + 3, low + 4]
+    const held = window.filter((rank) => ranks.has(rank)).length
+    if (held >= 4) {
+      const missing = window.find((rank) => !ranks.has(rank))
+      if (missing === low || missing === low + 4) {
+        return 'openEnded'
+      }
+      gutshot = true
+    }
+  }
+
+  return gutshot ? 'gutshot' : 'none'
+}
+
+function getBoardWetness(communityCards: Card[]): number {
+  const suitCounts = new Map<Card['suit'], number>()
+  for (const card of communityCards) {
+    suitCounts.set(card.suit, (suitCounts.get(card.suit) ?? 0) + 1)
+  }
+
+  const rankCounts = new Map<number, number>()
+  for (const card of communityCards) {
+    const value = RANK_VALUES[card.rank]
+    rankCounts.set(value, (rankCounts.get(value) ?? 0) + 1)
+  }
+
+  const ranks = Array.from(rankCounts.keys()).sort((left, right) => left - right)
+  const adjacentLinks = ranks.filter((rank, index) => index > 0 && rank - ranks[index - 1] <= 2).length
+  const suitedness = Math.max(0, ...suitCounts.values())
+  const paired = Array.from(rankCounts.values()).some((count) => count > 1)
+
+  return (suitedness >= 3 ? 2 : suitedness === 2 ? 1 : 0) + (adjacentLinks >= 2 ? 2 : adjacentLinks) + (paired ? 1 : 0)
+}
+
+function postflopBetAmount(
+  action: Extract<LegalAction, { type: 'bet' }>,
+  context: NpcDecisionContext,
+  assessment: PostflopAssessment,
+): number {
+  const potFraction = assessment.boardWetness >= 2 ? 0.72 : 0.62
+  const target = Math.max(action.min, Math.ceil(context.view.pot * potFraction))
+  const stackAwareCap = Math.max(action.min, Math.round(getEffectiveStack(context.view) * 0.45))
+  return Math.min(action.max, stackAwareCap, target)
 }
 
 function classifyPreflop(cards: Card[]): PreflopTier {
@@ -210,6 +381,14 @@ function classifyPreflop(cards: Card[]): PreflopTier {
   }
 
   return 'trash'
+}
+
+function uniqueStraightRanks(cards: Card[]): Set<number> {
+  const ranks = new Set(cards.map((card) => RANK_VALUES[card.rank]))
+  if (ranks.has(RANK_VALUES.A)) {
+    ranks.add(1)
+  }
+  return ranks
 }
 
 function pressureCommand(

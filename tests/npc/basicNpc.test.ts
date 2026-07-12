@@ -147,4 +147,90 @@ describe('basic NPC policy', () => {
 
     expect(commandAfterAAdvanced).toEqual(commandFromFreshB)
   })
+
+  it('bets strong postflop made hands for value', () => {
+    let state = advanceToNpcFlopAction([
+      c('K', 'clubs'),
+      c('A', 'spades'),
+      c('7', 'diamonds'),
+      c('Q', 'spades'),
+      c('A', 'diamonds'),
+      c('Q', 'clubs'),
+      c('4', 'hearts'),
+      c('8', 'spades'),
+      c('9', 'clubs'),
+    ])
+
+    const view = getSeatView(state, 'npc-1')
+    const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(view, createRng('postflop-value')))
+
+    expect(command).toEqual({ type: 'bet', seatId: 'npc-1', amount: 3, source: 'npc' })
+  })
+
+  it('checks weak postflop hands with no draw when checking is free', () => {
+    const state = advanceToNpcFlopAction([
+      c('A', 'clubs'),
+      c('9', 'spades'),
+      c('K', 'diamonds'),
+      c('2', 'hearts'),
+      c('Q', 'clubs'),
+      c('7', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('J', 'clubs'),
+    ])
+
+    const view = getSeatView(state, 'npc-1')
+    const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(view, createRng('postflop-air')))
+
+    expect(command).toEqual({ type: 'check', seatId: 'npc-1', source: 'npc' })
+  })
+
+  it('continues postflop with a strong draw at a fair price', () => {
+    let state = advanceToNpcFlopAction([
+      c('A', 'clubs'),
+      c('A', 'hearts'),
+      c('K', 'diamonds'),
+      c('J', 'hearts'),
+      c('2', 'hearts'),
+      c('9', 'hearts'),
+      c('4', 'spades'),
+      c('8', 'diamonds'),
+      c('Q', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'check', seatId: 'npc-1', source: 'npc' })
+    state = mustApply(state, { type: 'bet', seatId: 'human', amount: 4, source: 'human' })
+
+    const view = getSeatView(state, 'npc-1')
+    const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(view, createRng('postflop-draw')))
+
+    expect(command).toEqual({ type: 'call', seatId: 'npc-1', source: 'npc' })
+  })
+
+  it('folds weak postflop hands to oversized pressure', () => {
+    let state = advanceToNpcFlopAction([
+      c('A', 'clubs'),
+      c('9', 'spades'),
+      c('K', 'diamonds'),
+      c('2', 'hearts'),
+      c('Q', 'clubs'),
+      c('7', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('J', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'check', seatId: 'npc-1', source: 'npc' })
+    state = mustApply(state, { type: 'bet', seatId: 'human', amount: 24, source: 'human' })
+
+    const view = getSeatView(state, 'npc-1')
+    const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(view, createRng('postflop-fold')))
+
+    expect(command).toEqual({ type: 'fold', seatId: 'npc-1', source: 'npc' })
+  })
 })
+
+function advanceToNpcFlopAction(fixedDeck: Card[]): GameState {
+  let state = mustStart(fixedDeck)
+  state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+  return mustApply(state, { type: 'check', seatId: 'npc-1', source: 'npc' })
+}
