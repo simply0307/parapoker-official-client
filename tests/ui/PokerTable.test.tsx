@@ -37,6 +37,24 @@ describe('PokerTable', () => {
     expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
   })
 
+  it('trims entered seeds and allows random seeds without an entered value', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<PokerTable />)
+
+    fireEvent.change(screen.getByLabelText('Seed'), { target: { value: '  trimmed-seed  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByText('Seed trimmed-seed')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
+    fireEvent.change(screen.getByLabelText('Seed'), { target: { value: '' } })
+    fireEvent.click(screen.getByText('Random local seed'))
+    expect(screen.getByLabelText('Seed')).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByText(/Seed local-/)).toBeInTheDocument()
+  })
+
   it('lets players tune raises with the slider, wheel, and typed amount after the match starts', async () => {
     render(<PokerTable />)
 
@@ -89,6 +107,7 @@ describe('PokerTable', () => {
   it('shows a match result scene and supports same-seed and random rematches', async () => {
     render(<PokerTable />)
 
+    fireEvent.click(screen.getByText('Random local seed'))
     fireEvent.change(screen.getByLabelText('Stack'), { target: { value: '1' } })
     fireEvent.change(screen.getByLabelText('SB'), { target: { value: '1' } })
     fireEvent.change(screen.getByLabelText('BB'), { target: { value: '1' } })
@@ -97,10 +116,11 @@ describe('PokerTable', () => {
 
     expect(await screen.findByLabelText('Session result')).toBeInTheDocument()
     expect(screen.getByText('Seed')).toBeInTheDocument()
-    expect(screen.getByText('instant-result')).toBeInTheDocument()
+    const firstSeedLine = screen.getByText(/Seed local-/)
+    const firstSeed = firstSeedLine.textContent?.replace('Seed ', '') ?? ''
 
     fireEvent.click(screen.getByRole('button', { name: 'Rematch same seed' }))
-    expect(await screen.findByText('Seed instant-result')).toBeInTheDocument()
+    expect(await screen.findByText(`Seed ${firstSeed}`)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'New random match' }))
     expect(await screen.findByText(/Seed local-/)).toBeInTheDocument()

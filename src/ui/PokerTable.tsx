@@ -10,6 +10,7 @@ import {
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
+type SeedMode = 'form' | 'same' | 'random'
 
 export function PokerTable() {
   const sessionRef = useRef<LocalSoloSession | null>(null)
@@ -48,8 +49,9 @@ export function PokerTable() {
     return pending ? `${pending.name} to act` : 'Resolving hand'
   }, [matchWinner, snapshot])
 
-  async function startSession(config: LocalSoloSessionConfig, options: { forceRandomSeed?: boolean } = {}) {
-    const validationError = validateSetup(config, useRandomSeed || Boolean(options.forceRandomSeed))
+  async function startSession(config: LocalSoloSessionConfig, seedMode: SeedMode = 'form') {
+    const shouldUseRandomSeed = seedMode === 'random' || (seedMode === 'form' && useRandomSeed)
+    const validationError = validateSetup(config, shouldUseRandomSeed)
     if (validationError) {
       setSetupError(validationError)
       return
@@ -57,7 +59,7 @@ export function PokerTable() {
 
     const nextConfig = {
       ...config,
-      seed: useRandomSeed || options.forceRandomSeed ? createRandomLocalSeed() : String(config.seed).trim(),
+      seed: shouldUseRandomSeed ? createRandomLocalSeed() : String(config.seed).trim(),
     }
     const session = await LocalSoloSession.create(nextConfig)
     const nextSnapshot = session.getSnapshot()
@@ -111,12 +113,12 @@ export function PokerTable() {
 
   function rematchSameSeed() {
     const config = snapshot?.config ?? setup
-    void startSession({ ...config, seed: snapshot?.seed ?? config.seed }, { forceRandomSeed: false })
+    void startSession({ ...config, seed: snapshot?.seed ?? config.seed }, 'same')
   }
 
   function rematchRandomSeed() {
     const config = snapshot?.config ?? setup
-    void startSession(config, { forceRandomSeed: true })
+    void startSession(config, 'random')
   }
 
   if (scene === 'setup' || !snapshot) {
