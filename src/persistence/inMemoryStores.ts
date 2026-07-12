@@ -1,5 +1,8 @@
 import type { HandHistoryEvent, SeatId } from '../poker-engine'
 import type {
+  CommandRecord,
+  CommandRecordDraft,
+  CommandRecordStore,
   EventPrivacyClass,
   EventRecord,
   EventRecordDraft,
@@ -98,6 +101,29 @@ export class InMemoryEventRecordStore implements EventRecordStore {
   }
 }
 
+export class InMemoryCommandRecordStore implements CommandRecordStore {
+  private readonly commands: CommandRecord[] = []
+
+  async appendCommand(command: CommandRecordDraft): Promise<CommandRecord> {
+    const record: CommandRecord = {
+      ...clone(command),
+      privacyClass: 'tablePrivate',
+    }
+    this.commands.push(record)
+    return clone(record)
+  }
+
+  async listCommandsForMatch(matchId: string): Promise<CommandRecord[]> {
+    return clone(this.commands.filter((command) => command.matchId === matchId))
+  }
+
+  async listRejectedCommands(matchId: string): Promise<CommandRecord[]> {
+    return clone(
+      this.commands.filter((command) => command.matchId === matchId && command.status === 'rejected'),
+    )
+  }
+}
+
 export function createEventRecordDrafts(
   matchId: string,
   tableId: string,
@@ -108,6 +134,10 @@ export function createEventRecordDrafts(
     tableId,
     event,
   }))
+}
+
+export function createCommandRecordDraft(command: CommandRecordDraft): CommandRecordDraft {
+  return clone(command)
 }
 
 function toEventRecord(draft: EventRecordDraft): EventRecord {

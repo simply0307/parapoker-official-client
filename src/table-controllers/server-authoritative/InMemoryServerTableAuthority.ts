@@ -14,7 +14,9 @@ import {
   type SeatId,
 } from '../../poker-engine'
 import {
+  createCommandRecordDraft,
   createEventRecordDrafts,
+  type CommandRecordStore,
   type EventRecordStore,
   type MatchFormat,
   type MatchRecordStore,
@@ -66,6 +68,7 @@ export interface ServerAuthorityPersistence {
   matchId: string
   matchStore: MatchRecordStore
   eventStore: EventRecordStore
+  commandStore?: CommandRecordStore
   format?: MatchFormat
   rulesContractVersion?: string
 }
@@ -156,7 +159,9 @@ export class InMemoryServerTableAuthority {
 
     const trustedSeatId = this.connectionSeats.get(connectionId)
     if (!trustedSeatId) {
-      return this.reject(request.commandId, 'NOT_SEATED', false)
+      const rejected = this.reject(request.commandId, 'NOT_SEATED', false)
+      this.persistRejectedCommand(request, undefined, rejected.reason)
+      return rejected
     }
 
     const idempotencyKey = `${idempotencyScope}:${request.commandId}`
@@ -164,29 +169,38 @@ export class InMemoryServerTableAuthority {
     const existingRecord = this.idempotencyRecords.get(idempotencyKey)
     if (existingRecord) {
       if (existingRecord.fingerprint !== fingerprint) {
-        return this.reject(request.commandId, 'IDEMPOTENCY_CONFLICT', false)
+        const rejected = this.reject(request.commandId, 'IDEMPOTENCY_CONFLICT', false)
+        this.persistRejectedCommand(request, trustedSeatId, rejected.reason)
+        return rejected
       }
       return existingRecord.result
     }
 
     if (request.expectedStateVersion !== this.stateVersion) {
-      return this.reject(request.commandId, 'STATE_VERSION_CONFLICT', true)
+      const rejected = this.reject(request.commandId, 'STATE_VERSION_CONFLICT', true)
+      this.persistRejectedCommand(request, trustedSeatId, rejected.reason)
+      return rejected
     }
 
     const command = toTrustedCommand(trustedSeatId, request)
     const preflight = this.preflightCommand(command)
     if (preflight) {
-      return this.reject(request.commandId, preflight, true)
+      const rejected = this.reject(request.commandId, preflight, true)
+      this.persistRejectedCommand(request, trustedSeatId, rejected.reason)
+      return rejected
     }
 
     const result = applyAction(this.state, command)
     if (!result.ok) {
-      return this.reject(request.commandId, toProtocolError(result.error.reason), true)
+      const rejected = this.reject(request.commandId, toProtocolError(result.error.reason), true)
+      this.persistRejectedCommand(request, trustedSeatId, rejected.reason)
+      return rejected
     }
 
     this.state = result.state
     this.stateVersion += 1
     this.persistEvents(result.events)
+    this.persistAcceptedCommand(request, trustedSeatId, result.events.map((event) => event.eventId))
     const accepted: CommandAcceptedMessage = {
       ok: true,
       tableId: this.tableId,
@@ -299,6 +313,71 @@ export class InMemoryServerTableAuthority {
     }
 
     void this.persistence.eventStore.appendEvents(createEventRecordDrafts(this.persistence.matchId, this.tableId, events))
+  }
+
+  private persistAcceptedCommand(
+    request: PlayerActionRequest,
+    trustedSeatId: SeatId,
+    resultingEventIds: string[],
+  ): void {
+    if (!this.persistence?.commandStore) {
+      return
+    }
+
+    void this.persistence.commandStore.appendCommand(
+      createCommandRecordDraft({
+        matchId: this.persistence.matchId,
+        tableId: this.tableId,
+        commandId: request.commandId,
+        playerId: trustedSeatId,
+        trustedSeatId,
+        expectedStateVersion: request.expectedStateVersion,
+        requestedAction: sanitizeRequestedAction(request.requestedAction),
+        status: 'accepted',
+        resultingEventIds,
+      }),
+    )
+  }
+
+  private persistRejectedCommand(
+    request: PlayerActionRequest,
+    trustedSeatId: SeatId | undefined,
+    rejectionReason: ProtocolErrorReason,
+  ): void {
+    if (!this.persistence?.commandStore || !trustedSeatId) {
+      return
+    }
+
+    void this.persistence.commandStore.appendCommand(
+      createCommandRecordDraft({
+        matchId: this.persistence.matchId,
+        tableId: this.tableId,
+        commandId: request.commandId,
+        playerId: trustedSeatId,
+        trustedSeatId,
+        expectedStateVersion: request.expectedStateVersion,
+        requestedAction: sanitizeRequestedAction(request.requestedAction),
+        status: 'rejected',
+        rejectionReason,
+      }),
+    )
+  }
+}
+
+function sanitizeRequestedAction(action: RequestedPokerAction): RequestedPokerAction {
+  switch (action.type) {
+    case 'bet':
+      return { type: 'bet', amount: action.amount }
+    case 'raise':
+      return { type: 'raise', amount: action.amount }
+    case 'fold':
+      return { type: 'fold' }
+    case 'check':
+      return { type: 'check' }
+    case 'call':
+      return { type: 'call' }
+    case 'allIn':
+      return { type: 'allIn' }
   }
 }
 

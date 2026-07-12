@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { InMemoryEventRecordStore, InMemoryMatchRecordStore } from '../../src/persistence'
+import { InMemoryCommandRecordStore, InMemoryEventRecordStore, InMemoryMatchRecordStore } from '../../src/persistence'
 import {
   InMemoryServerTableAuthority,
   type PlayerActionRequest,
@@ -228,6 +228,55 @@ describe('in-memory server table authority', () => {
       'handStarted',
       'blindPosted',
       'blindPosted',
-    ])
+      ])
+  })
+
+  it('persists accepted and rejected command records separately from replay events', async () => {
+    const commandStore = new InMemoryCommandRecordStore()
+    const eventStore = new InMemoryEventRecordStore()
+    const table = new InMemoryServerTableAuthority({
+      tableId: 'table-1',
+      config: headsUpHumans,
+      seatBindings: [
+        { connectionId: 'conn-alice', seatId: 'seat-1' },
+        { connectionId: 'conn-bob', seatId: 'seat-2' },
+      ],
+      persistence: {
+        matchId: 'match-1',
+        matchStore: new InMemoryMatchRecordStore(),
+        eventStore,
+        commandStore,
+      },
+    })
+
+    table.startNextHand()
+    const accepted = table.submitPlayerAction('conn-alice', request())
+    const rejected = table.submitPlayerAction('conn-bob', request({ commandId: 'cmd-rejected', expectedStateVersion: 1 }))
+
+    expect(accepted.ok).toBe(true)
+    expect(rejected.ok).toBe(false)
+    const commandRecords = await commandStore.listCommandsForMatch('match-1')
+    const replayEvents = await eventStore.listReplayEvents('match-1')
+
+    expect(commandRecords).toHaveLength(2)
+    expect(commandRecords[0]).toEqual(
+      expect.objectContaining({
+        commandId: 'cmd-1',
+        status: 'accepted',
+        trustedSeatId: 'seat-1',
+        resultingEventIds: ['hand-1-event-6'],
+      }),
+    )
+    expect(commandRecords[1]).toEqual(
+      expect.objectContaining({
+        commandId: 'cmd-rejected',
+        status: 'rejected',
+        trustedSeatId: 'seat-2',
+        rejectionReason: 'STATE_VERSION_CONFLICT',
+      }),
+    )
+    expect(replayEvents.map((record) => record.event.eventId)).not.toContain('cmd-rejected')
+    expect(JSON.stringify(commandRecords)).not.toContain('deck')
+    expect(JSON.stringify(commandRecords)).not.toContain('rngState')
   })
 })

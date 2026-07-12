@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createGame, startNextHand, type GameState, type HandHistoryEvent } from '../../src/poker-engine'
 import {
+  createCommandRecordDraft,
   createEventRecordDrafts,
+  InMemoryCommandRecordStore,
   InMemoryEventRecordStore,
   InMemoryMatchRecordStore,
   type MatchRecordDraft,
@@ -124,5 +126,47 @@ describe('in-memory persistence stores', () => {
 
     const secondRead = await store.listPublicEvents('match-1')
     expect(secondRead[0].event.payload).toEqual({ dealerSeatId: 'human' })
+  })
+
+  it('stores command records separately from replay events for database-ready export metadata', async () => {
+    const store = new InMemoryCommandRecordStore()
+
+    await store.appendCommand(
+      createCommandRecordDraft({
+        matchId: 'match-1',
+        tableId: 'table-1',
+        commandId: 'cmd-call',
+        playerId: 'player-human',
+        trustedSeatId: 'human',
+        expectedStateVersion: 1,
+        requestedAction: { type: 'call' },
+        status: 'accepted',
+        resultingEventIds: ['hand-1-event-6'],
+      }),
+    )
+    await store.appendCommand(
+      createCommandRecordDraft({
+        matchId: 'match-1',
+        tableId: 'table-1',
+        commandId: 'cmd-bad',
+        playerId: 'player-npc',
+        trustedSeatId: 'npc-1',
+        expectedStateVersion: 1,
+        requestedAction: { type: 'check', seatId: 'human', source: 'npc' },
+        status: 'rejected',
+        rejectionReason: 'NOT_PENDING_ACTOR',
+      }),
+    )
+
+    const records = await store.listCommandsForMatch('match-1')
+    const rejected = await store.listRejectedCommands('match-1')
+
+    expect(records.map((record) => record.commandId)).toEqual(['cmd-call', 'cmd-bad'])
+    expect(records[0].status).toBe('accepted')
+    expect(records[0].resultingEventIds).toEqual(['hand-1-event-6'])
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]).toEqual(expect.objectContaining({ commandId: 'cmd-bad', rejectionReason: 'NOT_PENDING_ACTOR' }))
+    expect(JSON.stringify(records)).not.toContain('deck')
+    expect(JSON.stringify(records)).not.toContain('rngState')
   })
 })

@@ -1,4 +1,5 @@
 import type { Card, EventSchemaVersion, HandHistoryEvent, SeatId } from '../poker-engine'
+import type { ProtocolErrorReason, RequestedPokerAction } from '../table-controllers/server-authoritative/InMemoryServerTableAuthority'
 
 export type MatchFormat = 'freezeout' | 'sitAndGo' | 'cash' | 'league'
 export type MatchRecordStatus = 'active' | 'complete' | 'cancelled'
@@ -85,4 +86,30 @@ export interface EventRecordStore {
   listSeatEvents(matchId: string, seatId: SeatId): Promise<EventRecord[]>
   listReplayEvents(matchId: string): Promise<EventRecord[]>
   exportSeatHandHistory(matchId: string, seatId: SeatId): Promise<SeatHandHistoryExport>
+}
+
+export type CommandRecordStatus = 'accepted' | 'rejected'
+
+export interface CommandRecordDraft {
+  matchId: string
+  tableId: string
+  commandId: string
+  playerId?: string
+  npcId?: string
+  trustedSeatId: SeatId
+  expectedStateVersion: number
+  requestedAction: RequestedPokerAction
+  status: CommandRecordStatus
+  resultingEventIds?: string[]
+  rejectionReason?: ProtocolErrorReason
+}
+
+export interface CommandRecord extends CommandRecordDraft {
+  privacyClass: Extract<EventPrivacyClass, 'tablePrivate'>
+}
+
+export interface CommandRecordStore {
+  appendCommand(command: CommandRecordDraft): Promise<CommandRecord>
+  listCommandsForMatch(matchId: string): Promise<CommandRecord[]>
+  listRejectedCommands(matchId: string): Promise<CommandRecord[]>
 }
