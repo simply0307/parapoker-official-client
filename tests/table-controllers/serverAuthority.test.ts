@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { InMemoryEventRecordStore, InMemoryMatchRecordStore } from '../../src/persistence'
 import {
   InMemoryServerTableAuthority,
   type PlayerActionRequest,
@@ -162,5 +163,71 @@ describe('in-memory server table authority', () => {
     expect(publicProjection.privateSeatView).toBeUndefined()
     expect(JSON.stringify(publicProjection)).not.toContain('deck')
     expect(JSON.stringify(publicProjection)).not.toContain('rngState')
+  })
+
+  it('persists match summaries and visibility-scoped events through store interfaces', async () => {
+    const matchStore = new InMemoryMatchRecordStore()
+    const eventStore = new InMemoryEventRecordStore()
+    const table = new InMemoryServerTableAuthority({
+      tableId: 'table-1',
+      config: headsUpHumans,
+      seatBindings: [
+        { connectionId: 'conn-alice', seatId: 'seat-1' },
+        { connectionId: 'conn-bob', seatId: 'seat-2' },
+      ],
+      persistence: {
+        matchId: 'match-1',
+        matchStore,
+        eventStore,
+        format: 'freezeout',
+        rulesContractVersion: 'para-poker-rules-v0',
+      },
+    })
+
+    const started = table.startNextHand()
+    expect(started.ok).toBe(true)
+    const acted = table.submitPlayerAction('conn-alice', request())
+    expect(acted.ok).toBe(true)
+
+    const match = await matchStore.getMatch('match-1')
+    const publicEvents = await eventStore.listPublicEvents('match-1')
+    const aliceEvents = await eventStore.listSeatEvents('match-1', 'seat-1')
+    const exported = await eventStore.exportSeatHandHistory('match-1', 'seat-1')
+
+    expect(match?.tableId).toBe('table-1')
+    expect(match?.status).toBe('active')
+    expect(match?.eventSchemaVersion).toBe('poker-event-v1')
+    expect(publicEvents.map((record) => record.event.type)).toContain('actionApplied')
+    expect(aliceEvents.map((record) => record.event.type)).toContain('holeCardsDealt')
+    expect(exported.events.map((event) => event.type)).toContain('holeCardsDealt')
+    expect(JSON.stringify(exported)).not.toContain('deck')
+    expect(JSON.stringify(exported)).not.toContain('rngState')
+  })
+
+  it('does not persist rejected commands as replay events', async () => {
+    const eventStore = new InMemoryEventRecordStore()
+    const table = new InMemoryServerTableAuthority({
+      tableId: 'table-1',
+      config: headsUpHumans,
+      seatBindings: [
+        { connectionId: 'conn-alice', seatId: 'seat-1' },
+        { connectionId: 'conn-bob', seatId: 'seat-2' },
+      ],
+      persistence: {
+        matchId: 'match-1',
+        matchStore: new InMemoryMatchRecordStore(),
+        eventStore,
+      },
+    })
+
+    table.startNextHand()
+    const rejected = table.submitPlayerAction('conn-bob', request())
+
+    expect(rejected.ok).toBe(false)
+    expect((await eventStore.listPublicEvents('match-1')).map((record) => record.event.type)).toEqual([
+      'handStarted',
+      'blindPosted',
+      'blindPosted',
+    ])
   })
 })

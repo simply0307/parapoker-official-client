@@ -13,6 +13,12 @@ import {
   type PublicTableView,
   type SeatId,
 } from '../../poker-engine'
+import {
+  createEventRecordDrafts,
+  type EventRecordStore,
+  type MatchFormat,
+  type MatchRecordStore,
+} from '../../persistence'
 
 export type MultiplayerProtocolVersion = 'parapoker-multiplayer-v1'
 
@@ -53,6 +59,15 @@ export interface ServerTableAuthorityConfig {
     connectionId: string
     seatId: SeatId
   }>
+  persistence?: ServerAuthorityPersistence
+}
+
+export interface ServerAuthorityPersistence {
+  matchId: string
+  matchStore: MatchRecordStore
+  eventStore: EventRecordStore
+  format?: MatchFormat
+  rulesContractVersion?: string
 }
 
 export type PlayerActionResult = CommandAcceptedMessage | CommandRejectedMessage
@@ -97,11 +112,14 @@ export class InMemoryServerTableAuthority {
   private readonly tableId: string
   private readonly connectionSeats: Map<string, SeatId>
   private readonly idempotencyRecords = new Map<string, IdempotencyRecord>()
+  private readonly persistence?: ServerAuthorityPersistence
 
-  constructor({ tableId, config = {}, seatBindings = [] }: ServerTableAuthorityConfig) {
+  constructor({ tableId, config = {}, seatBindings = [], persistence }: ServerTableAuthorityConfig) {
     this.tableId = tableId
     this.state = createGame(config)
     this.connectionSeats = new Map(seatBindings.map((binding) => [binding.connectionId, binding.seatId]))
+    this.persistence = persistence
+    this.createPersistedMatch()
   }
 
   bindConnectionToSeat(connectionId: string, seatId: SeatId): void {
@@ -116,6 +134,7 @@ export class InMemoryServerTableAuthority {
 
     this.state = result.state
     this.stateVersion += 1
+    this.persistEvents(result.events)
     return {
       ok: true,
       tableId: this.tableId,
@@ -167,6 +186,7 @@ export class InMemoryServerTableAuthority {
 
     this.state = result.state
     this.stateVersion += 1
+    this.persistEvents(result.events)
     const accepted: CommandAcceptedMessage = {
       ok: true,
       tableId: this.tableId,
@@ -248,6 +268,37 @@ export class InMemoryServerTableAuthority {
       reason,
       retryable,
     }
+  }
+
+  private createPersistedMatch(): void {
+    if (!this.persistence) {
+      return
+    }
+
+    void this.persistence.matchStore.createMatch({
+      matchId: this.persistence.matchId,
+      tableId: this.tableId,
+      format: this.persistence.format ?? 'freezeout',
+      rulesContractVersion: this.persistence.rulesContractVersion ?? 'para-poker-rules-v0',
+      eventSchemaVersion: 'poker-event-v1',
+      seatAssignments: this.state.config.seats.map((seat) => ({
+        seatId: seat.id,
+        ...(seat.kind === 'human' ? { playerId: seat.id } : { npcId: seat.id }),
+      })),
+      startingStacks: Object.fromEntries(this.state.config.seats.map((seat) => [seat.id, this.state.config.startingStack])),
+      blinds: {
+        smallBlind: this.state.config.smallBlind,
+        bigBlind: this.state.config.bigBlind,
+      },
+    })
+  }
+
+  private persistEvents(events: HandHistoryEvent[]): void {
+    if (!this.persistence || events.length === 0) {
+      return
+    }
+
+    void this.persistence.eventStore.appendEvents(createEventRecordDrafts(this.persistence.matchId, this.tableId, events))
   }
 }
 
