@@ -17,6 +17,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -51,12 +52,14 @@ button.danger {
 }
 
 .table-shell {
-  width: min(1180px, 100%);
-  min-height: 100vh;
+  width: 100%;
+  height: 100svh;
   margin: 0 auto;
-  padding: 24px;
+  padding: 12px;
   display: grid;
-  gap: 18px;
+  grid-template-columns: minmax(220px, 0.78fr) minmax(500px, 1.8fr) minmax(300px, 0.98fr);
+  gap: 12px;
+  overflow: hidden;
 }
 
 .scoreboard,
@@ -69,10 +72,8 @@ button.danger {
 
 .scoreboard {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(420px, auto);
-  align-items: stretch;
-  gap: 18px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .title-block {
@@ -96,7 +97,7 @@ p {
 }
 
 h1 {
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.15;
 }
 
@@ -105,7 +106,6 @@ h2 {
 }
 
 .status-pill {
-  min-width: 190px;
   border: 1px solid #c3cbc5;
   border-radius: 6px;
   padding: 10px 14px;
@@ -116,7 +116,6 @@ h2 {
 
 .match-summary {
   display: grid;
-  grid-template-columns: auto 1fr;
   gap: 10px;
   align-items: stretch;
 }
@@ -124,12 +123,12 @@ h2 {
 .metric-grid {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 .metric-grid div {
-  min-height: 62px;
+  min-height: 54px;
   border: 1px solid #d3dbd2;
   border-radius: 6px;
   padding: 8px;
@@ -154,16 +153,18 @@ h2 {
 }
 
 .felt {
-  min-height: 530px;
-  padding: 22px;
+  min-height: 0;
+  height: 100%;
+  padding: 14px;
   border: 8px solid #533b2a;
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0)),
     #16603f;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 18px;
+  grid-template-rows: minmax(124px, auto) 1fr minmax(140px, auto);
+  gap: 12px;
+  overflow: hidden;
 }
 
 .opponents {
@@ -173,14 +174,14 @@ h2 {
 }
 
 .seat {
-  min-height: 160px;
-  padding: 14px;
+  min-height: 0;
+  padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 8px;
   background: rgba(9, 28, 20, 0.58);
   color: #ffffff;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .seat.active-seat {
@@ -220,7 +221,7 @@ h2 {
 }
 
 .card {
-  width: 54px;
+  width: clamp(38px, 4.2vw, 52px);
   aspect-ratio: 0.72;
   border: 1px solid #c8c8c8;
   border-radius: 6px;
@@ -271,9 +272,19 @@ h2 {
 }
 
 .controls {
-  padding: 16px;
+  padding: 14px;
   display: grid;
   gap: 14px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.right-rail {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
 }
 
 .controls-header,
@@ -300,30 +311,50 @@ h2 {
 }
 
 .action-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   align-items: center;
 }
 
+.action-row button,
+.action-row .amount-control {
+  width: 100%;
+}
+
 .amount-control {
-  min-width: 280px;
+  grid-column: 1 / -1;
+  min-width: 0;
   border: 1px solid #d3dbd2;
   border-radius: 6px;
   padding: 10px;
   display: grid;
-  grid-template-columns: 64px minmax(92px, 1fr) auto;
+  grid-template-columns: 1fr 88px;
   gap: 10px;
   align-items: center;
 }
 
 .amount-control span {
+  grid-column: 1 / -1;
   text-transform: capitalize;
   font-weight: 700;
 }
 
-.amount-control input {
+.amount-slider {
   min-width: 90px;
+}
+
+.amount-entry {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5cf;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-weight: 800;
+}
+
+.amount-control button {
+  grid-column: 1 / -1;
 }
 
 .muted {
@@ -337,13 +368,18 @@ h2 {
 }
 
 .history {
-  padding: 16px 18px;
+  min-height: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .history ol {
   margin: 10px 0 0;
   padding-left: 22px;
   color: #34423c;
+  overflow: auto;
 }
 
 .history li + li {
@@ -351,12 +387,21 @@ h2 {
 }
 
 @media (max-width: 760px) {
-  .table-shell {
-    padding: 12px;
+  body {
+    overflow: auto;
   }
 
-  .scoreboard {
+  .table-shell {
+    height: auto;
+    min-height: 100svh;
+    padding: 12px;
     grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .history {
+    order: 3;
+    max-height: 260px;
   }
 
   .match-summary,
@@ -366,6 +411,7 @@ h2 {
 
   .felt {
     min-height: 480px;
+    height: auto;
     padding: 12px;
   }
 

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { PokerTable } from '../../src/ui/PokerTable'
 
@@ -21,5 +21,21 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Hero seat')).toBeInTheDocument()
     expect(screen.getByLabelText('Opponent seat')).toBeInTheDocument()
     expect(screen.getByLabelText('Player actions')).toHaveTextContent('Call 1')
+  })
+
+  it('lets players tune raises with the slider, wheel, and typed amount', () => {
+    render(<PokerTable />)
+
+    const raiseSlider = screen.getByLabelText('Raise amount slider')
+    const raiseInput = screen.getByLabelText('Raise amount entry')
+
+    expect(raiseInput).toHaveValue(4)
+
+    fireEvent.wheel(raiseSlider, { deltaY: -100 })
+    expect(raiseInput).toHaveValue(5)
+
+    fireEvent.change(raiseInput, { target: { value: '12' } })
+    expect(raiseSlider).toHaveValue('12')
+    expect(screen.getByRole('button', { name: 'Raise 12' })).toBeInTheDocument()
   })
 })

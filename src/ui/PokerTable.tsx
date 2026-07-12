@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
 import {
   LocalSinglePlayerController,
@@ -55,20 +55,16 @@ export function PokerTable() {
 
   return (
     <main className="table-shell">
-      <section className="scoreboard" aria-label="Match state">
-        <div className="title-block">
-          <p className="eyebrow">ParaPoker Play Money</p>
-          <h1>Heads-Up No-Limit Hold&apos;em</h1>
+      <section className="history" aria-label="Hand history">
+        <div className="section-heading">
+          <h2>Hand history</h2>
+          <span>{snapshot.heroView.events.length} events</span>
         </div>
-        <div className="match-summary">
-          <div className="status-pill">{statusText}</div>
-          <dl className="metric-grid" aria-label="Match metrics">
-            <Metric label="Hand" value={snapshot.publicView.handNumber} />
-            <Metric label="Pot" value={formatChips(snapshot.publicView.pot)} />
-            <Metric label="To call" value={formatChips(toCall)} />
-            <Metric label="Stack lead" value={stackLead} />
-          </dl>
-        </div>
+        <ol>
+          {snapshot.heroView.events.slice(-14).map((event) => (
+            <li key={event.eventId}>{describeEvent(event)}</li>
+          ))}
+        </ol>
       </section>
 
       <section className="felt" aria-label="Poker table">
@@ -102,50 +98,56 @@ export function PokerTable() {
             label="Hero seat"
             active={pendingSeat?.id === heroSeat.id}
           />
-        )}
-      </section>
+          )}
+        </section>
 
-      <section className="controls" aria-label="Player actions">
-        <div className="controls-header">
-          <div>
-            <h2>Actions</h2>
-            <p>{lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
+      <aside className="right-rail" aria-label="Table controls">
+        <section className="scoreboard" aria-label="Match state">
+          <div className="title-block">
+            <p className="eyebrow">ParaPoker Play Money</p>
+            <h1>Heads-Up No-Limit Hold&apos;em</h1>
           </div>
-          <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
-        </div>
-        <div className="action-row">
-          {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && (
-            <span className="muted">Waiting for the table authority.</span>
-          )}
-          {snapshot.heroView.legalActions.map((action) => (
-            <ActionControl
-              key={action.type}
-              action={action}
-              amount={amounts[action.type]}
-              setAmount={(amount) => setAmounts((current) => ({ ...current, [action.type]: amount }))}
-              submit={submit}
-            />
-          ))}
-          {canStartNextHand && (
-            <button type="button" className="primary" onClick={startNext}>
-              Next hand
-            </button>
-          )}
-        </div>
-        {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
-      </section>
+          <div className="match-summary">
+            <div className="status-pill">{statusText}</div>
+            <dl className="metric-grid" aria-label="Match metrics">
+              <Metric label="Hand" value={snapshot.publicView.handNumber} />
+              <Metric label="Pot" value={formatChips(snapshot.publicView.pot)} />
+              <Metric label="To call" value={formatChips(toCall)} />
+              <Metric label="Stack lead" value={stackLead} />
+            </dl>
+          </div>
+        </section>
 
-      <section className="history" aria-label="Hand history">
-        <div className="section-heading">
-          <h2>Hand history</h2>
-          <span>{snapshot.heroView.events.length} events</span>
-        </div>
-        <ol>
-          {snapshot.heroView.events.slice(-10).map((event) => (
-            <li key={event.eventId}>{describeEvent(event)}</li>
-          ))}
-        </ol>
-      </section>
+        <section className="controls" aria-label="Player actions">
+          <div className="controls-header">
+            <div>
+              <h2>Actions</h2>
+              <p>{lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
+            </div>
+            <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
+          </div>
+          <div className="action-row">
+            {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && (
+              <span className="muted">Waiting for the table authority.</span>
+            )}
+            {snapshot.heroView.legalActions.map((action) => (
+              <ActionControl
+                key={action.type}
+                action={action}
+                amount={amounts[action.type]}
+                setAmount={(amount) => setAmounts((current) => ({ ...current, [action.type]: amount }))}
+                submit={submit}
+              />
+            ))}
+            {canStartNextHand && (
+              <button type="button" className="primary" onClick={startNext}>
+                Next hand
+              </button>
+            )}
+          </div>
+          {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
+        </section>
+      </aside>
     </main>
   )
 }
@@ -217,20 +219,49 @@ function ActionControl({
   submit: (command: HumanCommand) => void
 }) {
   if (action.type === 'bet' || action.type === 'raise') {
-    const selectedAmount = amount ?? action.min
+    const minAmount = action.min
+    const maxAmount = action.max
+    const selectedAmount = amount ?? minAmount
+    const actionName = titleCase(action.type)
+    const step = 1
+
+    function setClampedAmount(nextAmount: number) {
+      setAmount(clampAmount(nextAmount, minAmount, maxAmount))
+    }
+
+    function adjustWithWheel(event: WheelEvent<HTMLInputElement>) {
+      event.preventDefault()
+      const direction = event.deltaY < 0 ? 1 : -1
+      setClampedAmount(selectedAmount + direction * step)
+    }
+
     return (
       <label className="amount-control">
-        <span>{titleCase(action.type)}</span>
+        <span>{actionName}</span>
         <input
+          className="amount-slider"
           type="range"
-          min={action.min}
-          max={action.max}
-          aria-label={`${titleCase(action.type)} amount`}
+          min={minAmount}
+          max={maxAmount}
+          step={step}
+          aria-label={`${actionName} amount slider`}
           value={selectedAmount}
-          onChange={(event) => setAmount(Number(event.target.value))}
+          onChange={(event) => setClampedAmount(Number(event.target.value))}
+          onWheel={adjustWithWheel}
+        />
+        <input
+          className="amount-entry"
+          type="number"
+          min={minAmount}
+          max={maxAmount}
+          step={step}
+          aria-label={`${actionName} amount entry`}
+          value={selectedAmount}
+          onChange={(event) => setClampedAmount(Number(event.target.value))}
+          onWheel={adjustWithWheel}
         />
         <button type="button" onClick={() => submit({ type: action.type, amount: selectedAmount })}>
-          {titleCase(action.type)} {formatChips(selectedAmount)}
+          {actionName} {formatChips(selectedAmount)}
         </button>
       </label>
     )
@@ -299,6 +330,13 @@ function titleCase(value: string): string {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ')
+}
+
+function clampAmount(amount: number, min: number, max: number): number {
+  if (!Number.isFinite(amount)) {
+    return min
+  }
+  return Math.min(max, Math.max(min, Math.round(amount)))
 }
 
 function describeEvent(event: LocalSinglePlayerSnapshot['heroView']['events'][number]): string {
