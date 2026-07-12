@@ -67,6 +67,10 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
     nextState.status = 'complete'
     return error(nextState, 'MATCH_COMPLETE', 'At least two funded seats are required to start a hand.')
   }
+  const fixedDeckError = validateFixedDeck(nextState.config.fixedDeck, activeSeats.length)
+  if (fixedDeckError) {
+    return error(state, 'INVARIANT_VIOLATION', fixedDeckError)
+  }
 
   nextState.handNumber += 1
   for (const seat of nextState.seats) {
@@ -114,6 +118,7 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
   postBlind(nextState, smallBlindSeatId, nextState.config.smallBlind, 'small')
   postBlind(nextState, bigBlindSeatId, nextState.config.bigBlind, 'big')
   dealHoleCards(nextState)
+  settleOrAdvanceIfNoActionIsPossible(nextState)
 
   return { ok: true, state: nextState, events: hand.history }
 }
@@ -130,6 +135,8 @@ export function getLegalActions(state: GameState, seatId: SeatId): LegalAction[]
 
   const contribution = hand.streetContributions[seatId] ?? 0
   const toCall = Math.max(0, hand.currentBet - contribution)
+  const hasAlreadyActed = hand.actedThisRound.includes(seatId)
+  const canRaiseNow = toCall === 0 || !hasAlreadyActed
   const actions: LegalAction[] = []
 
   if (toCall > 0) {
@@ -144,13 +151,15 @@ export function getLegalActions(state: GameState, seatId: SeatId): LegalAction[]
     if (toCall === 0) {
       const minBet = Math.min(state.config.bigBlind, seat.stack)
       actions.push({ type: 'bet', min: contribution + minBet, max: targetContribution })
-    } else if (seat.stack > toCall) {
+    } else if (seat.stack > toCall && canRaiseNow) {
       const minRaiseTarget = hand.currentBet + hand.minRaise
       if (targetContribution >= minRaiseTarget) {
         actions.push({ type: 'raise', min: minRaiseTarget, max: targetContribution })
       }
     }
-    actions.push({ type: 'allIn', amount: seat.stack, targetContribution })
+    if (targetContribution <= hand.currentBet || canRaiseNow) {
+      actions.push({ type: 'allIn', amount: seat.stack, targetContribution })
+    }
   }
 
   return dedupeActions(actions)
@@ -228,7 +237,7 @@ export function applyAction(state: GameState, command: EngineCommand): EngineRes
 
 export function getPublicView(state: GameState): PublicTableView {
   const hand = state.hand
-  return {
+  return clone({
     status: state.status,
     handNumber: state.handNumber,
     street: hand?.street,
@@ -239,20 +248,20 @@ export function getPublicView(state: GameState): PublicTableView {
     pendingSeatId: hand?.pendingSeatId,
     seats: state.seats.map((seat) => toPublicSeatView(state, seat)),
     events: filterEventsForSeat(hand?.history ?? [], 'public'),
-  }
+  })
 }
 
 export function getSeatView(state: GameState, seatId: SeatId): PrivateSeatView {
   const publicView = getPublicView(state)
   const seat = state.seats.find((candidate) => candidate.id === seatId)
 
-  return {
+  return clone({
     ...publicView,
     heroSeatId: seatId,
     holeCards: seat?.holeCards ?? [],
     legalActions: getLegalActions(state, seatId),
     events: filterEventsForSeat(state.hand?.history ?? [], seatId),
-  }
+  })
 }
 
 export function replayCommands(initialState: GameState, commands: EngineCommand[]): EngineResult<GameState> {
@@ -281,7 +290,7 @@ function progressHand(state: GameState, actedSeatId: SeatId): void {
   }
 
   const ableToAct = contenders.filter(canSeatAct)
-  if (ableToAct.length === 0) {
+  if (canRunOutWithoutMoreAction(state, contenders, ableToAct)) {
     runoutAndSettle(state)
     return
   }
@@ -368,41 +377,20 @@ function settleUncontested(state: GameState, winnerSeatId: SeatId): void {
 function settleShowdown(state: GameState): void {
   const hand = requireHand(state)
   const contenders = state.seats.filter((seat) => seat.status !== 'folded' && seat.status !== 'out')
+  const pots = constructPots(hand.totalContributions, contenders.map((seat) => seat.id))
+  for (const refund of pots.refunds) {
+    requireSeat(state, refund.seatId).stack += refund.amount
+  }
   const evaluated = contenders.map((seat) => ({
     seat,
     value: evaluateBestHand([...seat.holeCards, ...hand.communityCards]),
   }))
-  const best = evaluated.reduce((currentBest, candidate) =>
-    compareHandValues(candidate.value, currentBest.value) > 0 ? candidate : currentBest,
-  )
-  const winners = evaluated.filter((candidate) => compareHandValues(candidate.value, best.value) === 0)
-  const potAmount = totalPot(hand)
-  const baseAward = Math.floor(potAmount / winners.length)
-  let oddChips = potAmount % winners.length
-  const orderedWinnerIds = orderFromSeat(state.seats, hand.dealerSeatId)
-    .map((seat) => seat.id)
-    .filter((seatId) => winners.some((winner) => winner.seat.id === seatId))
-
-  const awards = winners.map((winner) => {
-    const receivesOddChip = oddChips > 0 && orderedWinnerIds[0] === winner.seat.id
-    if (receivesOddChip) {
-      oddChips -= 1
-      orderedWinnerIds.shift()
-    }
-    const amount = baseAward + (receivesOddChip ? 1 : 0)
-    winner.seat.stack += amount
-    return {
-      seatId: winner.seat.id,
-      amount,
-      handName: winner.value.name,
-      cards: winner.value.cards,
-    }
-  })
+  const awards = pots.pots.flatMap((pot) => awardPot(state, pot.amount, pot.eligibleSeatIds, evaluated))
 
   const revealedCards = Object.fromEntries(contenders.map((seat) => [seat.id, seat.holeCards]))
   const result: ShowdownResult = {
     winners: awards,
-    pots: [{ amount: potAmount, eligibleSeatIds: contenders.map((seat) => seat.id) }],
+    pots: pots.pots,
     revealedCards,
   }
 
@@ -413,6 +401,103 @@ function settleShowdown(state: GameState): void {
   hand.history.push({ type: 'showdown', handId: hand.id, revealedCards, visibility: 'public' })
   hand.history.push({ type: 'potAwarded', handId: hand.id, winners: awards, visibility: 'public' })
   finishHand(state)
+}
+
+function awardPot(
+  state: GameState,
+  amount: number,
+  eligibleSeatIds: SeatId[],
+  evaluated: Array<{
+    seat: SeatState
+    value: ReturnType<typeof evaluateBestHand>
+  }>,
+): ShowdownResult['winners'] {
+  const eligible = evaluated.filter((candidate) => eligibleSeatIds.includes(candidate.seat.id))
+  const best = eligible.reduce((currentBest, candidate) =>
+    compareHandValues(candidate.value, currentBest.value) > 0 ? candidate : currentBest,
+  )
+  const winners = eligible.filter((candidate) => compareHandValues(candidate.value, best.value) === 0)
+  const baseAward = Math.floor(amount / winners.length)
+  let oddChips = amount % winners.length
+  const orderedWinnerIds = orderFromSeat(state.seats, requireHand(state).dealerSeatId)
+    .map((seat) => seat.id)
+    .filter((seatId) => winners.some((winner) => winner.seat.id === seatId))
+
+  return winners.map((winner) => {
+    const receivesOddChip = oddChips > 0 && orderedWinnerIds[0] === winner.seat.id
+    if (receivesOddChip) {
+      oddChips -= 1
+      orderedWinnerIds.shift()
+    }
+    const wonAmount = baseAward + (receivesOddChip ? 1 : 0)
+    winner.seat.stack += wonAmount
+    return {
+      seatId: winner.seat.id,
+      amount: wonAmount,
+      handName: winner.value.name,
+      cards: winner.value.cards,
+    }
+  })
+}
+
+function constructPots(
+  contributions: Record<SeatId, number>,
+  eligibleSeatIds: SeatId[],
+): {
+  pots: Array<{ amount: number; eligibleSeatIds: SeatId[] }>
+  refunds: Array<{ seatId: SeatId; amount: number }>
+} {
+  const remaining = new Map(
+    Object.entries(contributions)
+      .filter(([, amount]) => amount > 0)
+      .map(([seatId, amount]) => [seatId, amount]),
+  )
+  const eligibleSet = new Set(eligibleSeatIds)
+  const pots: Array<{ amount: number; eligibleSeatIds: SeatId[] }> = []
+  const refunds: Array<{ seatId: SeatId; amount: number }> = []
+
+  while (remaining.size > 0) {
+    const layer = Math.min(...remaining.values())
+    const participantIds = Array.from(remaining.keys())
+    const eligibleInLayer = participantIds.filter((seatId) => eligibleSet.has(seatId))
+
+    if (eligibleInLayer.length === 1 && participantIds.length === 1) {
+      refunds.push({ seatId: eligibleInLayer[0], amount: layer })
+    } else if (eligibleInLayer.length > 0) {
+      pots.push({ amount: layer * participantIds.length, eligibleSeatIds: eligibleInLayer })
+    }
+
+    for (const seatId of participantIds) {
+      const nextAmount = (remaining.get(seatId) ?? 0) - layer
+      if (nextAmount > 0) {
+        remaining.set(seatId, nextAmount)
+      } else {
+        remaining.delete(seatId)
+      }
+    }
+  }
+
+  return { pots, refunds }
+}
+
+function settleOrAdvanceIfNoActionIsPossible(state: GameState): void {
+  const hand = requireHand(state)
+  const contenders = state.seats.filter((seat) => seat.status !== 'folded' && seat.status !== 'out')
+  const ableToAct = contenders.filter(canSeatAct)
+
+  if (canRunOutWithoutMoreAction(state, contenders, ableToAct)) {
+    runoutAndSettle(state)
+    return
+  }
+
+  if (hand.pendingSeatId && !canSeatAct(requireSeat(state, hand.pendingSeatId))) {
+    const nextActor = findNextActor(state, hand.pendingSeatId)
+    if (nextActor) {
+      hand.pendingSeatId = nextActor
+      return
+    }
+    advanceStreetOrSettle(state)
+  }
 }
 
 function finishHand(state: GameState): void {
@@ -620,6 +705,18 @@ function canSeatAct(seat: SeatState): boolean {
   return seat.status === 'active' && seat.stack > 0
 }
 
+function canRunOutWithoutMoreAction(state: GameState, contenders: SeatState[], ableToAct: SeatState[]): boolean {
+  if (ableToAct.length === 0) {
+    return true
+  }
+  if (ableToAct.length !== 1 || !contenders.some((seat) => seat.status === 'all-in')) {
+    return false
+  }
+  const hand = requireHand(state)
+  const onlyActor = ableToAct[0]
+  return (hand.streetContributions[onlyActor.id] ?? 0) >= hand.currentBet
+}
+
 function addActedSeat(hand: HandState, seatId: SeatId): void {
   if (!hand.actedThisRound.includes(seatId)) {
     hand.actedThisRound.push(seatId)
@@ -628,6 +725,20 @@ function addActedSeat(hand: HandState, seatId: SeatId): void {
 
 function totalPot(hand: HandState): number {
   return Object.values(hand.totalContributions).reduce((sum, amount) => sum + amount, 0)
+}
+
+function validateFixedDeck(deck: Card[] | undefined, activeSeatCount: number): string | undefined {
+  if (!deck) {
+    return undefined
+  }
+  const minimumCards = activeSeatCount * 2 + 5
+  if (deck.length < minimumCards) {
+    return `A fixed deck must contain at least ${minimumCards} cards for this hand.`
+  }
+  if (!assertUniqueCards(deck)) {
+    return 'A fixed deck cannot contain duplicate cards.'
+  }
+  return undefined
 }
 
 function emptyContributionMap(seats: SeatState[]): Record<SeatId, number> {
