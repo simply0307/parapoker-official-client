@@ -10,4 +10,16 @@ describe('PokerTable', () => {
     expect(screen.getByRole('button', { name: /call/i })).toBeInTheDocument()
     expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
   })
+
+  it('shows scannable heads-up match metrics and action context', () => {
+    render(<PokerTable />)
+
+    expect(screen.getByText('Hand')).toBeInTheDocument()
+    expect(screen.getByText('Pot')).toBeInTheDocument()
+    expect(screen.getByText('To call')).toBeInTheDocument()
+    expect(screen.getByText('Stack lead')).toBeInTheDocument()
+    expect(screen.getByLabelText('Hero seat')).toBeInTheDocument()
+    expect(screen.getByLabelText('Opponent seat')).toBeInTheDocument()
+    expect(screen.getByLabelText('Player actions')).toHaveTextContent('Call 1')
+  })
 })

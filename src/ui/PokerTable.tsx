@@ -16,10 +16,16 @@ export function PokerTable() {
 
   const heroSeat = snapshot.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId)
+  const pendingSeat = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
   const canStartNextHand = snapshot.canonicalStatus === 'waitingForHand'
   const matchWinner = snapshot.publicView.status === 'complete'
     ? snapshot.publicView.seats.find((seat) => seat.stack > 0)
     : undefined
+  const toCall = heroSeat && snapshot.publicView.pendingSeatId === heroSeat.id
+    ? Math.max(0, snapshot.publicView.currentBet - heroSeat.streetContribution)
+    : 0
+  const stackLead = getStackLead(snapshot.publicView.seats, snapshot.heroView.heroSeatId)
+  const lastResult = getLastResultText(snapshot)
 
   const statusText = useMemo(() => {
     if (matchWinner) {
@@ -50,22 +56,37 @@ export function PokerTable() {
   return (
     <main className="table-shell">
       <section className="scoreboard" aria-label="Match state">
-        <div>
+        <div className="title-block">
           <p className="eyebrow">ParaPoker Play Money</p>
           <h1>Heads-Up No-Limit Hold&apos;em</h1>
         </div>
-        <div className="status-pill">{statusText}</div>
+        <div className="match-summary">
+          <div className="status-pill">{statusText}</div>
+          <dl className="metric-grid" aria-label="Match metrics">
+            <Metric label="Hand" value={snapshot.publicView.handNumber} />
+            <Metric label="Pot" value={formatChips(snapshot.publicView.pot)} />
+            <Metric label="To call" value={formatChips(toCall)} />
+            <Metric label="Stack lead" value={stackLead} />
+          </dl>
+        </div>
       </section>
 
       <section className="felt" aria-label="Poker table">
         <div className="opponents">
           {opponentSeats.map((seat) => (
-            <SeatPanel key={seat.id} seat={seat} cards={seat.revealedCards} hiddenCards={!seat.revealedCards} />
+            <SeatPanel
+              key={seat.id}
+              seat={seat}
+              cards={seat.revealedCards}
+              hiddenCards={!seat.revealedCards}
+              label="Opponent seat"
+              active={pendingSeat?.id === seat.id}
+            />
           ))}
         </div>
 
         <div className="board">
-          <div className="pot">Pot {snapshot.publicView.pot}</div>
+          <div className="pot">Pot {formatChips(snapshot.publicView.pot)}</div>
           <div className="community" aria-label="Community cards">
             {Array.from({ length: 5 }).map((_, index) => (
               <PlayingCard key={index} card={snapshot.publicView.communityCards[index]} placeholder="Board" />
@@ -74,10 +95,24 @@ export function PokerTable() {
           <div className="street">{snapshot.publicView.street ?? 'Waiting'}</div>
         </div>
 
-        {heroSeat && <SeatPanel seat={heroSeat} cards={snapshot.heroView.holeCards} />}
+        {heroSeat && (
+          <SeatPanel
+            seat={heroSeat}
+            cards={snapshot.heroView.holeCards}
+            label="Hero seat"
+            active={pendingSeat?.id === heroSeat.id}
+          />
+        )}
       </section>
 
       <section className="controls" aria-label="Player actions">
+        <div className="controls-header">
+          <div>
+            <h2>Actions</h2>
+            <p>{lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
+          </div>
+          <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
+        </div>
         <div className="action-row">
           {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && (
             <span className="muted">Waiting for the table authority.</span>
@@ -101,10 +136,13 @@ export function PokerTable() {
       </section>
 
       <section className="history" aria-label="Hand history">
-        <h2>Hand history</h2>
+        <div className="section-heading">
+          <h2>Hand history</h2>
+          <span>{snapshot.heroView.events.length} events</span>
+        </div>
         <ol>
-          {snapshot.heroView.events.slice(-10).map((event, index) => (
-            <li key={`${event.type}-${index}`}>{describeEvent(event)}</li>
+          {snapshot.heroView.events.slice(-10).map((event) => (
+            <li key={event.eventId}>{describeEvent(event)}</li>
           ))}
         </ol>
       </section>
@@ -116,22 +154,27 @@ function SeatPanel({
   seat,
   cards,
   hiddenCards = false,
+  label,
+  active = false,
 }: {
   seat: PublicSeatView
   cards?: PublicSeatView['revealedCards']
   hiddenCards?: boolean
+  label: string
+  active?: boolean
 }) {
   return (
-    <div className={`seat ${seat.id}`}>
+    <div className={`seat ${seat.id}${active ? ' active-seat' : ''}`} aria-label={label}>
       <div className="seat-meta">
         <strong>{seat.name}</strong>
-        <span>{seat.stack} chips</span>
+        <span>{formatChips(seat.stack)}</span>
       </div>
       <div className="badges">
         {seat.isDealer && <span>Button</span>}
         {seat.isSmallBlind && <span>SB</span>}
         {seat.isBigBlind && <span>BB</span>}
-        <span>{seat.status}</span>
+        <span>{titleCase(seat.status)}</span>
+        {active && <span>Acting</span>}
       </div>
       <div className="hole-cards">
         {hiddenCards ? (
@@ -146,7 +189,7 @@ function SeatPanel({
           </>
         )}
       </div>
-      <div className="contribution">Bet {seat.streetContribution}</div>
+      <div className="contribution">Bet {formatChips(seat.streetContribution)}</div>
     </div>
   )
 }
@@ -177,16 +220,17 @@ function ActionControl({
     const selectedAmount = amount ?? action.min
     return (
       <label className="amount-control">
-        <span>{action.type}</span>
+        <span>{titleCase(action.type)}</span>
         <input
           type="range"
           min={action.min}
           max={action.max}
+          aria-label={`${titleCase(action.type)} amount`}
           value={selectedAmount}
           onChange={(event) => setAmount(Number(event.target.value))}
         />
         <button type="button" onClick={() => submit({ type: action.type, amount: selectedAmount })}>
-          {action.type} {selectedAmount}
+          {titleCase(action.type)} {formatChips(selectedAmount)}
         </button>
       </label>
     )
@@ -210,9 +254,51 @@ function ActionControl({
 
   return (
     <button type="button" onClick={() => submit({ type: action.type })}>
-      {action.type}
+      {titleCase(action.type)}
     </button>
   )
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  )
+}
+
+function getStackLead(seats: PublicSeatView[], heroSeatId: string): string {
+  const hero = seats.find((seat) => seat.id === heroSeatId)
+  const opponent = seats.find((seat) => seat.id !== heroSeatId)
+  if (!hero || !opponent) {
+    return 'Even'
+  }
+  const difference = hero.stack - opponent.stack
+  if (difference === 0) {
+    return 'Even'
+  }
+  return difference > 0 ? `You +${difference}` : `${opponent.name} +${Math.abs(difference)}`
+}
+
+function getLastResultText(snapshot: LocalSinglePlayerSnapshot): string | undefined {
+  const awarded = [...snapshot.heroView.events].reverse().find((event) => event.type === 'potAwarded')
+  if (!awarded || snapshot.publicView.status === 'handInProgress') {
+    return undefined
+  }
+  return `Last pot: ${awarded.payload.winners.map((winner) => `${winner.seatId} won ${winner.amount}`).join(', ')}`
+}
+
+function formatChips(amount: number): string {
+  return `${amount}`
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-\s]/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
 }
 
 function describeEvent(event: LocalSinglePlayerSnapshot['heroView']['events'][number]): string {

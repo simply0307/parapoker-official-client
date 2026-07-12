@@ -32,11 +32,12 @@ button {
   min-height: 42px;
   padding: 0 16px;
   cursor: pointer;
-  text-transform: capitalize;
+  font-weight: 700;
 }
 
 button:hover {
   background: #ffffff;
+  transform: translateY(-1px);
 }
 
 button.primary {
@@ -67,11 +68,17 @@ button.danger {
 }
 
 .scoreboard {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(420px, auto);
+  align-items: stretch;
   gap: 18px;
   padding: 18px 20px;
+}
+
+.title-block {
+  display: grid;
+  align-content: center;
+  gap: 4px;
 }
 
 .eyebrow {
@@ -98,13 +105,52 @@ h2 {
 }
 
 .status-pill {
-  min-width: 180px;
+  min-width: 190px;
   border: 1px solid #c3cbc5;
-  border-radius: 999px;
+  border-radius: 6px;
   padding: 10px 14px;
   background: #f7f0d8;
   text-align: center;
   font-weight: 700;
+}
+
+.match-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.metric-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.metric-grid div {
+  min-height: 62px;
+  border: 1px solid #d3dbd2;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcf8;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.metric-grid dt,
+.section-heading span,
+.controls-header p {
+  color: #607067;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metric-grid dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .felt {
@@ -137,6 +183,11 @@ h2 {
   gap: 10px;
 }
 
+.seat.active-seat {
+  border-color: #f7d067;
+  box-shadow: 0 0 0 2px rgba(247, 208, 103, 0.22);
+}
+
 .seat-meta {
   display: flex;
   align-items: center;
@@ -152,8 +203,9 @@ h2 {
 
 .badges span,
 .street,
-.pot {
-  border-radius: 999px;
+.pot,
+.round-pill {
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.16);
   padding: 5px 9px;
   font-size: 13px;
@@ -220,6 +272,31 @@ h2 {
 
 .controls {
   padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.controls-header,
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.controls-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e7df;
+}
+
+.controls-header div {
+  display: grid;
+  gap: 4px;
+}
+
+.round-pill {
+  background: #eef4ec;
+  color: #24342d;
 }
 
 .action-row {
@@ -230,12 +307,12 @@ h2 {
 }
 
 .amount-control {
-  min-width: 230px;
+  min-width: 280px;
   border: 1px solid #d3dbd2;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 10px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 64px minmax(92px, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -279,8 +356,12 @@ h2 {
   }
 
   .scoreboard {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .match-summary,
+  .metric-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .felt {
@@ -295,5 +376,11 @@ h2 {
   .amount-control {
     width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .controls-header,
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
