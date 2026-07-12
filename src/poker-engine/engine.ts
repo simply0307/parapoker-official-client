@@ -280,6 +280,27 @@ export function replayCommands(initialState: GameState, commands: EngineCommand[
   return { ok: true, state: current, events: emitted }
 }
 
+export function replayHandFromConfig(
+  config: Partial<MatchConfig>,
+  commands: EngineCommand[],
+): EngineResult<GameState> {
+  const started = startNextHand(createGame(clone(config)))
+  if (!started.ok) {
+    return started
+  }
+
+  let current = started.state
+  for (const command of clone(commands)) {
+    const result = applyAction(current, command)
+    if (!result.ok) {
+      return result
+    }
+    current = result.state
+  }
+
+  return { ok: true, state: current, events: current.hand?.history ?? [] }
+}
+
 function progressHand(state: GameState, actedSeatId: SeatId): void {
   const hand = requireHand(state)
   const contenders = state.seats.filter((seat) => seat.status !== 'folded' && seat.status !== 'out')
