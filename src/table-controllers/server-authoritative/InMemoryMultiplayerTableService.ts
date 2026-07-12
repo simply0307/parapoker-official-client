@@ -5,6 +5,7 @@ import {
   type PlayerActionRequest,
   type PlayerActionResult,
   type ProjectionResult,
+  type ServerAuthorityPersistence,
 } from './InMemoryServerTableAuthority'
 
 export type MultiplayerConnectionStatus = 'connected' | 'disconnected' | 'spectating'
@@ -18,6 +19,7 @@ export interface InMemoryMultiplayerTableServiceConfig {
   tableId: string
   config?: Partial<MatchConfig>
   seats: MultiplayerSeatAssignment[]
+  persistence?: ServerAuthorityPersistence
 }
 
 export interface ConnectPlayerRequest {
@@ -41,10 +43,10 @@ export class InMemoryMultiplayerTableService {
   private readonly playerSeats: Map<string, SeatId>
   private readonly connections = new Map<string, ConnectionRecord>()
 
-  constructor({ tableId, config = {}, seats }: InMemoryMultiplayerTableServiceConfig) {
+  constructor({ tableId, config = {}, seats, persistence }: InMemoryMultiplayerTableServiceConfig) {
     this.tableId = tableId
     this.playerSeats = new Map(seats.map((seat) => [seat.playerId, seat.seatId]))
-    this.authority = new InMemoryServerTableAuthority({ tableId, config })
+    this.authority = new InMemoryServerTableAuthority({ tableId, config, persistence })
   }
 
   startNextHand(): PlayerActionResult {
@@ -77,6 +79,10 @@ export class InMemoryMultiplayerTableService {
 
   getConnectionStatus(connectionId: string): MultiplayerConnectionStatus | undefined {
     return this.connections.get(connectionId)?.status
+  }
+
+  async flushPersistence(): Promise<void> {
+    await this.authority.flushPersistence()
   }
 
   submitPlayerAction(connectionId: string, request: PlayerActionRequest): PlayerActionResult {

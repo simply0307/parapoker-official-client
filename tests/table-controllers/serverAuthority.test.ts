@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { InMemoryCommandRecordStore, InMemoryEventRecordStore, InMemoryMatchRecordStore } from '../../src/persistence'
+import {
+  InMemoryCommandRecordStore,
+  InMemoryEventRecordStore,
+  InMemoryMatchRecordStore,
+  type CommandRecordDraft,
+  type CommandRecordStore,
+  type EventRecordDraft,
+  type EventRecordStore,
+  type MatchRecordDraft,
+  type MatchRecordStore,
+} from '../../src/persistence'
 import {
   InMemoryServerTableAuthority,
   type PlayerActionRequest,
@@ -279,4 +289,67 @@ describe('in-memory server table authority', () => {
     expect(JSON.stringify(commandRecords)).not.toContain('deck')
     expect(JSON.stringify(commandRecords)).not.toContain('rngState')
   })
+
+  it('tracks async persistence writes so database-backed stores can be flushed', async () => {
+    const matchStore = new DelayedMatchRecordStore()
+    const eventStore = new DelayedEventRecordStore()
+    const commandStore = new DelayedCommandRecordStore()
+    const table = new InMemoryServerTableAuthority({
+      tableId: 'table-1',
+      config: headsUpHumans,
+      seatBindings: [{ connectionId: 'conn-alice', seatId: 'seat-1' }],
+      persistence: {
+        matchId: 'match-1',
+        matchStore,
+        eventStore,
+        commandStore,
+      },
+    })
+
+    table.startNextHand()
+    table.submitPlayerAction('conn-alice', request())
+    expect(matchStore.created).toBe(false)
+    expect(eventStore.appendCount).toBe(0)
+    expect(commandStore.appendCount).toBe(0)
+
+    await table.flushPersistence()
+
+    expect(matchStore.created).toBe(true)
+    expect(eventStore.appendCount).toBe(2)
+    expect(commandStore.appendCount).toBe(1)
+  })
 })
+
+class DelayedMatchRecordStore extends InMemoryMatchRecordStore implements MatchRecordStore {
+  created = false
+
+  override async createMatch(record: MatchRecordDraft) {
+    await delay()
+    this.created = true
+    return super.createMatch(record)
+  }
+}
+
+class DelayedEventRecordStore extends InMemoryEventRecordStore implements EventRecordStore {
+  appendCount = 0
+
+  override async appendEvents(events: EventRecordDraft[]) {
+    await delay()
+    this.appendCount += 1
+    return super.appendEvents(events)
+  }
+}
+
+class DelayedCommandRecordStore extends InMemoryCommandRecordStore implements CommandRecordStore {
+  appendCount = 0
+
+  override async appendCommand(command: CommandRecordDraft) {
+    await delay()
+    this.appendCount += 1
+    return super.appendCommand(command)
+  }
+}
+
+function delay(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}

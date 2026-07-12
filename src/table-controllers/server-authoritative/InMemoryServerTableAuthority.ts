@@ -116,6 +116,8 @@ export class InMemoryServerTableAuthority {
   private readonly connectionSeats: Map<string, SeatId>
   private readonly idempotencyRecords = new Map<string, IdempotencyRecord>()
   private readonly persistence?: ServerAuthorityPersistence
+  private persistenceWrites: Array<Promise<void>> = []
+  private persistenceErrors: unknown[] = []
 
   constructor({ tableId, config = {}, seatBindings = [], persistence }: ServerTableAuthorityConfig) {
     this.tableId = tableId
@@ -127,6 +129,19 @@ export class InMemoryServerTableAuthority {
 
   bindConnectionToSeat(connectionId: string, seatId: SeatId): void {
     this.connectionSeats.set(connectionId, seatId)
+  }
+
+  async flushPersistence(): Promise<void> {
+    while (this.persistenceWrites.length > 0) {
+      const writes = this.persistenceWrites
+      this.persistenceWrites = []
+      await Promise.all(writes)
+    }
+    if (this.persistenceErrors.length > 0) {
+      const [error] = this.persistenceErrors
+      this.persistenceErrors = []
+      throw error instanceof Error ? error : new Error(String(error))
+    }
   }
 
   startNextHand(): CommandAcceptedMessage | CommandRejectedMessage {
@@ -289,22 +304,26 @@ export class InMemoryServerTableAuthority {
       return
     }
 
-    void this.persistence.matchStore.createMatch({
-      matchId: this.persistence.matchId,
-      tableId: this.tableId,
-      format: this.persistence.format ?? 'freezeout',
-      rulesContractVersion: this.persistence.rulesContractVersion ?? 'para-poker-rules-v0',
-      eventSchemaVersion: 'poker-event-v1',
-      seatAssignments: this.state.config.seats.map((seat) => ({
-        seatId: seat.id,
-        ...(seat.kind === 'human' ? { playerId: seat.id } : { npcId: seat.id }),
-      })),
-      startingStacks: Object.fromEntries(this.state.config.seats.map((seat) => [seat.id, this.state.config.startingStack])),
-      blinds: {
-        smallBlind: this.state.config.smallBlind,
-        bigBlind: this.state.config.bigBlind,
-      },
-    })
+    this.trackPersistenceWrite(
+      this.persistence.matchStore.createMatch({
+        matchId: this.persistence.matchId,
+        tableId: this.tableId,
+        format: this.persistence.format ?? 'freezeout',
+        rulesContractVersion: this.persistence.rulesContractVersion ?? 'para-poker-rules-v0',
+        eventSchemaVersion: 'poker-event-v1',
+        seatAssignments: this.state.config.seats.map((seat) => ({
+          seatId: seat.id,
+          ...(seat.kind === 'human' ? { playerId: seat.id } : { npcId: seat.id }),
+        })),
+        startingStacks: Object.fromEntries(
+          this.state.config.seats.map((seat) => [seat.id, this.state.config.startingStack]),
+        ),
+        blinds: {
+          smallBlind: this.state.config.smallBlind,
+          bigBlind: this.state.config.bigBlind,
+        },
+      }),
+    )
   }
 
   private persistEvents(events: HandHistoryEvent[]): void {
@@ -312,7 +331,9 @@ export class InMemoryServerTableAuthority {
       return
     }
 
-    void this.persistence.eventStore.appendEvents(createEventRecordDrafts(this.persistence.matchId, this.tableId, events))
+    this.trackPersistenceWrite(
+      this.persistence.eventStore.appendEvents(createEventRecordDrafts(this.persistence.matchId, this.tableId, events)),
+    )
   }
 
   private persistAcceptedCommand(
@@ -324,18 +345,20 @@ export class InMemoryServerTableAuthority {
       return
     }
 
-    void this.persistence.commandStore.appendCommand(
-      createCommandRecordDraft({
-        matchId: this.persistence.matchId,
-        tableId: this.tableId,
-        commandId: request.commandId,
-        playerId: trustedSeatId,
-        trustedSeatId,
-        expectedStateVersion: request.expectedStateVersion,
-        requestedAction: sanitizeRequestedAction(request.requestedAction),
-        status: 'accepted',
-        resultingEventIds,
-      }),
+    this.trackPersistenceWrite(
+      this.persistence.commandStore.appendCommand(
+        createCommandRecordDraft({
+          matchId: this.persistence.matchId,
+          tableId: this.tableId,
+          commandId: request.commandId,
+          playerId: trustedSeatId,
+          trustedSeatId,
+          expectedStateVersion: request.expectedStateVersion,
+          requestedAction: sanitizeRequestedAction(request.requestedAction),
+          status: 'accepted',
+          resultingEventIds,
+        }),
+      ),
     )
   }
 
@@ -348,18 +371,31 @@ export class InMemoryServerTableAuthority {
       return
     }
 
-    void this.persistence.commandStore.appendCommand(
-      createCommandRecordDraft({
-        matchId: this.persistence.matchId,
-        tableId: this.tableId,
-        commandId: request.commandId,
-        playerId: trustedSeatId,
-        trustedSeatId,
-        expectedStateVersion: request.expectedStateVersion,
-        requestedAction: sanitizeRequestedAction(request.requestedAction),
-        status: 'rejected',
-        rejectionReason,
-      }),
+    this.trackPersistenceWrite(
+      this.persistence.commandStore.appendCommand(
+        createCommandRecordDraft({
+          matchId: this.persistence.matchId,
+          tableId: this.tableId,
+          commandId: request.commandId,
+          playerId: trustedSeatId,
+          trustedSeatId,
+          expectedStateVersion: request.expectedStateVersion,
+          requestedAction: sanitizeRequestedAction(request.requestedAction),
+          status: 'rejected',
+          rejectionReason,
+        }),
+      ),
+    )
+  }
+
+  private trackPersistenceWrite(write: Promise<unknown>): void {
+    this.persistenceWrites.push(
+      write.then(
+        () => undefined,
+        (error: unknown) => {
+          this.persistenceErrors.push(error)
+        },
+      ),
     )
   }
 }
