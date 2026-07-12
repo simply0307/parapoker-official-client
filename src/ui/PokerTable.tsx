@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
+import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
 import {
   createRandomLocalSeed,
@@ -9,19 +9,16 @@ import {
 } from '../table-controllers/local-single-player/LocalSoloSession'
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 
+type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
+
 export function PokerTable() {
   const sessionRef = useRef<LocalSoloSession | null>(null)
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
   const [useRandomSeed, setUseRandomSeed] = useState(false)
   const [snapshot, setSnapshot] = useState<LocalSoloSessionSnapshot | null>(null)
+  const [scene, setScene] = useState<SoloScene>('setup')
+  const [setupError, setSetupError] = useState('')
   const [amounts, setAmounts] = useState<Record<string, number>>({})
-
-  useEffect(() => {
-    void LocalSoloSession.create(defaultLocalSoloSessionConfig()).then((session) => {
-      sessionRef.current = session
-      setSnapshot(session.getSnapshot())
-    })
-  }, [])
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -39,7 +36,7 @@ export function PokerTable() {
 
   const statusText = useMemo(() => {
     if (!snapshot) {
-      return 'Starting match'
+      return 'Configure a local match'
     }
     if (matchWinner) {
       return `${matchWinner.name} wins the match`
@@ -51,15 +48,25 @@ export function PokerTable() {
     return pending ? `${pending.name} to act` : 'Resolving hand'
   }, [matchWinner, snapshot])
 
-  async function startSession(config: LocalSoloSessionConfig) {
+  async function startSession(config: LocalSoloSessionConfig, options: { forceRandomSeed?: boolean } = {}) {
+    const validationError = validateSetup(config, useRandomSeed || Boolean(options.forceRandomSeed))
+    if (validationError) {
+      setSetupError(validationError)
+      return
+    }
+
     const nextConfig = {
       ...config,
-      seed: useRandomSeed ? createRandomLocalSeed() : config.seed,
+      seed: useRandomSeed || options.forceRandomSeed ? createRandomLocalSeed() : String(config.seed).trim(),
     }
     const session = await LocalSoloSession.create(nextConfig)
+    const nextSnapshot = session.getSnapshot()
     sessionRef.current = session
+    setSetup(nextConfig)
+    setSetupError('')
     setAmounts({})
-    setSnapshot(session.getSnapshot())
+    setSnapshot(nextSnapshot)
+    setScene(sceneForSnapshot(nextSnapshot))
   }
 
   async function submit(command: HumanCommand) {
@@ -67,7 +74,9 @@ export function PokerTable() {
     if (!session) {
       return
     }
-    setSnapshot(await session.submitHumanAction(command))
+    const nextSnapshot = await session.submitHumanAction(command)
+    setSnapshot(nextSnapshot)
+    setScene(sceneForSnapshot(nextSnapshot))
   }
 
   async function startNext() {
@@ -76,20 +85,55 @@ export function PokerTable() {
       return
     }
     setAmounts({})
-    setSnapshot(await session.startNextHand())
+    const nextSnapshot = await session.startNextHand()
+    setSnapshot(nextSnapshot)
+    setScene(sceneForSnapshot(nextSnapshot))
   }
 
   function updateSetup<TField extends keyof LocalSoloSessionConfig>(field: TField, value: LocalSoloSessionConfig[TField]) {
     setSetup((current) => ({ ...current, [field]: value }))
+    setSetupError('')
   }
 
-  if (!snapshot) {
+  function changeSetup() {
+    const abandoningActiveMatch = snapshot?.publicView.status === 'handInProgress' || snapshot?.publicView.status === 'waitingForHand'
+    if (abandoningActiveMatch && !snapshot.summary) {
+      const confirmed = window.confirm('Abandon this local match and return to setup?')
+      if (!confirmed) {
+        return
+      }
+    }
+    sessionRef.current = null
+    setSnapshot(null)
+    setAmounts({})
+    setScene('setup')
+  }
+
+  function rematchSameSeed() {
+    const config = snapshot?.config ?? setup
+    void startSession({ ...config, seed: snapshot?.seed ?? config.seed }, { forceRandomSeed: false })
+  }
+
+  function rematchRandomSeed() {
+    const config = snapshot?.config ?? setup
+    void startSession(config, { forceRandomSeed: true })
+  }
+
+  if (scene === 'setup' || !snapshot) {
     return (
-      <main className="table-shell">
-        <section className="felt" aria-label="Poker table">
-          <div className="board">
-            <div className="pot">Starting local match</div>
-          </div>
+      <main className="setup-shell">
+        <section className="setup-card" aria-label="Local match setup">
+          <p className="eyebrow">ParaPoker Play Money</p>
+          <h1>Start a Local Solo Match</h1>
+          <p className="setup-copy">Choose a heads-up or six-max freezeout before the table is created.</p>
+          <SetupForm
+            setup={setup}
+            useRandomSeed={useRandomSeed}
+            setupError={setupError}
+            updateSetup={updateSetup}
+            setUseRandomSeed={setUseRandomSeed}
+            startMatch={() => void startSession(setup)}
+          />
         </section>
       </main>
     )
@@ -144,52 +188,11 @@ export function PokerTable() {
       </section>
 
       <aside className="right-rail" aria-label="Table controls">
-        <section className="scoreboard" aria-label="Match setup and state">
+        <section className="scoreboard" aria-label="Match state">
           <div className="title-block">
             <p className="eyebrow">ParaPoker Play Money</p>
             <h1>{tableTitle}</h1>
-            <div className="mode-switch" aria-label="Solo mode setup">
-              <button
-                type="button"
-                className={setup.mode === 'heads-up' ? 'selected' : ''}
-                aria-pressed={setup.mode === 'heads-up'}
-                onClick={() => updateSetup('mode', 'heads-up')}
-              >
-                Heads-up
-              </button>
-              <button
-                type="button"
-                className={setup.mode === 'six-max' ? 'selected' : ''}
-                aria-pressed={setup.mode === 'six-max'}
-                onClick={() => updateSetup('mode', 'six-max')}
-              >
-                Six-max
-              </button>
-            </div>
-          </div>
-          <div className="setup-grid" aria-label="Local match setup">
-            <NumberField label="Stack" value={setup.startingStack} onChange={(value) => updateSetup('startingStack', value)} />
-            <NumberField label="SB" value={setup.smallBlind} onChange={(value) => updateSetup('smallBlind', value)} />
-            <NumberField label="BB" value={setup.bigBlind} onChange={(value) => updateSetup('bigBlind', value)} />
-            <label className="seed-field">
-              <span>Seed</span>
-              <input
-                value={String(setup.seed)}
-                disabled={useRandomSeed}
-                onChange={(event) => updateSetup('seed', event.target.value)}
-              />
-            </label>
-            <label className="toggle-field">
-              <input
-                type="checkbox"
-                checked={useRandomSeed}
-                onChange={(event) => setUseRandomSeed(event.target.checked)}
-              />
-              <span>Random local seed</span>
-            </label>
-            <button type="button" className="primary" onClick={() => void startSession(setup)}>
-              Start new match
-            </button>
+            <p className="seed-note">Seed {String(snapshot.seed)}</p>
           </div>
           <div className="match-summary">
             <div className="status-pill">{statusText}</div>
@@ -200,21 +203,24 @@ export function PokerTable() {
               <Metric label="Stack lead" value={stackLead} />
             </dl>
           </div>
+          <button type="button" onClick={changeSetup}>
+            Change setup
+          </button>
         </section>
 
         <section className="controls" aria-label="Player actions">
           <div className="controls-header">
             <div>
-              <h2>Actions</h2>
+              <h2>{scene === 'betweenHand' ? 'Hand result' : 'Actions'}</h2>
               <p>{lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
             </div>
             <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
           </div>
           <div className="action-row">
-            {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && (
+            {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && scene !== 'matchResult' && (
               <span className="muted">Waiting for the table authority.</span>
             )}
-            {snapshot.heroView.legalActions.map((action) => (
+            {scene === 'playing' && snapshot.heroView.legalActions.map((action) => (
               <ActionControl
                 key={action.type}
                 action={action}
@@ -223,7 +229,7 @@ export function PokerTable() {
                 submit={(command) => void submit(command)}
               />
             ))}
-            {canStartNextHand && (
+            {scene === 'betweenHand' && (
               <button type="button" className="primary" onClick={() => void startNext()}>
                 Next hand
               </button>
@@ -232,9 +238,84 @@ export function PokerTable() {
           {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
         </section>
 
-        {snapshot.summary && <SessionResult summary={snapshot.summary} />}
+        {scene === 'matchResult' && snapshot.summary && (
+          <SessionResult
+            summary={snapshot.summary}
+            rematchSameSeed={rematchSameSeed}
+            rematchRandomSeed={rematchRandomSeed}
+            changeSetup={changeSetup}
+          />
+        )}
       </aside>
     </main>
+  )
+}
+
+function SetupForm({
+  setup,
+  useRandomSeed,
+  setupError,
+  updateSetup,
+  setUseRandomSeed,
+  startMatch,
+}: {
+  setup: LocalSoloSessionConfig
+  useRandomSeed: boolean
+  setupError: string
+  updateSetup: <TField extends keyof LocalSoloSessionConfig>(
+    field: TField,
+    value: LocalSoloSessionConfig[TField],
+  ) => void
+  setUseRandomSeed: (value: boolean) => void
+  startMatch: () => void
+}) {
+  return (
+    <>
+      <div className="mode-switch" aria-label="Solo mode setup">
+        <button
+          type="button"
+          className={setup.mode === 'heads-up' ? 'selected' : ''}
+          aria-pressed={setup.mode === 'heads-up'}
+          onClick={() => updateSetup('mode', 'heads-up')}
+        >
+          Heads-up
+        </button>
+        <button
+          type="button"
+          className={setup.mode === 'six-max' ? 'selected' : ''}
+          aria-pressed={setup.mode === 'six-max'}
+          onClick={() => updateSetup('mode', 'six-max')}
+        >
+          Six-max
+        </button>
+      </div>
+      <div className="setup-grid">
+        <NumberField label="Stack" value={setup.startingStack} onChange={(value) => updateSetup('startingStack', value)} />
+        <NumberField label="SB" value={setup.smallBlind} onChange={(value) => updateSetup('smallBlind', value)} />
+        <NumberField label="BB" value={setup.bigBlind} onChange={(value) => updateSetup('bigBlind', value)} />
+        <label className="seed-field">
+          <span>Seed</span>
+          <input
+            value={String(setup.seed)}
+            disabled={useRandomSeed}
+            aria-label="Seed"
+            onChange={(event) => updateSetup('seed', event.target.value)}
+          />
+        </label>
+        <label className="toggle-field">
+          <input
+            type="checkbox"
+            checked={useRandomSeed}
+            onChange={(event) => setUseRandomSeed(event.target.checked)}
+          />
+          <span>Random local seed</span>
+        </label>
+        <button type="button" className="primary" onClick={startMatch}>
+          Start Match
+        </button>
+      </div>
+      {setupError && <p className="error" role="alert">{setupError}</p>}
+    </>
   )
 }
 
@@ -246,14 +327,25 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
         type="number"
         min={1}
         step={1}
+        aria-label={label}
         value={value}
-        onChange={(event) => onChange(Math.max(1, Math.round(Number(event.target.value) || 1)))}
+        onChange={(event) => onChange(Math.round(Number(event.target.value) || 0))}
       />
     </label>
   )
 }
 
-function SessionResult({ summary }: { summary: NonNullable<LocalSoloSessionSnapshot['summary']> }) {
+function SessionResult({
+  summary,
+  rematchSameSeed,
+  rematchRandomSeed,
+  changeSetup,
+}: {
+  summary: NonNullable<LocalSoloSessionSnapshot['summary']>
+  rematchSameSeed: () => void
+  rematchRandomSeed: () => void
+  changeSetup: () => void
+}) {
   return (
     <section className="session-result" aria-label="Session result">
       <div className="controls-header">
@@ -277,6 +369,17 @@ function SessionResult({ summary }: { summary: NonNullable<LocalSoloSessionSnaps
             <span>Stack {summary.finalStacks[stat.seatId] ?? 0}</span>
           </div>
         ))}
+      </div>
+      <div className="result-actions">
+        <button type="button" className="primary" onClick={rematchSameSeed}>
+          Rematch same seed
+        </button>
+        <button type="button" onClick={rematchRandomSeed}>
+          New random match
+        </button>
+        <button type="button" onClick={changeSetup}>
+          Change setup
+        </button>
       </div>
     </section>
   )
@@ -427,6 +530,38 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <dd>{value}</dd>
     </div>
   )
+}
+
+function sceneForSnapshot(snapshot: LocalSoloSessionSnapshot): SoloScene {
+  if (snapshot.summary || snapshot.publicView.status === 'complete') {
+    return 'matchResult'
+  }
+  if (snapshot.canonicalStatus === 'waitingForHand') {
+    return 'betweenHand'
+  }
+  return 'playing'
+}
+
+function validateSetup(config: LocalSoloSessionConfig, randomSeed: boolean): string {
+  if (!Number.isInteger(config.startingStack) || config.startingStack <= 0) {
+    return 'Starting stack must be a positive whole number.'
+  }
+  if (!Number.isInteger(config.smallBlind) || config.smallBlind <= 0) {
+    return 'Small blind must be a positive whole number.'
+  }
+  if (!Number.isInteger(config.bigBlind) || config.bigBlind <= 0) {
+    return 'Big blind must be a positive whole number.'
+  }
+  if (config.bigBlind < config.smallBlind) {
+    return 'Big blind must be at least the small blind.'
+  }
+  if (config.startingStack < config.bigBlind) {
+    return 'Starting stack must be at least the big blind.'
+  }
+  if (!randomSeed && String(config.seed).trim().length === 0) {
+    return 'Seed is required unless random local seed is enabled.'
+  }
+  return ''
 }
 
 function getStackLead(seats: PublicSeatView[], heroSeatId: string): string {

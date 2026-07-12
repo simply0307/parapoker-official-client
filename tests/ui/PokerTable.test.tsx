@@ -1,31 +1,46 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PokerTable } from '../../src/ui/PokerTable'
 
 describe('PokerTable', () => {
-  it('renders a playable table surface', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('starts on setup without creating a poker table', () => {
     render(<PokerTable />)
+
+    expect(screen.getByText('Start a Local Solo Match')).toBeInTheDocument()
+    expect(screen.getByLabelText('Local match setup')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /call/i })).not.toBeInTheDocument()
+  })
+
+  it('starts a playable heads-up match after explicit setup submission', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
 
     expect(await screen.findByText("Heads-Up No-Limit Hold'em")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /call/i })).toBeInTheDocument()
     expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
+    expect(screen.getByText('Seed heads-up-solo')).toBeInTheDocument()
   })
 
-  it('shows scannable heads-up match metrics and action context', async () => {
+  it('validates setup before creating a match', () => {
     render(<PokerTable />)
 
-    expect(await screen.findByText("Heads-Up No-Limit Hold'em")).toBeInTheDocument()
-    expect(screen.getByText('Hand')).toBeInTheDocument()
-    expect(screen.getByText('Pot')).toBeInTheDocument()
-    expect(screen.getByText('To call')).toBeInTheDocument()
-    expect(screen.getByText('Stack lead')).toBeInTheDocument()
-    expect(screen.getByLabelText('Hero seat')).toBeInTheDocument()
-    expect(screen.getByLabelText('Opponent seat')).toBeInTheDocument()
-    expect(screen.getByLabelText('Player actions')).toHaveTextContent('Call 1')
+    fireEvent.change(screen.getByLabelText('BB'), { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Big blind must be a positive whole number.')
+    expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
   })
 
-  it('lets players tune raises with the slider, wheel, and typed amount', async () => {
+  it('lets players tune raises with the slider, wheel, and typed amount after the match starts', async () => {
     render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
 
     const raiseSlider = await screen.findByLabelText('Raise amount slider')
     const raiseInput = screen.getByLabelText('Raise amount entry')
@@ -43,14 +58,51 @@ describe('PokerTable', () => {
   it('can start a six-max solo table with one hero and five NPC seats', async () => {
     render(<PokerTable />)
 
-    expect(await screen.findByText("Heads-Up No-Limit Hold'em")).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Six-max' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Start new match' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
 
     expect(await screen.findByText("Six-Max No-Limit Hold'em")).toBeInTheDocument()
     expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
     expect(screen.getByText('ParaBot 5')).toBeInTheDocument()
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
     expect(screen.getByLabelText('Player actions')).toHaveTextContent(/Call|Check|Raise|Bet|Waiting/)
+  })
+
+  it('requires confirmation before abandoning an active match for setup', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+    expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
+
+    expect(confirm).toHaveBeenCalledWith('Abandon this local match and return to setup?')
+    expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
+
+    expect(screen.getByText('Start a Local Solo Match')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
+  })
+
+  it('shows a match result scene and supports same-seed and random rematches', async () => {
+    render(<PokerTable />)
+
+    fireEvent.change(screen.getByLabelText('Stack'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('SB'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('BB'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('Seed'), { target: { value: 'instant-result' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByLabelText('Session result')).toBeInTheDocument()
+    expect(screen.getByText('Seed')).toBeInTheDocument()
+    expect(screen.getByText('instant-result')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rematch same seed' }))
+    expect(await screen.findByText('Seed instant-result')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New random match' }))
+    expect(await screen.findByText(/Seed local-/)).toBeInTheDocument()
   })
 })
