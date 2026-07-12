@@ -126,7 +126,11 @@ export class InMemoryServerTableAuthority {
     }
   }
 
-  submitPlayerAction(connectionId: string, request: PlayerActionRequest): PlayerActionResult {
+  submitPlayerAction(
+    connectionId: string,
+    request: PlayerActionRequest,
+    idempotencyScope = connectionId,
+  ): PlayerActionResult {
     if (request.protocolVersion !== 'parapoker-multiplayer-v1' || request.tableId !== this.tableId) {
       return this.reject(request.commandId, 'TABLE_NOT_FOUND', false)
     }
@@ -136,7 +140,7 @@ export class InMemoryServerTableAuthority {
       return this.reject(request.commandId, 'NOT_SEATED', false)
     }
 
-    const idempotencyKey = `${connectionId}:${request.commandId}`
+    const idempotencyKey = `${idempotencyScope}:${request.commandId}`
     const fingerprint = fingerprintRequest(request)
     const existingRecord = this.idempotencyRecords.get(idempotencyKey)
     if (existingRecord) {
