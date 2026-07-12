@@ -25,15 +25,15 @@ For three active seats ordered clockwise as `human`, `npc-1`, `npc-2`:
 
 This differs from heads-up, where the button is also the small blind.
 
-## Required Failing Tests
+## Required Regression Tests
 
-The test file `tests/poker-engine/threeHandedRules.test.ts` documents expected behavior with `it.fails` cases:
+The test file `tests/poker-engine/threeHandedRules.test.ts` documents expected behavior:
 
 - Three-handed blind assignment and initial stacks.
 - Three-handed preflop order, street progression, and postflop first actor.
 - Folded-player contributions and side-pot eligibility.
 
-These tests must be changed from expected failures to normal passing tests during the later `Generic Multi-Seat Engine Implementation` task.
+These tests started as expected failures during the design gate and became passing regression tests during the `Generic Multi-Seat Engine Implementation` task.
 
 ## Review Gate
 

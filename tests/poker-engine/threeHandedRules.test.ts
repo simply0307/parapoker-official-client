@@ -54,7 +54,7 @@ function mustApply(state: GameState, command: EngineCommand): GameState {
 }
 
 describe('three-handed rules design gate', () => {
-  it.fails('assigns dealer, blinds, and UTG without heads-up button-as-small-blind assumptions', () => {
+  it('assigns dealer, blinds, and UTG without heads-up button-as-small-blind assumptions', () => {
     const state = mustStart()
 
     expect(state.hand?.dealerSeatId).toBe('human')
@@ -72,7 +72,7 @@ describe('three-handed rules design gate', () => {
     ])
   })
 
-  it.fails('uses UTG, small blind, big blind preflop order and first active seat after button postflop', () => {
+  it('uses UTG, small blind, big blind preflop order and first active seat after button postflop', () => {
     let state = mustStart()
 
     state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
@@ -86,7 +86,7 @@ describe('three-handed rules design gate', () => {
     expect(state.hand?.pendingSeatId).toBe('npc-1')
   })
 
-  it.fails('keeps folded-player contributions in multiway pots while excluding folded players from eligibility', () => {
+  it('keeps folded-player contributions in multiway pots while excluding folded players from eligibility', () => {
     let state = mustStart({
       startingStack: 60,
       fixedDeck: [
@@ -120,7 +120,7 @@ describe('three-handed rules design gate', () => {
     }
 
     expect(state.hand?.result?.pots).toEqual([
-      { amount: 30, eligibleSeatIds: ['human', 'npc-1', 'npc-2'] },
+      { amount: 30, eligibleSeatIds: ['human', 'npc-1'] },
       { amount: 40, eligibleSeatIds: ['human', 'npc-1'] },
     ])
   })

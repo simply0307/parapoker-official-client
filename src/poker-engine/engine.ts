@@ -81,8 +81,10 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
   }
 
   const dealerSeatId = chooseNextDealer(nextState)
-  const bigBlindSeatId = nextSeatId(nextState.seats, dealerSeatId, (seat) => seat.stack > 0)
-  const smallBlindSeatId = dealerSeatId
+  const { smallBlindSeatId, bigBlindSeatId, firstPreflopActorSeatId } = assignBlindsAndFirstActor(
+    nextState.seats,
+    dealerSeatId,
+  )
   const shuffled = nextState.config.fixedDeck
     ? { deck: nextState.config.fixedDeck.map((card) => ({ ...card })), rngState: nextState.rngState }
     : shuffleDeck(freshDeck(), nextState.rngState)
@@ -104,7 +106,7 @@ export function startNextHand(state: GameState): EngineResult<GameState> {
     actedThisRound: [],
     streetContributions: emptyContributionMap(nextState.seats),
     totalContributions: emptyContributionMap(nextState.seats),
-    pendingSeatId: smallBlindSeatId,
+    pendingSeatId: firstPreflopActorSeatId,
     status: 'active',
     history: [],
   }
@@ -623,6 +625,26 @@ function chooseNextDealer(state: GameState): SeatId {
     return state.seats.find((seat) => seat.stack > 0)?.id ?? state.seats[0].id
   }
   return nextSeatId(state.seats, state.dealerSeatId, (seat) => seat.stack > 0)
+}
+
+function assignBlindsAndFirstActor(
+  seats: SeatState[],
+  dealerSeatId: SeatId,
+): { smallBlindSeatId: SeatId; bigBlindSeatId: SeatId; firstPreflopActorSeatId: SeatId } {
+  const fundedSeatCount = seats.filter((seat) => seat.stack > 0).length
+  if (fundedSeatCount === 2) {
+    const bigBlindSeatId = nextSeatId(seats, dealerSeatId, (seat) => seat.stack > 0)
+    return {
+      smallBlindSeatId: dealerSeatId,
+      bigBlindSeatId,
+      firstPreflopActorSeatId: dealerSeatId,
+    }
+  }
+
+  const smallBlindSeatId = nextSeatId(seats, dealerSeatId, (seat) => seat.stack > 0)
+  const bigBlindSeatId = nextSeatId(seats, smallBlindSeatId, (seat) => seat.stack > 0)
+  const firstPreflopActorSeatId = nextSeatId(seats, bigBlindSeatId, (seat) => seat.stack > 0)
+  return { smallBlindSeatId, bigBlindSeatId, firstPreflopActorSeatId }
 }
 
 function nextSeatId(seats: SeatState[], fromSeatId: SeatId, predicate: (seat: SeatState) => boolean): SeatId {
