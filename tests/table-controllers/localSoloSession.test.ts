@@ -35,6 +35,29 @@ describe('local solo session integration', () => {
     expect(stats.map((stat) => stat.handsPlayed)).toEqual([1, 1, 1, 1, 1, 1])
   })
 
+  it('accepts configurable NPC lineups and preserves the resolved game blueprint', async () => {
+    const session = await LocalSoloSession.create({
+      ...baseConfig,
+      seed: 'custom-lineup',
+      visibility: 'unlisted',
+      npcLineup: [{ seatId: 'npc-1', npcDefinitionId: 'npc-vega' }],
+    })
+
+    const snapshot = session.getSnapshot()
+    const match = await session.getMatchRecord()
+
+    expect(snapshot.publicView.seats.map((seat) => seat.name)).toEqual(['You', 'Vega'])
+    expect(snapshot.blueprint.visibility).toBe('unlisted')
+    expect(snapshot.blueprint.seats).toEqual([
+      { seatId: 'human', kind: 'human', displayName: 'You', playerId: 'local-human' },
+      { seatId: 'npc-1', kind: 'npc', npcDefinitionId: 'npc-vega' },
+    ])
+    expect(match?.seatAssignments).toEqual([
+      { seatId: 'human', playerId: 'local-human' },
+      { seatId: 'npc-1', npcId: 'npc-vega' },
+    ])
+  })
+
   it('isolates stats by match ID and seat ID', async () => {
     const first = await LocalSoloSession.create({ ...baseConfig, matchId: 'match-a', seed: 'match-a' })
     const second = await LocalSoloSession.create({ ...baseConfig, matchId: 'match-b', seed: 'match-b' })

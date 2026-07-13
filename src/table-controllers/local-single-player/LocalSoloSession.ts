@@ -1,9 +1,18 @@
-import type { EngineCommand, MatchConfig, PublicSeatView, SeatId } from '../../poker-engine'
-import { LOCAL_NPC_ROSTER } from '../../npc/roster'
+import type { EngineCommand, PublicSeatView, SeatId } from '../../poker-engine'
 import {
   buildCompletedSessionPackage,
   type CompletedSessionPackage,
 } from '../../exports/completedSessionPackage'
+import {
+  createGameBlueprint,
+  gameBlueprintToControllerConfig,
+  npcDefinitionsForBlueprint,
+  npcLineupForBlueprint,
+  npcStrategyProfilesForBlueprint,
+  type GameBlueprint,
+  type GameVisibility,
+} from '../../game-config/gameBlueprint'
+import type { NpcSeatAssignment } from '../../npc/config'
 import {
   createEventRecordDrafts,
   InMemoryEventRecordStore,
@@ -14,7 +23,6 @@ import {
   type MatchRecord,
 } from '../../persistence'
 import {
-  createSixMaxSoloConfig,
   LocalSinglePlayerController,
   type LocalSinglePlayerSnapshot,
   type LocalSinglePlayerTransition,
@@ -29,6 +37,9 @@ export interface LocalSoloSessionConfig {
   bigBlind: number
   seed: string | number
   matchId?: string
+  visibility?: GameVisibility
+  npcLineup?: NpcSeatAssignment[]
+  blueprint?: GameBlueprint
 }
 
 export interface LocalSoloSessionSummary {
@@ -47,6 +58,7 @@ export interface LocalSoloSessionSnapshot extends LocalSinglePlayerSnapshot {
   mode: SoloSessionMode
   seed: string | number
   config: LocalSoloSessionConfig
+  blueprint: GameBlueprint
   stats: DerivedStatsSnapshot[]
   summary?: LocalSoloSessionSummary
 }
@@ -57,6 +69,7 @@ export class LocalSoloSession {
   private readonly matchId: string
   private readonly tableId: string
   private readonly config: LocalSoloSessionConfig
+  private readonly blueprint: GameBlueprint
   private readonly controller: LocalSinglePlayerController
   private readonly matchStore: InMemoryMatchRecordStore
   private readonly eventStore: InMemoryEventRecordStore
@@ -65,13 +78,29 @@ export class LocalSoloSession {
   private completed = false
 
   private constructor(config: LocalSoloSessionConfig) {
-    this.config = clone(config)
+    const resolvedBlueprint = config.blueprint ? clone(config.blueprint) : createBlueprintFromSessionConfig(config)
+    this.config = {
+      ...clone(config),
+      mode: resolvedBlueprint.mode,
+      startingStack: resolvedBlueprint.startingStack,
+      smallBlind: resolvedBlueprint.smallBlind,
+      bigBlind: resolvedBlueprint.bigBlind,
+      seed: resolvedBlueprint.seed,
+      visibility: resolvedBlueprint.visibility,
+      npcLineup: npcLineupForBlueprint(resolvedBlueprint),
+      blueprint: clone(resolvedBlueprint),
+    }
     this.matchId = config.matchId ?? createLocalMatchId()
     this.tableId = `${this.matchId}:table`
+    this.blueprint = resolvedBlueprint
     this.matchStore = new InMemoryMatchRecordStore()
     this.eventStore = new InMemoryEventRecordStore()
     this.statsStore = new InMemoryStatsStore(this.eventStore)
-    this.controller = new LocalSinglePlayerController(createControllerConfig(config))
+    this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint), {
+      npcLineup: npcLineupForBlueprint(this.blueprint),
+      npcDefinitions: npcDefinitionsForBlueprint(this.blueprint),
+      npcStrategyProfiles: npcStrategyProfilesForBlueprint(this.blueprint),
+    })
   }
 
   static async create(config: LocalSoloSessionConfig): Promise<LocalSoloSession> {
@@ -82,13 +111,15 @@ export class LocalSoloSession {
       format: 'freezeout',
       rulesContractVersion: 'para-poker-rules-v0',
       eventSchemaVersion: 'poker-event-v1',
-      seatAssignments: session.controller.getSnapshot().publicView.seats.map((seat) => toSeatAssignment(seat)),
+      seatAssignments: session.controller
+        .getSnapshot()
+        .publicView.seats.map((seat) => toSeatAssignment(seat, session.blueprint)),
       startingStacks: Object.fromEntries(
-        session.controller.getSnapshot().publicView.seats.map((seat) => [seat.id, config.startingStack]),
+        session.controller.getSnapshot().publicView.seats.map((seat) => [seat.id, session.blueprint.startingStack]),
       ),
       blinds: {
-        smallBlind: config.smallBlind,
-        bigBlind: config.bigBlind,
+        smallBlind: session.blueprint.smallBlind,
+        bigBlind: session.blueprint.bigBlind,
       },
     })
     await session.recordTransition(session.controller.consumeInitialTransition())
@@ -104,6 +135,7 @@ export class LocalSoloSession {
       mode: this.config.mode,
       seed: this.config.seed,
       config: clone(this.config),
+      blueprint: clone(this.blueprint),
       stats: clone(this.stats),
       summary: this.buildSummary(snapshot),
     }
@@ -210,27 +242,27 @@ export function defaultLocalSoloSessionConfig(): LocalSoloSessionConfig {
   }
 }
 
-function createControllerConfig(config: LocalSoloSessionConfig): Partial<MatchConfig> {
-  const base = {
+function createBlueprintFromSessionConfig(config: LocalSoloSessionConfig): GameBlueprint {
+  return createGameBlueprint({
+    mode: config.mode,
     startingStack: config.startingStack,
     smallBlind: config.smallBlind,
     bigBlind: config.bigBlind,
     seed: config.seed,
-  }
-  if (config.mode === 'six-max') {
-    return createSixMaxSoloConfig(base)
-  }
-  return {
-    ...base,
-    seats: [
-      { id: 'human', name: 'You', kind: 'human' },
-      { id: 'npc-1', name: LOCAL_NPC_ROSTER[0].name, kind: 'npc' },
-    ],
-  }
+    visibility: config.visibility,
+    npcLineup: config.npcLineup,
+  })
 }
 
-function toSeatAssignment(seat: PublicSeatView) {
-  return seat.kind === 'human' ? { seatId: seat.id, playerId: 'local-human' } : { seatId: seat.id, npcId: seat.id }
+function toSeatAssignment(seat: PublicSeatView, blueprint: GameBlueprint) {
+  if (seat.kind === 'human') {
+    return {
+      seatId: seat.id,
+      playerId: blueprint.seats.find((entry) => entry.seatId === seat.id)?.playerId ?? 'local-human',
+    }
+  }
+  const npcDefinitionId = blueprint.seats.find((entry) => entry.seatId === seat.id)?.npcDefinitionId
+  return { seatId: seat.id, npcId: npcDefinitionId ?? seat.id }
 }
 
 function finalStacks(seats: PublicSeatView[]): Record<SeatId, number> {

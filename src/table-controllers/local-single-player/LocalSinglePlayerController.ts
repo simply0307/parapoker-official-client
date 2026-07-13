@@ -5,7 +5,14 @@ import {
   type NpcPolicyConfig,
   type NpcTableMemory,
 } from '../../npc/basicNpc'
-import { LOCAL_NPC_ROSTER } from '../../npc/roster'
+import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
+import {
+  DEFAULT_SIX_MAX_NPC_LINEUP,
+  localNpcDefinition,
+  localNpcDefinitionForSeat,
+  localNpcStrategyProfile,
+} from '../../npc/roster'
+import { createGameBlueprint, gameBlueprintToControllerConfig } from '../../game-config/gameBlueprint'
 import {
   applyAction,
   createGame,
@@ -38,20 +45,40 @@ export interface LocalSinglePlayerTransition extends LocalSinglePlayerSnapshot {
 }
 
 interface NpcSeatController {
+  definition: NpcDefinition
+  strategyProfile: NpcStrategyProfile
   policy: NpcPolicy
   rng: Rng
-  config?: Partial<NpcPolicyConfig>
+  config: Partial<NpcPolicyConfig>
   memory: NpcTableMemory
 }
 
+export interface LocalNpcRuntime {
+  seatId: SeatId
+  definition: NpcDefinition
+  strategyProfile: NpcStrategyProfile
+}
+
+export interface LocalSinglePlayerControllerOptions {
+  npcLineup?: NpcSeatAssignment[]
+  npcDefinitions?: NpcDefinition[]
+  npcStrategyProfiles?: NpcStrategyProfile[]
+  npcPolicyFactory?: (runtime: LocalNpcRuntime) => NpcPolicy
+}
+
 export function createSixMaxSoloConfig(config: Partial<MatchConfig> = {}): Partial<MatchConfig> {
-  return {
-    ...config,
-    seats: config.seats ?? [
-      { id: 'human', name: 'You', kind: 'human' },
-      ...LOCAL_NPC_ROSTER.map((npc) => ({ id: npc.seatId, name: npc.name, kind: 'npc' as const })),
-    ],
+  if (config.seats) {
+    return config
   }
+  const blueprint = createGameBlueprint({
+    mode: 'six-max',
+    startingStack: config.startingStack ?? 200,
+    smallBlind: config.smallBlind ?? 1,
+    bigBlind: config.bigBlind ?? 2,
+    seed: config.seed ?? 'six-max-solo',
+    npcLineup: DEFAULT_SIX_MAX_NPC_LINEUP,
+  })
+  return { ...config, ...gameBlueprintToControllerConfig(blueprint) }
 }
 
 export class LocalSinglePlayerController {
@@ -61,20 +88,26 @@ export class LocalSinglePlayerController {
   private lastError?: string
   private initialTransition: LocalSinglePlayerTransition
 
-  constructor(config: Partial<MatchConfig> = {}, npcPolicy: NpcPolicy = new BasicNpcPolicy()) {
+  constructor(config: Partial<MatchConfig> = {}, options: LocalSinglePlayerControllerOptions = {}) {
     this.state = createGame(config)
     this.humanSeatId = config.seats?.find((seat) => seat.kind === 'human')?.id ?? 'human'
     this.npcControllers = new Map(
       this.state.seats
         .filter((seat) => seat.kind === 'npc')
-        .map((seat) => [
-          seat.id,
-          {
-            policy: npcPolicy,
-            rng: createRng(`${this.state.config.seed}:${seat.id}:npc-policy`),
-            memory: {},
-          },
-        ]),
+        .map((seat) => {
+          const runtime = resolveNpcRuntime(seat.id, options)
+          return [
+            seat.id,
+            {
+              definition: runtime.definition,
+              strategyProfile: runtime.strategyProfile,
+              policy: options.npcPolicyFactory?.(runtime) ?? new BasicNpcPolicy(),
+              rng: createRng(`${this.state.config.seed}:${seat.id}:${runtime.definition.id}:npc-policy`),
+              config: runtime.strategyProfile.policyConfig,
+              memory: {},
+            },
+          ]
+        }),
     )
     this.initialTransition = this.startNextHand()
   }
@@ -166,4 +199,33 @@ export class LocalSinglePlayerController {
   private visibleHeroEventCount(): number {
     return getSeatView(this.state, this.humanSeatId).events.length
   }
+}
+
+function resolveNpcRuntime(seatId: SeatId, options: LocalSinglePlayerControllerOptions): LocalNpcRuntime {
+  const assignedNpcId = options.npcLineup?.find((assignment) => assignment.seatId === seatId)?.npcDefinitionId
+  const definition =
+    findNpcDefinition(assignedNpcId, options.npcDefinitions) ??
+    localNpcDefinitionForSeat(seatId, options.npcLineup)
+  if (!definition) {
+    throw new Error(`No NPC definition configured for seat ${seatId}.`)
+  }
+
+  const strategyProfile =
+    options.npcStrategyProfiles?.find((profile) => profile.id === definition.strategyProfileId) ??
+    localNpcStrategyProfile(definition.strategyProfileId)
+  if (!strategyProfile) {
+    throw new Error(`No NPC strategy profile configured for ${definition.id}.`)
+  }
+
+  return { seatId, definition, strategyProfile }
+}
+
+function findNpcDefinition(
+  npcDefinitionId: string | undefined,
+  definitions: readonly NpcDefinition[] | undefined,
+): NpcDefinition | undefined {
+  if (!npcDefinitionId) {
+    return undefined
+  }
+  return definitions?.find((definition) => definition.id === npcDefinitionId) ?? localNpcDefinition(npcDefinitionId)
 }

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type HandHistoryEvent, type LegalAction, type PublicSeatView } from '../poker-engine'
-import { localNpcPresentation } from '../npc/roster'
+import { localNpcPresentation, localNpcPresentationForDefinition } from '../npc/roster'
 import {
   createRandomLocalSeed,
   defaultLocalSoloSessionConfig,
@@ -187,6 +187,7 @@ export function PokerTable() {
             <SeatPanel
               key={seat.id}
               seat={seat}
+              npcDefinitionId={snapshot.blueprint.seats.find((entry) => entry.seatId === seat.id)?.npcDefinitionId}
               cards={seat.revealedCards}
               hiddenCards={!seat.revealedCards}
               label="Opponent seat"
@@ -468,14 +469,20 @@ function SeatPanel({
   hiddenCards = false,
   label,
   active = false,
+  npcDefinitionId,
 }: {
   seat: PublicSeatView
   cards?: PublicSeatView['revealedCards']
   hiddenCards?: boolean
   label: string
   active?: boolean
+  npcDefinitionId?: string
 }) {
-  const presentation = seat.kind === 'npc' ? localNpcPresentation(seat.id) : undefined
+  const presentation = seat.kind === 'npc'
+    ? npcDefinitionId
+      ? localNpcPresentationForDefinition(seat.id, npcDefinitionId)
+      : localNpcPresentation(seat.id)
+    : undefined
   const seatDescriptor = seat.kind === 'human'
     ? 'Local player'
     : presentation

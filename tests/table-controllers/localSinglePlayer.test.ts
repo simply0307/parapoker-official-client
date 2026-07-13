@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { NpcDecisionContext, NpcPolicy } from '../../src/npc/basicNpc'
 import {
   createSixMaxSoloConfig,
   LocalSinglePlayerController,
@@ -34,5 +35,39 @@ describe('local single-player controller', () => {
     expect(snapshot.publicView.pendingSeatId === 'human' || snapshot.publicView.status !== 'handInProgress').toBe(true)
     expect(JSON.stringify(snapshot.heroView)).not.toContain('deck')
     expect(JSON.stringify(snapshot.heroView)).not.toContain('rngState')
+  })
+
+  it('creates independent NPC policy runtimes from seat strategy profiles', () => {
+    const created: Array<{ seatId: string; npcId: string; strategyProfileId: string; policy: NpcPolicy }> = []
+    const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'npc-runtime-config' }), {
+      npcPolicyFactory(runtime) {
+        const policy: NpcPolicy = {
+          chooseAction(context: NpcDecisionContext) {
+            expect(context.config).toEqual(runtime.strategyProfile.policyConfig)
+            return { type: 'fold', seatId: context.view.heroSeatId, source: 'npc' }
+          },
+        }
+        created.push({
+          seatId: runtime.seatId,
+          npcId: runtime.definition.id,
+          strategyProfileId: runtime.strategyProfile.id,
+          policy,
+        })
+        return policy
+      },
+    })
+
+    expect(controller.getSnapshot().publicView.seats.map((seat) => seat.name)).toEqual([
+      'You',
+      'Maven',
+      'Rook',
+      'Quinn',
+      'Sol',
+      'Vega',
+    ])
+    expect(created.map((entry) => entry.seatId)).toEqual(['npc-1', 'npc-2', 'npc-3', 'npc-4', 'npc-5'])
+    expect(new Set(created.map((entry) => entry.policy)).size).toBe(created.length)
+    expect(new Set(created.map((entry) => entry.strategyProfileId)).size).toBeGreaterThan(1)
+    expect(created.find((entry) => entry.seatId === 'npc-2')?.npcId).toBe('npc-rook')
   })
 })
