@@ -82,7 +82,10 @@ export function npcStrategyProfilesForBlueprint(blueprint: GameBlueprint): NpcSt
   return npcDefinitionsForBlueprint(blueprint).map((definition) => mustNpcStrategyProfile(definition.strategyProfileId))
 }
 
-export function gameBlueprintToControllerConfig(blueprint: GameBlueprint): Partial<MatchConfig> {
+export function gameBlueprintToControllerConfig(
+  blueprint: GameBlueprint,
+  npcDefinitions: readonly NpcDefinition[] = [],
+): Partial<MatchConfig> {
   return {
     startingStack: blueprint.startingStack,
     smallBlind: blueprint.smallBlind,
@@ -90,20 +93,21 @@ export function gameBlueprintToControllerConfig(blueprint: GameBlueprint): Parti
     seed: blueprint.seed,
     seats: blueprint.seats.map((seat) => ({
       id: seat.seatId,
-      name: seatName(seat),
+      name: seatName(seat, npcDefinitions),
       kind: seat.kind,
     })),
   }
 }
 
-function seatName(seat: GameSeatBlueprint): string {
+function seatName(seat: GameSeatBlueprint, npcDefinitions: readonly NpcDefinition[]): string {
   if (seat.kind === 'human') {
     return seat.displayName ?? 'You'
   }
   if (!seat.npcDefinitionId) {
     return 'NPC'
   }
-  return mustNpcDefinition(seat.npcDefinitionId).name
+  return npcDefinitions.find((definition) => definition.id === seat.npcDefinitionId)?.name ??
+    mustNpcDefinition(seat.npcDefinitionId).name
 }
 
 function clone<T>(value: T): T {

@@ -21,7 +21,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -42,6 +43,34 @@ button:hover {
 }
 
 button.primary {
+  background: #174b38;
+  color: #ffffff;
+}
+
+.app-nav {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #cbd5cf;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 28px rgba(20, 32, 28, 0.12);
+}
+
+.app-nav button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+}
+
+.app-nav button.selected {
+  border-color: #174b38;
   background: #174b38;
   color: #ffffff;
 }
@@ -183,7 +212,9 @@ h2 {
 }
 
 .number-field input,
-.seed-field input {
+.seed-field input,
+.admin-panel input,
+.admin-panel select {
   width: 100%;
   min-height: 34px;
   border: 1px solid #cbd5cf;
@@ -191,6 +222,140 @@ h2 {
   padding: 0 8px;
   color: #17201c;
   font-weight: 800;
+}
+
+.admin-shell {
+  height: 100svh;
+  padding: 58px 16px 16px;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(420px, 1.2fr);
+  gap: 12px;
+  overflow: auto;
+}
+
+.admin-panel {
+  min-width: 0;
+  border: 1px solid #d3dbd2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-heading {
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.admin-list,
+.strategy-grid,
+.admin-controls,
+.lineup-grid,
+.preview-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-list {
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.admin-row {
+  border: 1px solid #e1e7e2;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcf8;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.admin-panel label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #607067;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.strategy-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.strategy-card {
+  border: 1px solid #e1e7e2;
+  border-radius: 6px;
+  padding: 9px;
+  background: #fbfcf8;
+  display: grid;
+  gap: 8px;
+}
+
+.strategy-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.strategy-card > div span,
+.strategy-card p {
+  color: #607067;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.strategy-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.strategy-card dl div {
+  border: 1px solid #d3dbd2;
+  border-radius: 6px;
+  padding: 6px;
+  background: #ffffff;
+}
+
+.strategy-card dt {
+  color: #607067;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.strategy-card dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.admin-controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lineup-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.preview-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.preview-grid pre {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #d3dbd2;
+  border-radius: 6px;
+  background: #17201c;
+  color: #f4f7f0;
+  padding: 10px;
+  font-size: 12px;
 }
 
 .seed-field,
