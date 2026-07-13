@@ -83,6 +83,11 @@ describe('PokerTable', () => {
     expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
     expect(screen.getByText('ParaBot 5')).toBeInTheDocument()
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
+    expect(screen.getByLabelText('Poker table')).toHaveClass('six-max-table')
+    expect(screen.getByLabelText('Hero seat')).toHaveTextContent('BTN')
+    for (const position of ['SB', 'BB', 'UTG', 'HJ', 'CO']) {
+      expect(screen.getByLabelText('Poker table')).toHaveTextContent(position)
+    }
     expect(screen.getByLabelText('Player actions')).toHaveTextContent(/Call|Check|Raise|Bet|Waiting/)
   })
 

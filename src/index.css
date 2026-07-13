@@ -57,7 +57,7 @@ button.danger {
   margin: 0 auto;
   padding: 12px;
   display: grid;
-  grid-template-columns: minmax(220px, 0.78fr) minmax(500px, 1.8fr) minmax(300px, 0.98fr);
+  grid-template-columns: minmax(200px, 0.7fr) minmax(560px, 2.1fr) minmax(280px, 0.9fr);
   gap: 12px;
   overflow: hidden;
 }
@@ -283,18 +283,51 @@ h2 {
 }
 
 .six-max-table {
-  grid-template-rows: minmax(240px, auto) 1fr minmax(142px, auto);
+  position: relative;
+  grid-template-rows: 1fr auto 1fr;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-areas:
+    "seat2 seat3 seat4 seat5 seat6"
+    "board board board board board"
+    ". . hero . .";
   gap: 10px;
+  align-items: center;
 }
 
 .six-max-table .opponents {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: contents;
 }
 
-.six-max-table .opponents .seat {
+.six-max-table .opponents .seat,
+.six-max-table > .seat {
+  min-width: 0;
   padding: 8px;
   gap: 6px;
+}
+
+.six-max-table .opponents .seat:nth-child(1) {
+  grid-area: seat2;
+  align-self: end;
+}
+
+.six-max-table .opponents .seat:nth-child(2) {
+  grid-area: seat3;
+  align-self: start;
+}
+
+.six-max-table .opponents .seat:nth-child(3) {
+  grid-area: seat4;
+  align-self: start;
+}
+
+.six-max-table .opponents .seat:nth-child(4) {
+  grid-area: seat5;
+  align-self: start;
+}
+
+.six-max-table .opponents .seat:nth-child(5) {
+  grid-area: seat6;
+  align-self: end;
 }
 
 .six-max-table .opponents .badges span,
@@ -302,12 +335,23 @@ h2 {
   font-size: 12px;
 }
 
-.six-max-table .opponents .card {
-  width: clamp(38px, 3.4vw, 50px);
+.six-max-table .card {
+  width: clamp(36px, 3.2vw, 48px);
 }
 
 .six-max-table .board {
+  grid-area: board;
   gap: 10px;
+}
+
+.six-max-table .hole-cards,
+.six-max-table .community {
+  gap: 6px;
+}
+
+.six-max-table > .seat {
+  grid-area: hero;
+  align-self: start;
 }
 
 .seat {
