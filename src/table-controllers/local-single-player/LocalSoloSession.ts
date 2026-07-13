@@ -1,6 +1,10 @@
 import type { EngineCommand, MatchConfig, PublicSeatView, SeatId } from '../../poker-engine'
 import { LOCAL_NPC_ROSTER } from '../../npc/roster'
 import {
+  buildCompletedSessionPackage,
+  type CompletedSessionPackage,
+} from '../../exports/completedSessionPackage'
+import {
   createEventRecordDrafts,
   InMemoryEventRecordStore,
   InMemoryMatchRecordStore,
@@ -121,6 +125,23 @@ export class LocalSoloSession {
 
   async getMatchRecord(): Promise<MatchRecord | undefined> {
     return this.matchStore.getMatch(this.matchId)
+  }
+
+  async exportCompletedSessionPackage(): Promise<CompletedSessionPackage> {
+    const match = await this.matchStore.getMatch(this.matchId)
+    const snapshot = this.getSnapshot()
+    if (!match || !snapshot.summary) {
+      throw new Error('Completed-session export requires a completed local solo match.')
+    }
+
+    return buildCompletedSessionPackage({
+      match,
+      publicEvents: await this.eventStore.listPublicEvents(this.matchId),
+      snapshotSeats: snapshot.publicView.seats,
+      summary: snapshot.summary,
+      config: this.config,
+      appVersion: '0.0.0',
+    })
   }
 
   getMatchSeatStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined> {
