@@ -101,47 +101,49 @@ export function PokerClientShell({
         changeSetup={changeSetup}
       />
       <section className={`table-window-grid layout-${tableLayout}`} aria-label="Table windows">
-        <PokerTableSurface
-          snapshot={snapshot}
-          heroSeat={heroSeat}
-          opponentSeats={opponentSeats}
-          pendingSeat={pendingSeat}
-          handResult={handResult}
-          scene={scene}
-        />
+        <section className="active-table-pane" aria-label="Active table pane">
+          <PokerTableSurface
+            snapshot={snapshot}
+            heroSeat={heroSeat}
+            opponentSeats={opponentSeats}
+            pendingSeat={pendingSeat}
+            handResult={handResult}
+            scene={scene}
+          />
+          <ActionDock
+            scene={scene}
+            snapshot={snapshot}
+            pendingSeat={pendingSeat}
+            handResult={handResult}
+            lastResult={lastResult}
+            presentationEvents={presentationEvents}
+            amounts={amounts}
+            setAmounts={setAmounts}
+            submit={submit}
+            startNext={startNext}
+            canStartNextHand={canStartNextHand}
+          />
+          {scene === 'matchResult' && snapshot.summary && (
+            <div className="table-overlay">
+              <SessionResult
+                summary={snapshot.summary}
+                rematchSameSeed={rematchSameSeed}
+                rematchRandomSeed={rematchRandomSeed}
+                changeSetup={changeSetup}
+              />
+            </div>
+          )}
+        </section>
         {Array.from({ length: Number(tableLayout) - 1 }).map((_, index) => (
           <InactiveTableSlot key={index} slotNumber={index + 2} />
         ))}
       </section>
-      <ActionDock
-        scene={scene}
-        snapshot={snapshot}
-        pendingSeat={pendingSeat}
-        handResult={handResult}
-        lastResult={lastResult}
-        presentationEvents={presentationEvents}
-        amounts={amounts}
-        setAmounts={setAmounts}
-        submit={submit}
-        startNext={startNext}
-        canStartNextHand={canStartNextHand}
-      />
       <HandHistoryDrawer
         events={snapshot.heroView.events}
         presentationEvents={presentationEvents}
         open={historyOpen}
         setOpen={setHistoryOpen}
       />
-      {scene === 'matchResult' && snapshot.summary && (
-        <div className="table-overlay">
-          <SessionResult
-            summary={snapshot.summary}
-            rematchSameSeed={rematchSameSeed}
-            rematchRandomSeed={rematchRandomSeed}
-            changeSetup={changeSetup}
-          />
-        </div>
-      )}
     </main>
   )
 }

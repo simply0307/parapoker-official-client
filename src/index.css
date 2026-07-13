@@ -83,7 +83,7 @@ button.danger {
 .poker-client-shell {
   width: 100%;
   height: 100svh;
-  padding: 56px 14px 132px;
+  padding: 56px 14px 14px;
   background:
     radial-gradient(circle at 50% 32%, rgba(48, 83, 67, 0.48), transparent 42%),
     linear-gradient(180deg, #15201d 0%, #0d1513 100%);
@@ -111,6 +111,14 @@ button.danger {
 .table-window-grid.layout-4 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
+}
+
+.active-table-pane {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .table-utility-bar {
@@ -212,11 +220,54 @@ button.danger {
   overflow: hidden;
 }
 
+.layout-2 .active-table-pane,
 .layout-2 .poker-table-surface,
 .layout-2 .inactive-table-slot,
+.layout-4 .active-table-pane,
 .layout-4 .poker-table-surface,
 .layout-4 .inactive-table-slot {
   min-height: 0;
+}
+
+.layout-2 .active-table-pane,
+.layout-4 .active-table-pane {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.layout-2 .action-dock,
+.layout-4 .action-dock {
+  min-height: 0;
+  max-height: 100%;
+  grid-template-columns: 1fr;
+  align-content: start;
+  align-items: stretch;
+  overflow: auto;
+}
+
+.layout-2 .action-dock .presentation-queue,
+.layout-4 .action-dock .presentation-queue {
+  max-height: 64px;
+}
+
+.layout-2 .dock-actions,
+.layout-4 .dock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.layout-2 .amount-control,
+.layout-4 .amount-control {
+  grid-column: 1 / -1;
+  flex-basis: auto;
+  grid-template-columns: 1fr 78px;
+}
+
+.layout-2 .amount-control span,
+.layout-2 .amount-control button,
+.layout-4 .amount-control span,
+.layout-4 .amount-control button {
+  grid-column: 1 / -1;
 }
 
 .layout-2 .seat-pod,
@@ -465,10 +516,7 @@ button.danger {
 }
 
 .action-dock {
-  position: fixed;
-  left: 14px;
-  right: 14px;
-  bottom: 12px;
+  position: relative;
   z-index: 10;
   min-height: 102px;
   border: 1px solid rgba(223, 211, 175, 0.2);
@@ -499,14 +547,20 @@ button.danger {
 }
 
 .dock-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
+}
+
+.dock-actions > button,
+.dock-actions > .muted {
+  flex: 1 1 108px;
+  min-width: 100px;
 }
 
 .dock-actions button {
-  min-height: 44px;
+  min-height: 38px;
 }
 
 .action-dock .presentation-queue {
@@ -564,8 +618,8 @@ button.danger {
 }
 
 .table-overlay {
-  position: fixed;
-  inset: 74px 20px 132px;
+  position: absolute;
+  inset: 12px;
   z-index: 9;
   display: grid;
   place-items: center;
@@ -1057,21 +1111,23 @@ h2 {
 }
 
 .amount-control {
-  grid-column: 1 / -1;
+  flex: 4 1 420px;
   min-width: 0;
   border: 1px solid #d3dbd2;
   border-radius: 6px;
-  padding: 9px;
+  padding: 7px;
   display: grid;
-  grid-template-columns: 1fr 88px;
-  gap: 8px;
+  grid-template-columns: auto minmax(120px, 1fr) 78px auto;
+  gap: 6px;
   align-items: center;
 }
 
 .amount-control span {
-  grid-column: 1 / -1;
+  grid-column: auto;
+  white-space: nowrap;
   text-transform: capitalize;
   font-weight: 700;
+  font-size: 13px;
 }
 
 .amount-slider {
@@ -1080,7 +1136,7 @@ h2 {
 
 .amount-entry {
   width: 100%;
-  min-height: 42px;
+  min-height: 36px;
   border: 1px solid #cbd5cf;
   border-radius: 6px;
   padding: 0 10px;
@@ -1088,7 +1144,9 @@ h2 {
 }
 
 .amount-control button {
-  grid-column: 1 / -1;
+  grid-column: auto;
+  min-height: 36px;
+  white-space: nowrap;
 }
 
 .muted {
@@ -1128,7 +1186,13 @@ h2 {
 
   .amount-control {
     width: 100%;
+    flex-basis: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .amount-control span,
+  .amount-control button {
+    grid-column: 1 / -1;
   }
 
   .controls-header,
@@ -1140,7 +1204,7 @@ h2 {
   .poker-client-shell {
     height: auto;
     min-height: 100svh;
-    padding: 56px 8px 180px;
+    padding: 56px 8px 8px;
     overflow: visible;
   }
 
@@ -1148,6 +1212,12 @@ h2 {
   .table-window-grid.layout-1,
   .table-window-grid.layout-2,
   .table-window-grid.layout-4 {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+
+  .layout-2 .active-table-pane,
+  .layout-4 .active-table-pane {
     grid-template-columns: 1fr;
     grid-template-rows: none;
   }
@@ -1217,14 +1287,12 @@ h2 {
   }
 
   .action-dock {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
   .dock-actions {
+    display: grid;
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1234,6 +1302,6 @@ h2 {
   }
 
   .table-overlay {
-    inset: 80px 12px 190px;
+    inset: 10px;
   }
 }

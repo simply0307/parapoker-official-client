@@ -28,6 +28,7 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Table flow')).toHaveTextContent('Maven posts big blind 2')
     expect(screen.getByLabelText('Table utility bar')).toBeInTheDocument()
     expect(screen.getByLabelText('Player actions')).toHaveClass('action-dock')
+    expect(screen.getByLabelText('Active table pane')).toContainElement(screen.getByLabelText('Player actions'))
     expect(screen.getByLabelText('Opponent seat')).toHaveClass('opponent-1')
     expect(screen.getByLabelText('Hero seat')).toHaveClass('hero')
   })
