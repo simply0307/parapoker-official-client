@@ -31,6 +31,7 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Active table pane')).toContainElement(screen.getByLabelText('Player actions'))
     expect(screen.getByLabelText('Opponent seat')).toHaveClass('opponent-1')
     expect(screen.getByLabelText('Hero seat')).toHaveClass('hero')
+    expect(screen.getByLabelText('Maven street contribution')).toHaveTextContent(/^2$/)
   })
 
   it('validates setup before creating a match', () => {

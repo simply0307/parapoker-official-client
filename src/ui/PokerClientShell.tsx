@@ -542,9 +542,11 @@ function CompactSeatPod({
           </>
         )}
       </div>
-      <div className="contribution" aria-label={`${seat.name} street contribution`}>
-        Bet {formatChips(seat.streetContribution)}
-      </div>
+      {seat.streetContribution > 0 && (
+        <div className="street-bet-marker" aria-label={`${seat.name} street contribution`}>
+          {formatChips(seat.streetContribution)}
+        </div>
+      )}
     </div>
   )
 }

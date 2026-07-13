@@ -473,19 +473,13 @@ button.danger {
   gap: 4px;
 }
 
-.seat-pod .badges span,
-.seat-pod .contribution {
+.seat-pod .badges span {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   padding: 3px 7px;
   color: #e4eee7;
   font-size: 11px;
   font-weight: 800;
-}
-
-.seat-pod .contribution {
-  justify-self: center;
-  color: #fff4d2;
 }
 
 .seat-pod .card {
@@ -495,6 +489,60 @@ button.danger {
 
 .hero-seat .card {
   width: clamp(44px, 4.2vw, 62px);
+}
+
+.street-bet-marker {
+  position: absolute;
+  z-index: 5;
+  min-width: 42px;
+  min-height: 30px;
+  padding: 5px 11px 5px 24px;
+  border: 1px solid rgba(255, 244, 210, 0.42);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 15px 50%, #ffe8a3 0 5px, #9a2f36 6px 9px, transparent 10px),
+    rgba(13, 20, 18, 0.9);
+  color: #fff4d2;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.36);
+  pointer-events: none;
+}
+
+.opponent-1 .street-bet-marker,
+.opponent-2 .street-bet-marker,
+.opponent-3 .street-bet-marker,
+.opponent-4 .street-bet-marker {
+  left: 50%;
+  bottom: -38px;
+  transform: translateX(-50%);
+}
+
+.six-max-layout .opponent-1 .street-bet-marker,
+.six-max-layout .opponent-2 .street-bet-marker {
+  left: auto;
+  right: -58px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.six-max-layout .opponent-4 .street-bet-marker,
+.six-max-layout .opponent-5 .street-bet-marker {
+  left: -58px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.hero .street-bet-marker {
+  left: 50%;
+  top: -40px;
+  transform: translateX(-50%);
 }
 
 .hand-result-overlay {
