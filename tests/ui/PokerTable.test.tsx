@@ -25,6 +25,7 @@ describe('PokerTable', () => {
     expect(screen.getByRole('button', { name: /call/i })).toBeInTheDocument()
     expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
     expect(screen.getByText('Seed heads-up-solo')).toBeInTheDocument()
+    expect(screen.getByLabelText('Table flow')).toHaveTextContent('Maven posts big blind 2')
   })
 
   it('validates setup before creating a match', () => {
@@ -82,7 +83,7 @@ describe('PokerTable', () => {
     expect(await screen.findByText("Six-Max No-Limit Hold'em")).toBeInTheDocument()
     expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
     expect(screen.getByText('Vega')).toBeInTheDocument()
-    expect(screen.getByText('Measured caller · Steady')).toBeInTheDocument()
+    expect(screen.getByText('Measured caller - Steady')).toBeInTheDocument()
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
     expect(screen.getByLabelText('Poker table')).toHaveClass('six-max-table')
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('BTN')
@@ -103,6 +104,21 @@ describe('PokerTable', () => {
     expect(result).toHaveTextContent('Pot awarded')
     expect(result).toHaveTextContent('Maven wins 3')
     expect(screen.queryByLabelText('Revealed cards')).not.toBeInTheDocument()
+  })
+
+  it('updates the table-flow queue from verified events after player and NPC actions', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Call 1' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Table flow')).toHaveTextContent('You call 1')
+    })
+    const flow = screen.getByLabelText('Table flow')
+    expect(flow).toHaveTextContent('You call 1')
+    expect(flow).toHaveTextContent('Maven')
+    expect(flow).not.toHaveTextContent('posts big blind')
   })
 
   it('requires confirmation before abandoning an active match for setup', async () => {

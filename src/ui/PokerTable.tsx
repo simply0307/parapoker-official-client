@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type WheelEvent } from 'react'
-import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
+import { cardToString, type Card, type HandHistoryEvent, type LegalAction, type PublicSeatView } from '../poker-engine'
 import { localNpcPresentation } from '../npc/roster'
 import {
   createRandomLocalSeed,
@@ -25,6 +25,10 @@ interface HandResultSummary {
     cards: Card[]
   }>
 }
+interface PresentationEvent {
+  id: string
+  text: string
+}
 
 export function PokerTable() {
   const sessionRef = useRef<LocalSoloSession | null>(null)
@@ -34,6 +38,7 @@ export function PokerTable() {
   const [scene, setScene] = useState<SoloScene>('setup')
   const [setupError, setSetupError] = useState('')
   const [amounts, setAmounts] = useState<Record<string, number>>({})
+  const [presentationEvents, setPresentationEvents] = useState<PresentationEvent[]>([])
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -82,8 +87,7 @@ export function PokerTable() {
     setSetup(nextConfig)
     setSetupError('')
     setAmounts({})
-    setSnapshot(nextSnapshot)
-    setScene(sceneForSnapshot(nextSnapshot))
+    applySnapshot(nextSnapshot, null)
   }
 
   async function submit(command: HumanCommand) {
@@ -91,9 +95,9 @@ export function PokerTable() {
     if (!session) {
       return
     }
+    const previousSnapshot = snapshot
     const nextSnapshot = await session.submitHumanAction(command)
-    setSnapshot(nextSnapshot)
-    setScene(sceneForSnapshot(nextSnapshot))
+    applySnapshot(nextSnapshot, previousSnapshot)
   }
 
   async function startNext() {
@@ -101,10 +105,10 @@ export function PokerTable() {
     if (!session) {
       return
     }
+    const previousSnapshot = snapshot
     setAmounts({})
     const nextSnapshot = await session.startNextHand()
-    setSnapshot(nextSnapshot)
-    setScene(sceneForSnapshot(nextSnapshot))
+    applySnapshot(nextSnapshot, previousSnapshot)
   }
 
   function updateSetup<TField extends keyof LocalSoloSessionConfig>(field: TField, value: LocalSoloSessionConfig[TField]) {
@@ -123,7 +127,14 @@ export function PokerTable() {
     sessionRef.current = null
     setSnapshot(null)
     setAmounts({})
+    setPresentationEvents([])
     setScene('setup')
+  }
+
+  function applySnapshot(nextSnapshot: LocalSoloSessionSnapshot, previousSnapshot: LocalSoloSessionSnapshot | null) {
+    setSnapshot(nextSnapshot)
+    setScene(sceneForSnapshot(nextSnapshot))
+    setPresentationEvents(getPresentationEvents(nextSnapshot, previousSnapshot))
   }
 
   function rematchSameSeed() {
@@ -236,6 +247,7 @@ export function PokerTable() {
           {(scene === 'betweenHand' || scene === 'matchResult') && handResult && (
             <HandResultPanel result={handResult} />
           )}
+          <PresentationQueue events={presentationEvents} />
           <div className="action-row">
             {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && scene !== 'matchResult' && (
               <span className="muted">Waiting for the table authority.</span>
@@ -355,6 +367,26 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
   )
 }
 
+function PresentationQueue({ events }: { events: PresentationEvent[] }) {
+  return (
+    <div className="presentation-queue" aria-label="Table flow">
+      <div className="queue-heading">
+        <strong>Table flow</strong>
+        <span>{events.length ? 'Latest verified events' : 'Waiting for action'}</span>
+      </div>
+      {events.length > 0 ? (
+        <ol>
+          {events.map((event) => (
+            <li key={event.id}>{event.text}</li>
+          ))}
+        </ol>
+      ) : (
+        <p className="muted">The table authority will publish the next update here.</p>
+      )}
+    </div>
+  )
+}
+
 function HandResultPanel({ result }: { result: HandResultSummary }) {
   return (
     <div className="hand-result-card" aria-label="Latest hand result">
@@ -447,7 +479,7 @@ function SeatPanel({
   const seatDescriptor = seat.kind === 'human'
     ? 'Local player'
     : presentation
-      ? `${presentation.archetype} · ${titleCase(presentation.difficulty)}`
+      ? `${presentation.archetype} - ${titleCase(presentation.difficulty)}`
       : 'NPC opponent'
 
   return (
@@ -676,6 +708,49 @@ function getHandResultSummary(snapshot: LocalSinglePlayerSnapshot): HandResultSu
     label: revealed.length > 0 ? 'Showdown result' : 'Pot awarded',
     winners,
     revealed,
+  }
+}
+
+function getPresentationEvents(
+  snapshot: LocalSinglePlayerSnapshot,
+  previousSnapshot: LocalSinglePlayerSnapshot | null,
+): PresentationEvent[] {
+  const previousEventIds = new Set(previousSnapshot?.heroView.events.map((event) => event.eventId) ?? [])
+  const events = snapshot.heroView.events.filter((event) => !previousEventIds.has(event.eventId))
+  const visibleEvents = events.length > 0 ? events : snapshot.heroView.events.slice(-4)
+
+  return visibleEvents
+    .map((event) => ({
+      id: event.eventId,
+      text: describePresentationEvent(event, snapshot),
+    }))
+    .slice(-5)
+}
+
+function describePresentationEvent(
+  event: HandHistoryEvent,
+  snapshot: LocalSinglePlayerSnapshot,
+): string {
+  const seatName = (seatId: string) => snapshot.publicView.seats.find((seat) => seat.id === seatId)?.name ?? seatId
+  switch (event.type) {
+    case 'handStarted':
+      return `Hand ${event.handId} begins; button is ${seatName(event.payload.dealerSeatId)}.`
+    case 'blindPosted':
+      return `${seatName(event.payload.seatId)} posts ${event.payload.blind} blind ${event.payload.amount}.`
+    case 'holeCardsDealt':
+      return `${seatName(event.payload.seatId)} receives hole cards.`
+    case 'actionApplied':
+      return `${seatName(event.payload.seatId)} ${event.payload.action}${event.payload.amount ? ` ${event.payload.amount}` : ''}.`
+    case 'streetAdvanced':
+      return `${titleCase(event.payload.street)} dealt.`
+    case 'showdown':
+      return `Showdown: ${Object.keys(event.payload.revealedCards).map(seatName).join(', ')} reveal.`
+    case 'potAwarded':
+      return `Pot awarded: ${event.payload.winners
+        .map((winner) => `${seatName(winner.seatId)} wins ${winner.amount}`)
+        .join(', ')}.`
+    case 'matchComplete':
+      return `${seatName(event.payload.winnerSeatId)} wins the match.`
   }
 }
 
