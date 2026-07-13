@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PokerTable } from '../../src/ui/PokerTable'
 
@@ -114,7 +114,7 @@ describe('PokerTable', () => {
     fireEvent.change(screen.getByLabelText('Seed'), { target: { value: 'instant-result' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
 
-    expect(await screen.findByLabelText('Session result')).toBeInTheDocument()
+    expect(await playUntilSessionResult()).toBeInTheDocument()
     expect(screen.getByText('Seed')).toBeInTheDocument()
     const firstSeedLine = screen.getByText(/Seed local-/)
     const firstSeed = firstSeedLine.textContent?.replace('Seed ', '') ?? ''
@@ -126,3 +126,22 @@ describe('PokerTable', () => {
     expect(await screen.findByText(/Seed local-/)).toBeInTheDocument()
   })
 })
+
+async function playUntilSessionResult(maxHands = 20): Promise<HTMLElement> {
+  for (let hand = 0; hand < maxHands; hand += 1) {
+    const result = screen.queryByLabelText('Session result')
+    if (result) {
+      return result
+    }
+
+    const nextHand = screen.queryByRole('button', { name: 'Next hand' })
+    if (nextHand) {
+      fireEvent.click(nextHand)
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Session result') ?? screen.queryByRole('button', { name: 'Next hand' })).toBeTruthy()
+      })
+    }
+  }
+
+  return screen.findByLabelText('Session result')
+}

@@ -407,9 +407,15 @@ function SeatPanel({
         <span>{formatChips(seat.stack)}</span>
       </div>
       <div className="badges">
-        {seat.isDealer && <span>Button</span>}
-        {seat.isSmallBlind && <span>SB</span>}
-        {seat.isBigBlind && <span>BB</span>}
+        {seat.position ? (
+          <span>{seat.position}</span>
+        ) : (
+          <>
+            {seat.isDealer && <span>Button</span>}
+            {seat.isSmallBlind && <span>SB</span>}
+            {seat.isBigBlind && <span>BB</span>}
+          </>
+        )}
         <span>{titleCase(seat.status)}</span>
         {active && <span>Acting</span>}
       </div>

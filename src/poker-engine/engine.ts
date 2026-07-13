@@ -1,5 +1,6 @@
 import { assertUniqueCards, freshDeck, shuffleDeck } from './cards'
 import { compareHandValues, evaluateBestHand } from './handEvaluator'
+import { positionForSeat } from './positions'
 import { constructPots } from './pots'
 import type {
   Card,
@@ -609,6 +610,7 @@ function toPublicSeatView(state: GameState, seat: SeatState): PublicSeatView {
     id: seat.id,
     name: seat.name,
     kind: seat.kind,
+    position: positionForSeat(state.seats, hand?.dealerSeatId, seat.id),
     stack: seat.stack,
     status: seat.status,
     streetContribution: hand?.streetContributions[seat.id] ?? 0,

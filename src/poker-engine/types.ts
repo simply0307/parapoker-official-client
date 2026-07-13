@@ -183,6 +183,7 @@ export interface PublicSeatView {
   id: SeatId
   name: string
   kind: PlayerKind
+  position?: import('./positions').PositionLabel
   stack: number
   status: PlayerStatus
   streetContribution: number

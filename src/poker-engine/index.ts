@@ -1,4 +1,5 @@
 export * from './cards'
 export * from './engine'
 export * from './handEvaluator'
+export * from './positions'
 export type * from './types'
