@@ -239,7 +239,7 @@ describe('PokerTable', () => {
 
     expect(await playUntilSessionResult()).toBeInTheDocument()
     expect(screen.getByText('Seed')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Download Hand History JSON' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Download Hand History CSV' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View in Hand Histories' })).toBeInTheDocument()
     expect(screen.getByText('Package checksum')).toBeInTheDocument()
     const firstSeedLine = screen.getByText(/Seed local-/)

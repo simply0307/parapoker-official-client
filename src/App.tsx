@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AdminPortal } from './ui/AdminPortal'
 import { PokerTable } from './ui/PokerTable'
+import { SupabaseIdentityWidget } from './ui/SupabaseIdentityWidget'
 
 type AppScreen = 'play' | 'admin'
 
@@ -9,6 +10,7 @@ function App() {
 
   return (
     <>
+      <SupabaseIdentityWidget />
       <nav className="app-nav" aria-label="Client sections">
         <button
           type="button"

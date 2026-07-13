@@ -13,6 +13,7 @@ import {
   type ArchivedSessionDetail,
   type ArchivedSessionRecord,
 } from '../persistence'
+import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
 
 interface AdminNpcDraft {
   id: string
@@ -140,12 +141,12 @@ export function AdminPortal() {
     if (!session.publicPackage) {
       return
     }
-    const json = JSON.stringify(session.publicPackage, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
+    const csv = completedSessionPackageToPokerNowCsv(session.publicPackage)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `parapoker-${session.matchId}-hand-history.json`
+    anchor.download = `parapoker-${session.matchId}-hand-history.csv`
     document.body.append(anchor)
     anchor.click()
     anchor.remove()
@@ -189,7 +190,7 @@ export function AdminPortal() {
                   Open details
                 </button>
                 <button type="button" onClick={() => downloadArchivePackage(session)} disabled={!session.publicPackage}>
-                  Download public package
+                  Download public CSV
                 </button>
                 <button type="button" onClick={() => void markImported(session.matchId)} disabled={!session.publicPackage}>
                   Mark imported

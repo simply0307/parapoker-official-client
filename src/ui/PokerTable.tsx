@@ -17,6 +17,7 @@ import {
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 import { IndexedDbHandHistoryArchiveStore } from '../persistence'
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
+import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
@@ -223,12 +224,12 @@ export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void })
 }
 
 function downloadCompletedPackage(completedPackage: CompletedSessionPackage) {
-  const json = JSON.stringify(completedPackage, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
+  const csv = completedSessionPackageToPokerNowCsv(completedPackage)
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `parapoker-${completedPackage.source.sourceMatchId}-hand-history.json`
+  anchor.download = `parapoker-${completedPackage.source.sourceMatchId}-hand-history.csv`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()

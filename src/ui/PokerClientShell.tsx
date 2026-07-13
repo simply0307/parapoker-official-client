@@ -521,7 +521,7 @@ function SessionResult({
         <Metric label="Package checksum" value={packageChecksum ?? 'Preparing'} />
       </dl>
       <p className="export-note">
-        Local archive may include your private hand history. Download exports the public package only.
+        Local archive may include your private hand history. Download exports a public Poker Now-style CSV only.
       </p>
       <div className="stats-list" aria-label="Per-seat stats">
         {summary.stats.map((stat) => (
@@ -536,7 +536,7 @@ function SessionResult({
       </div>
       <div className="result-actions">
         <button type="button" className="primary" onClick={downloadHandHistory} disabled={!canDownloadHandHistory}>
-          Download Hand History JSON
+          Download Hand History CSV
         </button>
         <button type="button" onClick={viewHandHistories}>
           View in Hand Histories
