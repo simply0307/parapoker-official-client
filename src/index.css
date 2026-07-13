@@ -377,6 +377,18 @@ h2 {
   gap: 12px;
 }
 
+.seat-meta div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.seat-role {
+  color: #d4e7dc;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .badges {
   display: flex;
   flex-wrap: wrap;
@@ -498,6 +510,32 @@ h2 {
 .controls-header div {
   display: grid;
   gap: 4px;
+}
+
+.hand-result-card {
+  border: 1px solid #d3dbd2;
+  border-radius: 6px;
+  padding: 9px;
+  background: #fbfcf8;
+  display: grid;
+  gap: 8px;
+}
+
+.hand-result-card div,
+.revealed-list {
+  display: grid;
+  gap: 4px;
+}
+
+.hand-result-card span {
+  color: #43524b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.revealed-list {
+  border-top: 1px solid #e2e7df;
+  padding-top: 8px;
 }
 
 .round-pill {

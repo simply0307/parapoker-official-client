@@ -81,7 +81,8 @@ describe('PokerTable', () => {
 
     expect(await screen.findByText("Six-Max No-Limit Hold'em")).toBeInTheDocument()
     expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
-    expect(screen.getByText('ParaBot 5')).toBeInTheDocument()
+    expect(screen.getByText('Vega')).toBeInTheDocument()
+    expect(screen.getByText('Measured caller · Steady')).toBeInTheDocument()
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
     expect(screen.getByLabelText('Poker table')).toHaveClass('six-max-table')
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('BTN')
@@ -89,6 +90,19 @@ describe('PokerTable', () => {
       expect(screen.getByLabelText('Poker table')).toHaveTextContent(position)
     }
     expect(screen.getByLabelText('Player actions')).toHaveTextContent(/Call|Check|Raise|Bet|Waiting/)
+  })
+
+  it('shows a verified hand-result panel after an uncontested pot', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Fold' }))
+
+    const result = await screen.findByLabelText('Latest hand result')
+    expect(screen.getByText('Hand result')).toBeInTheDocument()
+    expect(result).toHaveTextContent('Pot awarded')
+    expect(result).toHaveTextContent('Maven wins 3')
+    expect(screen.queryByLabelText('Revealed cards')).not.toBeInTheDocument()
   })
 
   it('requires confirmation before abandoning an active match for setup', async () => {

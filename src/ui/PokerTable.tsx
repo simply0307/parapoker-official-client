@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
+import { localNpcPresentation } from '../npc/roster'
 import {
   createRandomLocalSeed,
   defaultLocalSoloSessionConfig,
@@ -11,6 +12,19 @@ import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-singl
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
+interface HandResultSummary {
+  label: string
+  winners: Array<{
+    name: string
+    amount: number
+    handName?: string
+    cards?: Card[]
+  }>
+  revealed: Array<{
+    name: string
+    cards: Card[]
+  }>
+}
 
 export function PokerTable() {
   const sessionRef = useRef<LocalSoloSession | null>(null)
@@ -33,6 +47,7 @@ export function PokerTable() {
     : 0
   const stackLead = snapshot ? getStackLead(snapshot.publicView.seats, snapshot.heroView.heroSeatId) : 'Even'
   const lastResult = snapshot ? getLastResultText(snapshot) : undefined
+  const handResult = snapshot ? getHandResultSummary(snapshot) : undefined
   const tableTitle = snapshot?.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
 
   const statusText = useMemo(() => {
@@ -214,10 +229,13 @@ export function PokerTable() {
           <div className="controls-header">
             <div>
               <h2>{scene === 'betweenHand' ? 'Hand result' : 'Actions'}</h2>
-              <p>{lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
+              <p>{handResult?.label ?? lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
             </div>
             <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
           </div>
+          {(scene === 'betweenHand' || scene === 'matchResult') && handResult && (
+            <HandResultPanel result={handResult} />
+          )}
           <div className="action-row">
             {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && scene !== 'matchResult' && (
               <span className="muted">Waiting for the table authority.</span>
@@ -337,6 +355,31 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
   )
 }
 
+function HandResultPanel({ result }: { result: HandResultSummary }) {
+  return (
+    <div className="hand-result-card" aria-label="Latest hand result">
+      <div>
+        <strong>{result.label}</strong>
+        {result.winners.map((winner) => (
+          <span key={`${winner.name}-${winner.amount}`}>
+            {winner.name} wins {winner.amount}
+            {winner.handName ? ` with ${winner.handName}` : ''}
+          </span>
+        ))}
+      </div>
+      {result.revealed.length > 0 && (
+        <div className="revealed-list" aria-label="Revealed cards">
+          {result.revealed.map((entry) => (
+            <span key={entry.name}>
+              {entry.name}: {entry.cards.map(cardToString).join(' ')}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SessionResult({
   summary,
   rematchSameSeed,
@@ -400,10 +443,20 @@ function SeatPanel({
   label: string
   active?: boolean
 }) {
+  const presentation = seat.kind === 'npc' ? localNpcPresentation(seat.id) : undefined
+  const seatDescriptor = seat.kind === 'human'
+    ? 'Local player'
+    : presentation
+      ? `${presentation.archetype} · ${titleCase(presentation.difficulty)}`
+      : 'NPC opponent'
+
   return (
     <div className={`seat ${seat.id}${active ? ' active-seat' : ''}`} aria-label={label}>
       <div className="seat-meta">
-        <strong>{seat.name}</strong>
+        <div>
+          <strong>{seat.name}</strong>
+          <span className="seat-role">{seatDescriptor}</span>
+        </div>
         <span>{formatChips(seat.stack)}</span>
       </div>
       <div className="badges">
@@ -596,6 +649,34 @@ function getLastResultText(snapshot: LocalSinglePlayerSnapshot): string | undefi
     return undefined
   }
   return `Last pot: ${awarded.payload.winners.map((winner) => `${winner.seatId} won ${winner.amount}`).join(', ')}`
+}
+
+function getHandResultSummary(snapshot: LocalSinglePlayerSnapshot): HandResultSummary | undefined {
+  const awarded = [...snapshot.heroView.events].reverse().find((event) => event.type === 'potAwarded')
+  if (!awarded || snapshot.publicView.status === 'handInProgress') {
+    return undefined
+  }
+
+  const showdown = [...snapshot.heroView.events].reverse().find((event) => event.type === 'showdown')
+  const seatName = (seatId: string) => snapshot.publicView.seats.find((seat) => seat.id === seatId)?.name ?? seatId
+  const winners = awarded.payload.winners.map((winner) => ({
+    name: seatName(winner.seatId),
+    amount: winner.amount,
+    handName: winner.handName,
+    cards: winner.cards,
+  }))
+  const revealed = showdown && showdown.handId === awarded.handId
+    ? Object.entries(showdown.payload.revealedCards).map(([seatId, cards]) => ({
+        name: seatName(seatId),
+        cards,
+      }))
+    : []
+
+  return {
+    label: revealed.length > 0 ? 'Showdown result' : 'Pot awarded',
+    winners,
+    revealed,
+  }
 }
 
 function formatChips(amount: number): string {

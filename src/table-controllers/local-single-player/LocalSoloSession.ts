@@ -1,4 +1,5 @@
 import type { EngineCommand, MatchConfig, PublicSeatView, SeatId } from '../../poker-engine'
+import { LOCAL_NPC_ROSTER } from '../../npc/roster'
 import {
   createEventRecordDrafts,
   InMemoryEventRecordStore,
@@ -198,7 +199,13 @@ function createControllerConfig(config: LocalSoloSessionConfig): Partial<MatchCo
   if (config.mode === 'six-max') {
     return createSixMaxSoloConfig(base)
   }
-  return base
+  return {
+    ...base,
+    seats: [
+      { id: 'human', name: 'You', kind: 'human' },
+      { id: 'npc-1', name: LOCAL_NPC_ROSTER[0].name, kind: 'npc' },
+    ],
+  }
 }
 
 function toSeatAssignment(seat: PublicSeatView) {

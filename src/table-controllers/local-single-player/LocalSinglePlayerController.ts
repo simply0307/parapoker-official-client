@@ -5,6 +5,7 @@ import {
   type NpcPolicyConfig,
   type NpcTableMemory,
 } from '../../npc/basicNpc'
+import { LOCAL_NPC_ROSTER } from '../../npc/roster'
 import {
   applyAction,
   createGame,
@@ -48,11 +49,7 @@ export function createSixMaxSoloConfig(config: Partial<MatchConfig> = {}): Parti
     ...config,
     seats: config.seats ?? [
       { id: 'human', name: 'You', kind: 'human' },
-      { id: 'npc-1', name: 'ParaBot 1', kind: 'npc' },
-      { id: 'npc-2', name: 'ParaBot 2', kind: 'npc' },
-      { id: 'npc-3', name: 'ParaBot 3', kind: 'npc' },
-      { id: 'npc-4', name: 'ParaBot 4', kind: 'npc' },
-      { id: 'npc-5', name: 'ParaBot 5', kind: 'npc' },
+      ...LOCAL_NPC_ROSTER.map((npc) => ({ id: npc.seatId, name: npc.name, kind: 'npc' as const })),
     ],
   }
 }
