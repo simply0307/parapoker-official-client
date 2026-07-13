@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction, WheelEvent } from 'react'
+import type { Dispatch, ReactNode, SetStateAction, WheelEvent } from 'react'
 import { cardToString, type Card, type LegalAction, type PublicSeatView } from '../poker-engine'
 import { localNpcPresentation, localNpcPresentationForDefinition } from '../npc/roster'
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
@@ -88,6 +88,9 @@ export function PokerClientShell({
   pendingSeat,
   canStartNextHand,
 }: PokerClientShellProps) {
+  const tableCount = Number(tableLayout)
+  const density = tableLayout === '1' ? 'large' : 'compact'
+
   return (
     <main className="poker-client-shell">
       <TableUtilityBar
@@ -101,7 +104,28 @@ export function PokerClientShell({
         changeSetup={changeSetup}
       />
       <section className={`table-window-grid layout-${tableLayout}`} aria-label="Table windows">
-        <section className="active-table-pane" aria-label="Active table pane">
+        <TableWindow
+          tableNumber={1}
+          title={tableTitle}
+          status={statusText}
+          active
+          density={density}
+          footer={(
+            <ActionDock
+              scene={scene}
+              snapshot={snapshot}
+              pendingSeat={pendingSeat}
+              handResult={handResult}
+              lastResult={lastResult}
+              presentationEvents={presentationEvents}
+              amounts={amounts}
+              setAmounts={setAmounts}
+              submit={submit}
+              startNext={startNext}
+              canStartNextHand={canStartNextHand}
+            />
+          )}
+        >
           <PokerTableSurface
             snapshot={snapshot}
             heroSeat={heroSeat}
@@ -109,19 +133,6 @@ export function PokerClientShell({
             pendingSeat={pendingSeat}
             handResult={handResult}
             scene={scene}
-          />
-          <ActionDock
-            scene={scene}
-            snapshot={snapshot}
-            pendingSeat={pendingSeat}
-            handResult={handResult}
-            lastResult={lastResult}
-            presentationEvents={presentationEvents}
-            amounts={amounts}
-            setAmounts={setAmounts}
-            submit={submit}
-            startNext={startNext}
-            canStartNextHand={canStartNextHand}
           />
           {scene === 'matchResult' && snapshot.summary && (
             <div className="table-overlay">
@@ -133,9 +144,18 @@ export function PokerClientShell({
               />
             </div>
           )}
-        </section>
-        {Array.from({ length: Number(tableLayout) - 1 }).map((_, index) => (
-          <InactiveTableSlot key={index} slotNumber={index + 2} />
+        </TableWindow>
+        {Array.from({ length: tableCount - 1 }).map((_, index) => (
+          <TableWindow
+            key={index}
+            tableNumber={index + 2}
+            title={`Table ${index + 2}`}
+            status="No active session"
+            density={density}
+            footer={<InactiveTableFooter />}
+          >
+            <InactiveTableStage slotNumber={index + 2} />
+          </TableWindow>
         ))}
       </section>
       <HandHistoryDrawer
@@ -145,6 +165,43 @@ export function PokerClientShell({
         setOpen={setHistoryOpen}
       />
     </main>
+  )
+}
+
+function TableWindow({
+  tableNumber,
+  title,
+  status,
+  active = false,
+  density,
+  footer,
+  children,
+}: {
+  tableNumber: number
+  title: string
+  status: string
+  active?: boolean
+  density: 'large' | 'compact'
+  footer: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <section
+      className={`table-window ${active ? 'active-table-window' : 'inactive-table-window'} density-${density}`}
+      aria-label={`Table ${tableNumber} window`}
+      data-testid="table-window"
+    >
+      <header className="table-window-header" aria-label={`Table ${tableNumber} header`}>
+        <strong>{title}</strong>
+        <span>{status}</span>
+      </header>
+      <div className="table-stage" aria-label={`Table ${tableNumber} stage`}>
+        {children}
+      </div>
+      <footer className="table-window-footer" aria-label={`Table ${tableNumber} footer`}>
+        {footer}
+      </footer>
+    </section>
   )
 }
 
@@ -261,13 +318,22 @@ function PokerTableSurface({
   )
 }
 
-function InactiveTableSlot({ slotNumber }: { slotNumber: number }) {
+function InactiveTableStage({ slotNumber }: { slotNumber: number }) {
   return (
-    <section className="inactive-table-slot" aria-label={`Inactive table slot ${slotNumber}`}>
+    <div className="inactive-table-stage" aria-label={`Inactive table slot ${slotNumber}`}>
       <div className="inactive-table-oval" />
       <strong>Table {slotNumber}</strong>
+      <span>No active session</span>
+    </div>
+  )
+}
+
+function InactiveTableFooter() {
+  return (
+    <div className="inactive-table-footer">
+      <strong>No active session</strong>
       <span>Available when multi-table sessions are enabled</span>
-    </section>
+    </div>
   )
 }
 
@@ -457,13 +523,30 @@ function HandResultOverlay({ result }: { result: HandResultSummary }) {
   return (
     <div className="hand-result-overlay" aria-label="Latest hand result">
       <strong>{result.label}</strong>
-      <span>
-        {result.winners
-          .map((winner) => `${winner.name} wins ${winner.amount}${winner.handName ? ` with ${winner.handName}` : ''}`)
-          .join(', ')}
-      </span>
+      <span>{formatHandResultWinners(result.winners)}</span>
     </div>
   )
+}
+
+function formatHandResultWinners(winners: HandResultSummary['winners']): string {
+  const grouped = new Map<string, { amount: number; handNames: Set<string> }>()
+  for (const winner of winners) {
+    const current = grouped.get(winner.name) ?? { amount: 0, handNames: new Set<string>() }
+    current.amount += winner.amount
+    if (winner.handName) {
+      current.handNames.add(winner.handName)
+    }
+    grouped.set(winner.name, current)
+  }
+
+  return Array.from(grouped.entries())
+    .map(([name, result]) => {
+      const verb = name === 'You' ? 'win' : 'wins'
+      const handNames = Array.from(result.handNames)
+      const handText = handNames.length === 0 ? '' : ` with ${handNames.join(' / ')}`
+      return `${name} ${verb} ${result.amount}${handText}`
+    })
+    .join('; ')
 }
 
 function CompactSeatPod({
