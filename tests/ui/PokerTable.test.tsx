@@ -106,6 +106,24 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Player actions')).toHaveTextContent(/Call|Check|Raise|Bet|Waiting/)
   })
 
+  it('switches between one, two, and four table window layouts without creating extra sessions', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+    expect(await screen.findByLabelText('Table windows')).toHaveClass('layout-1')
+    expect(screen.queryByLabelText('Inactive table slot 2')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Table layout'), { target: { value: '2' } })
+    expect(screen.getByLabelText('Table windows')).toHaveClass('layout-2')
+    expect(screen.getByLabelText('Inactive table slot 2')).toHaveTextContent('Available when multi-table sessions are enabled')
+    expect(screen.getAllByLabelText('Poker table')).toHaveLength(1)
+
+    fireEvent.change(screen.getByLabelText('Table layout'), { target: { value: '4' } })
+    expect(screen.getByLabelText('Table windows')).toHaveClass('layout-4')
+    expect(screen.getByLabelText('Inactive table slot 4')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Poker table')).toHaveLength(1)
+  })
+
   it('shows a verified hand-result panel after an uncontested pot', async () => {
     render(<PokerTable />)
 
