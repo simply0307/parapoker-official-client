@@ -1,4 +1,4 @@
-import type { EngineCommand, PublicSeatView, SeatId } from '../../poker-engine'
+import type { EngineCommand, HandHistoryEvent, PublicSeatView, SeatId } from '../../poker-engine'
 import {
   buildCompletedSessionPackage,
   type CompletedSessionPackage,
@@ -16,10 +16,16 @@ import type { NpcSeatAssignment } from '../../npc/config'
 import {
   createEventRecordDrafts,
   InMemoryEventRecordStore,
+  buildArchivedHandRecord,
+  buildArchiveParticipants,
+  buildSeatPrivateHandArchive,
+  type ArchivedSessionDetail,
+  type ArchivedSessionRecord,
   InMemoryMatchRecordStore,
   InMemoryStatsStore,
   type DerivedStatsSnapshot,
   type EventRecord,
+  type HandHistoryArchiveStore,
   type MatchRecord,
 } from '../../persistence'
 import {
@@ -42,6 +48,10 @@ export interface LocalSoloSessionConfig {
   blueprint?: GameBlueprint
 }
 
+export interface LocalSoloSessionOptions {
+  archiveStore?: HandHistoryArchiveStore
+}
+
 export interface LocalSoloSessionSummary {
   winnerSeatId?: SeatId
   winnerName?: string
@@ -61,6 +71,11 @@ export interface LocalSoloSessionSnapshot extends LocalSinglePlayerSnapshot {
   blueprint: GameBlueprint
   stats: DerivedStatsSnapshot[]
   summary?: LocalSoloSessionSummary
+  archive?: {
+    status: ArchivedSessionRecord['status']
+    packageChecksum?: string
+    importStatus?: ArchivedSessionRecord['importStatus']
+  }
 }
 
 type HumanCommand = Omit<EngineCommand, 'seatId' | 'source'>
@@ -74,10 +89,15 @@ export class LocalSoloSession {
   private readonly matchStore: InMemoryMatchRecordStore
   private readonly eventStore: InMemoryEventRecordStore
   private readonly statsStore: InMemoryStatsStore
+  private readonly archiveStore?: HandHistoryArchiveStore
+  private readonly retainedHandNumbers = new Set<number>()
+  private readonly heroPrivateEvents: HandHistoryEvent[] = []
   private stats: DerivedStatsSnapshot[] = []
   private completed = false
+  private archiveFinalized = false
+  private archiveRecord?: ArchivedSessionRecord
 
-  private constructor(config: LocalSoloSessionConfig) {
+  private constructor(config: LocalSoloSessionConfig, options: LocalSoloSessionOptions = {}) {
     const resolvedBlueprint = config.blueprint ? clone(config.blueprint) : createBlueprintFromSessionConfig(config)
     this.config = {
       ...clone(config),
@@ -96,6 +116,7 @@ export class LocalSoloSession {
     this.matchStore = new InMemoryMatchRecordStore()
     this.eventStore = new InMemoryEventRecordStore()
     this.statsStore = new InMemoryStatsStore(this.eventStore)
+    this.archiveStore = options.archiveStore
     this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint), {
       npcLineup: npcLineupForBlueprint(this.blueprint),
       npcDefinitions: npcDefinitionsForBlueprint(this.blueprint),
@@ -103,8 +124,8 @@ export class LocalSoloSession {
     })
   }
 
-  static async create(config: LocalSoloSessionConfig): Promise<LocalSoloSession> {
-    const session = new LocalSoloSession(config)
+  static async create(config: LocalSoloSessionConfig, options: LocalSoloSessionOptions = {}): Promise<LocalSoloSession> {
+    const session = new LocalSoloSession(config, options)
     await session.matchStore.createMatch({
       matchId: session.matchId,
       tableId: session.tableId,
@@ -122,6 +143,17 @@ export class LocalSoloSession {
         bigBlind: session.blueprint.bigBlind,
       },
     })
+    if (session.archiveStore) {
+      session.archiveRecord = await session.archiveStore.createActiveSession({
+        matchId: session.matchId,
+        tableId: session.tableId,
+        blueprint: session.blueprint,
+        config: session.config,
+        participants: buildArchiveParticipants(session.blueprint),
+        rulesContractVersion: 'para-poker-rules-v0',
+        eventSchemaVersion: 'poker-event-v1',
+      })
+    }
     await session.recordTransition(session.controller.consumeInitialTransition())
     return session
   }
@@ -138,6 +170,13 @@ export class LocalSoloSession {
       blueprint: clone(this.blueprint),
       stats: clone(this.stats),
       summary: this.buildSummary(snapshot),
+      archive: this.archiveRecord
+        ? {
+            status: this.archiveRecord.status,
+            packageChecksum: this.archiveRecord.packageChecksum,
+            importStatus: this.archiveRecord.importStatus,
+          }
+        : undefined,
     }
   }
 
@@ -176,6 +215,10 @@ export class LocalSoloSession {
     })
   }
 
+  async getArchivedSession(): Promise<ArchivedSessionDetail | undefined> {
+    return this.archiveStore?.readArchivedSession(this.matchId)
+  }
+
   getMatchSeatStats(seatId: SeatId): Promise<DerivedStatsSnapshot | undefined> {
     return this.statsStore.getMatchSeatStats(this.matchId, seatId)
   }
@@ -190,11 +233,51 @@ export class LocalSoloSession {
 
   private async recordTransition(transition: LocalSinglePlayerTransition): Promise<void> {
     const publicEvents = transition.events.filter((event) => event.visibility === 'public')
+    const privateHeroEvents = transition.events.filter((event) => event.visibility === transition.heroView.heroSeatId)
+    this.heroPrivateEvents.push(...privateHeroEvents)
     if (publicEvents.length > 0) {
       await this.eventStore.appendEvents(createEventRecordDrafts(this.matchId, this.tableId, publicEvents))
     }
     this.stats = await this.statsStore.updateFromVerifiedEvents(this.matchId)
+    await this.archiveCompletedHands(publicEvents)
     await this.completeMatchIfNeeded()
+    await this.finalizeArchiveIfNeeded()
+  }
+
+  private async archiveCompletedHands(publicEvents: HandHistoryEvent[]): Promise<void> {
+    if (!this.archiveStore) {
+      return
+    }
+    const completedHandIds = publicEvents
+      .filter((event) => event.type === 'potAwarded')
+      .map((event) => event.handId)
+    if (completedHandIds.length === 0) {
+      return
+    }
+    const allPublicEvents = await this.eventStore.listPublicEvents(this.matchId)
+    for (const handNumber of completedHandIds) {
+      if (this.retainedHandNumbers.has(handNumber)) {
+        continue
+      }
+      const hand = buildArchivedHandRecord({
+        matchId: this.matchId,
+        tableId: this.tableId,
+        handNumber,
+        publicEvents: allPublicEvents.map((record) => record.event),
+      })
+      await this.archiveStore.upsertCompletedHand(hand)
+      const privateHand = buildSeatPrivateHandArchive({
+        matchId: this.matchId,
+        tableId: this.tableId,
+        seatId: this.controller.getSnapshot().heroView.heroSeatId,
+        handNumber,
+        privateEvents: this.heroPrivateEvents,
+      })
+      if (privateHand) {
+        await this.archiveStore.upsertSeatPrivateHand(privateHand)
+      }
+      this.retainedHandNumbers.add(handNumber)
+    }
   }
 
   private async completeMatchIfNeeded(): Promise<void> {
@@ -208,6 +291,23 @@ export class LocalSoloSession {
       status: 'complete',
       winnerSeatIds: fundedSeats.map((seat) => seat.id),
       finalStacks: finalStacks(snapshot.publicView.seats),
+    })
+  }
+
+  private async finalizeArchiveIfNeeded(): Promise<void> {
+    if (!this.archiveStore || this.archiveFinalized) {
+      return
+    }
+    const snapshot = this.getSnapshot()
+    if (!snapshot.summary) {
+      return
+    }
+    this.archiveFinalized = true
+    const publicPackage = await this.exportCompletedSessionPackage()
+    this.archiveRecord = await this.archiveStore.finalizeCompletedSession({
+      matchId: this.matchId,
+      summary: snapshot.summary,
+      publicPackage,
     })
   }
 

@@ -1083,6 +1083,43 @@ h2 {
   gap: 8px;
 }
 
+.history-row {
+  grid-template-columns: 0.85fr 1.2fr 1fr 1fr;
+}
+
+.history-row > div,
+.history-actions,
+.archive-detail {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.history-row span {
+  min-width: 0;
+  color: #607067;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-actions {
+  grid-template-columns: 1fr 1fr;
+}
+
+.history-actions button {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.archive-detail {
+  border-top: 1px solid #e1e7e2;
+  padding-top: 10px;
+}
+
 .admin-panel label {
   min-width: 0;
   display: grid;
@@ -1327,6 +1364,12 @@ h2 {
 .result-actions {
   display: grid;
   gap: 8px;
+}
+
+.export-note {
+  color: #607067;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .controls-header,

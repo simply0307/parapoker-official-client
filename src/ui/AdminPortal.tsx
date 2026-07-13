@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createGameBlueprint,
   defaultNpcLineup,
@@ -8,6 +8,11 @@ import {
 } from '../game-config/gameBlueprint'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../npc/config'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../npc/roster'
+import {
+  IndexedDbHandHistoryArchiveStore,
+  type ArchivedSessionDetail,
+  type ArchivedSessionRecord,
+} from '../persistence'
 
 interface AdminNpcDraft {
   id: string
@@ -28,6 +33,7 @@ interface AdminGameDraft {
 }
 
 export function AdminPortal() {
+  const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
   const [npcDrafts, setNpcDrafts] = useState<AdminNpcDraft[]>(() =>
     LOCAL_NPC_DEFINITIONS.map((npc) => ({
       id: npc.id,
@@ -47,6 +53,8 @@ export function AdminPortal() {
     seed: 'admin-preview',
     npcLineup: defaultNpcLineup('heads-up'),
   }))
+  const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionRecord[]>([])
+  const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
 
   const activeNpcDrafts = npcDrafts.filter((npc) => npc.status === 'active')
   const npcDefinitions = useMemo<NpcDefinition[]>(
@@ -75,6 +83,18 @@ export function AdminPortal() {
     [npcDefinitions, resolvedBlueprint],
   )
 
+  const refreshArchives = useCallback(async () => {
+    const sessions = await archiveStoreRef.current.listArchivedSessions()
+    setArchivedSessions(sessions)
+    if (selectedArchive && !sessions.some((session) => session.matchId === selectedArchive.session.matchId)) {
+      setSelectedArchive(null)
+    }
+  }, [selectedArchive])
+
+  useEffect(() => {
+    void refreshArchives()
+  }, [refreshArchives])
+
   function updateNpc(id: string, patch: Partial<AdminNpcDraft>) {
     setNpcDrafts((current) => current.map((npc) => (npc.id === id ? { ...npc, ...patch } : npc)))
   }
@@ -100,6 +120,38 @@ export function AdminPortal() {
     }))
   }
 
+  async function openArchive(matchId: string) {
+    const detail = await archiveStoreRef.current.readArchivedSession(matchId)
+    setSelectedArchive(detail ?? null)
+  }
+
+  async function deleteArchive(matchId: string) {
+    await archiveStoreRef.current.deleteArchivedSession(matchId)
+    await refreshArchives()
+  }
+
+  async function markImported(matchId: string) {
+    await archiveStoreRef.current.updateImportStatus(matchId, 'imported')
+    await refreshArchives()
+    await openArchive(matchId)
+  }
+
+  function downloadArchivePackage(session: ArchivedSessionRecord) {
+    if (!session.publicPackage) {
+      return
+    }
+    const json = JSON.stringify(session.publicPackage, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `parapoker-${session.matchId}-hand-history.json`
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main className="admin-shell">
       <section className="admin-panel admin-heading" aria-label="Admin overview">
@@ -108,6 +160,73 @@ export function AdminPortal() {
           <h1>NPC and Game Configuration</h1>
         </div>
         <span className="status-pill">Local draft</span>
+      </section>
+
+      <section className="admin-panel admin-history-panel" aria-label="Archived hand histories">
+        <div className="section-heading">
+          <h2>Hand Histories</h2>
+          <span>{archivedSessions.length} archived matches</span>
+        </div>
+        <div className="admin-list">
+          {archivedSessions.length === 0 && <p className="muted">No completed local histories have been retained yet.</p>}
+          {archivedSessions.map((session) => (
+            <article className="admin-row history-row" key={session.matchId}>
+              <div>
+                <strong>{session.matchId}</strong>
+                <span>{session.mode} - {session.status}</span>
+              </div>
+              <div>
+                <span>{session.participants.map((participant) => participant.displayName).join(', ')}</span>
+                <span>{session.handCount} hands - {session.visibility} - {session.sourceAuthority}</span>
+              </div>
+              <div>
+                <span>{session.startedAt}</span>
+                <span>{session.completedAt ?? 'In progress'}</span>
+                <span>{session.packageChecksum ?? 'No package yet'}</span>
+              </div>
+              <div className="history-actions">
+                <button type="button" onClick={() => void openArchive(session.matchId)}>
+                  Open details
+                </button>
+                <button type="button" onClick={() => downloadArchivePackage(session)} disabled={!session.publicPackage}>
+                  Download public package
+                </button>
+                <button type="button" onClick={() => void markImported(session.matchId)} disabled={!session.publicPackage}>
+                  Mark imported
+                </button>
+                <button type="button" className="danger" onClick={() => void deleteArchive(session.matchId)}>
+                  Delete local archive
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+        {selectedArchive && (
+          <div className="archive-detail" aria-label="Archived hand details">
+            <div className="section-heading">
+              <h2>{selectedArchive.session.matchId}</h2>
+              <span>{selectedArchive.hands.length} hands</span>
+            </div>
+            <dl className="result-grid">
+              <Metric label="Status" value={selectedArchive.session.status} />
+              <Metric label="Import" value={selectedArchive.session.importStatus ?? 'not exported'} />
+              <Metric label="Checksum" value={selectedArchive.session.packageChecksum ?? 'none'} />
+              <Metric label="Authority" value={selectedArchive.session.sourceAuthority} />
+            </dl>
+            <div className="admin-list">
+              {selectedArchive.hands.map((hand) => (
+                <article className="strategy-card" key={hand.handId}>
+                  <div>
+                    <strong>Hand {hand.handNumber}</strong>
+                    <span>{hand.potAwards.map((award) => `${award.seatId} +${award.amount}`).join(', ')}</span>
+                  </div>
+                  <p>Board {hand.board.join(' ') || 'none'} - {hand.actions.length} actions</p>
+                  <p>Revealed {Object.keys(hand.revealedCards).join(', ') || 'none'}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="admin-panel" aria-label="NPC definitions">

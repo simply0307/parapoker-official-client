@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parapoker.local/schemas/para-completed-session-v1.schema.json",
+  "title": "ParaPoker Completed Session Package v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "source",
+    "rules",
+    "participants",
+    "hands",
+    "orderedPublicEvents",
+    "resultSummary",
+    "paraPokerSite",
+    "integrity"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "para-completed-session-v1"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "app",
+        "appVersion",
+        "packageCreationVersion",
+        "packageCreatedAt",
+        "sourceAuthority",
+        "sourceMatchId",
+        "sourceTableId",
+        "blueprintId",
+        "gameVisibility"
+      ],
+      "properties": {
+        "app": { "const": "parapoker-official-client" },
+        "appVersion": { "type": "string" },
+        "packageCreationVersion": { "const": "para-completed-session-v1" },
+        "packageCreatedAt": { "type": "string" },
+        "sourceAuthority": { "enum": ["local-browser", "server-authoritative"] },
+        "sourceMatchId": { "type": "string" },
+        "sourceTableId": { "type": "string" },
+        "blueprintId": { "type": "string" },
+        "gameVisibility": { "type": "string" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["rulesContractVersion", "eventSchemaVersion", "mode", "format", "blinds", "startingStack"]
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["seatId", "displayName", "kind", "startingStack", "finalStack"],
+        "properties": {
+          "kind": { "enum": ["human", "npc"] }
+        }
+      }
+    },
+    "hands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["handId", "handNumber", "dealerSeatId", "participantSeatIds", "board", "revealedCards", "potAwards"]
+      }
+    },
+    "orderedPublicEvents": {
+      "type": "array"
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["checksumAlgorithm", "checksum", "eventCount", "handCount"],
+      "properties": {
+        "checksumAlgorithm": { "const": "stable-json-fnv1a32" },
+        "checksum": { "type": "string", "pattern": "^[0-9a-f]{8}$" },
+        "eventCount": { "type": "number" },
+        "handCount": { "type": "number" }
+      }
+    }
+  }
+}

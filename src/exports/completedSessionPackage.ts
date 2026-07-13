@@ -1,6 +1,7 @@
 import { cardToString, type HandHistoryEvent, type PublicSeatView, type SeatId } from '../poker-engine'
 import type { DerivedStatsSnapshot, EventRecord, MatchRecord } from '../persistence'
 import type { LocalSoloSessionConfig, LocalSoloSessionSummary } from '../table-controllers/local-single-player/LocalSoloSession'
+import { mustNpcDefinition, mustNpcStrategyProfile } from '../npc/roster'
 
 export const COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION = 'para-completed-session-v1' as const
 export const PARA_SITE_IMPORT_TARGET_VERSION = 'para-poker-site-import-v1' as const
@@ -13,6 +14,9 @@ export interface CompletedSessionParticipant {
   startingStack: number
   finalStack: number
   optionalParaPlayerId?: string
+  npcDefinitionId?: string
+  npcStrategyProfileId?: string
+  npcStrategyProfileVersion?: number
 }
 
 export interface CompletedSessionHand {
@@ -61,8 +65,13 @@ export interface CompletedSessionPackage {
   source: {
     app: 'parapoker-official-client'
     appVersion: string
+    packageCreationVersion: typeof COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION
+    packageCreatedAt: string
+    sourceAuthority: 'local-browser' | 'server-authoritative'
     sourceMatchId: string
     sourceTableId: string
+    blueprintId: string
+    gameVisibility: string
   }
   rules: {
     rulesContractVersion: string
@@ -95,6 +104,9 @@ export interface CompletedSessionPackage {
       seat_id: SeatId
       kind: 'human' | 'npc'
       optional_para_player_id?: string
+      npc_definition_id?: string
+      npc_strategy_profile_id?: string
+      npc_strategy_profile_version?: number
     }>
     hands: ParaPokerSiteImportHandPreview[]
     actions: ParaPokerSiteImportActionPreview[]
@@ -140,8 +152,13 @@ export function buildCompletedSessionPackage(input: BuildCompletedSessionPackage
     source: {
       app: 'parapoker-official-client' as const,
       appVersion: input.appVersion,
+      packageCreationVersion: COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION,
+      packageCreatedAt: '1970-01-01T00:00:00.000Z',
+      sourceAuthority: 'local-browser' as const,
       sourceMatchId: input.match.matchId,
       sourceTableId: input.match.tableId,
+      blueprintId: input.config.blueprint?.id ?? `local-${input.summary.mode}-blueprint`,
+      gameVisibility: input.config.blueprint?.visibility ?? input.config.visibility ?? 'private',
     },
     rules: {
       rulesContractVersion: input.match.rulesContractVersion,
@@ -171,6 +188,9 @@ export function buildCompletedSessionPackage(input: BuildCompletedSessionPackage
         seat_id: participant.seatId,
         kind: participant.kind,
         ...(participant.optionalParaPlayerId ? { optional_para_player_id: participant.optionalParaPlayerId } : {}),
+        ...(participant.npcDefinitionId ? { npc_definition_id: participant.npcDefinitionId } : {}),
+        ...(participant.npcStrategyProfileId ? { npc_strategy_profile_id: participant.npcStrategyProfileId } : {}),
+        ...(participant.npcStrategyProfileVersion ? { npc_strategy_profile_version: participant.npcStrategyProfileVersion } : {}),
       })),
       hands: siteHands,
       actions: siteActions,
@@ -225,14 +245,22 @@ function sanitizeSummary(summary: LocalSoloSessionSummary): CompletedSessionResu
 }
 
 function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedSessionParticipant[] {
-  return input.snapshotSeats.map((seat) => ({
-    seatId: seat.id,
-    displayName: seat.name,
-    kind: seat.kind,
-    position: seat.position,
-    startingStack: input.match.startingStacks[seat.id] ?? input.config.startingStack,
-    finalStack: input.summary.finalStacks[seat.id] ?? seat.stack,
-  }))
+  const blueprintSeats = input.config.blueprint?.seats ?? []
+  return input.snapshotSeats.map((seat) => {
+    const blueprintSeat = blueprintSeats.find((entry) => entry.seatId === seat.id)
+    const npcDefinition = blueprintSeat?.npcDefinitionId ? mustNpcDefinition(blueprintSeat.npcDefinitionId) : undefined
+    const npcProfile = npcDefinition ? mustNpcStrategyProfile(npcDefinition.strategyProfileId) : undefined
+    return {
+      seatId: seat.id,
+      displayName: seat.name,
+      kind: seat.kind,
+      position: seat.position,
+      startingStack: input.match.startingStacks[seat.id] ?? input.config.startingStack,
+      finalStack: input.summary.finalStacks[seat.id] ?? seat.stack,
+      ...(npcDefinition ? { npcDefinitionId: npcDefinition.id } : {}),
+      ...(npcProfile ? { npcStrategyProfileId: npcProfile.id, npcStrategyProfileVersion: npcProfile.version } : {}),
+    }
+  })
 }
 
 function buildHands(events: HandHistoryEvent[]): CompletedSessionHand[] {
@@ -381,7 +409,7 @@ function participantName(participants: CompletedSessionParticipant[], seatId: Se
   return participants.find((participant) => participant.seatId === seatId)?.displayName ?? seatId
 }
 
-function stableChecksum(value: unknown): string {
+export function stableChecksum(value: unknown): string {
   const json = stableStringify(value)
   let hash = 0x811c9dc5
   for (let index = 0; index < json.length; index += 1) {

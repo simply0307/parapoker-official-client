@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HandHistoryEvent, PublicSeatView } from '../poker-engine'
 import {
   PokerClientShell,
@@ -15,12 +15,15 @@ import {
   type LocalSoloSessionSnapshot,
 } from '../table-controllers/local-single-player/LocalSoloSession'
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
+import { IndexedDbHandHistoryArchiveStore } from '../persistence'
+import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
 
-export function PokerTable() {
+export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void }) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
+  const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
   const [useRandomSeed, setUseRandomSeed] = useState(false)
   const [snapshot, setSnapshot] = useState<LocalSoloSessionSnapshot | null>(null)
@@ -30,6 +33,7 @@ export function PokerTable() {
   const [presentationEvents, setPresentationEvents] = useState<PresentationEvent[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tableLayout, setTableLayout] = useState<TableWindowLayout>('1')
+  const [completedPackage, setCompletedPackage] = useState<CompletedSessionPackage | null>(null)
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -45,6 +49,25 @@ export function PokerTable() {
   const lastResult = snapshot ? getLastResultText(snapshot) : undefined
   const handResult = snapshot ? getHandResultSummary(snapshot) : undefined
   const tableTitle = snapshot?.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadCompletedPackage() {
+      const session = sessionRef.current
+      if (!session || !snapshot?.summary) {
+        setCompletedPackage(null)
+        return
+      }
+      const exported = await session.exportCompletedSessionPackage()
+      if (!cancelled) {
+        setCompletedPackage(exported)
+      }
+    }
+    void loadCompletedPackage()
+    return () => {
+      cancelled = true
+    }
+  }, [snapshot?.matchId, snapshot?.summary])
 
   const statusText = useMemo(() => {
     if (!snapshot) {
@@ -72,12 +95,13 @@ export function PokerTable() {
       ...config,
       seed: shouldUseRandomSeed ? createRandomLocalSeed() : String(config.seed).trim(),
     }
-    const session = await LocalSoloSession.create(nextConfig)
+    const session = await LocalSoloSession.create(nextConfig, { archiveStore: archiveStoreRef.current })
     const nextSnapshot = session.getSnapshot()
     sessionRef.current = session
     setSetup(nextConfig)
     setSetupError('')
     setAmounts({})
+    setCompletedPackage(null)
     applySnapshot(nextSnapshot, null)
   }
 
@@ -118,6 +142,7 @@ export function PokerTable() {
     sessionRef.current = null
     setSnapshot(null)
     setAmounts({})
+    setCompletedPackage(null)
     setPresentationEvents([])
     setScene('setup')
   }
@@ -184,8 +209,30 @@ export function PokerTable() {
       opponentSeats={opponentSeats}
       pendingSeat={pendingSeat}
       canStartNextHand={canStartNextHand}
+      archiveStatus={snapshot.archive?.status ?? 'active'}
+      packageChecksum={completedPackage?.integrity.checksum ?? snapshot.archive?.packageChecksum}
+      canDownloadHandHistory={Boolean(completedPackage)}
+      downloadHandHistory={() => {
+        if (completedPackage) {
+          downloadCompletedPackage(completedPackage)
+        }
+      }}
+      viewHandHistories={openAdmin}
     />
   )
+}
+
+function downloadCompletedPackage(completedPackage: CompletedSessionPackage) {
+  const json = JSON.stringify(completedPackage, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `parapoker-${completedPackage.source.sourceMatchId}-hand-history.json`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 function SetupForm({

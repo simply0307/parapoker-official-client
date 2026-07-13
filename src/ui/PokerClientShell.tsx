@@ -60,6 +60,11 @@ export interface PokerClientShellProps {
   opponentSeats: PublicSeatView[]
   pendingSeat?: PublicSeatView
   canStartNextHand: boolean
+  archiveStatus: string
+  packageChecksum?: string
+  canDownloadHandHistory: boolean
+  downloadHandHistory: () => void
+  viewHandHistories: () => void
 }
 
 export function PokerClientShell({
@@ -87,6 +92,11 @@ export function PokerClientShell({
   opponentSeats,
   pendingSeat,
   canStartNextHand,
+  archiveStatus,
+  packageChecksum,
+  canDownloadHandHistory,
+  downloadHandHistory,
+  viewHandHistories,
 }: PokerClientShellProps) {
   const tableCount = Number(tableLayout)
   const density = tableLayout === '1' ? 'large' : 'compact'
@@ -141,6 +151,11 @@ export function PokerClientShell({
                 rematchSameSeed={rematchSameSeed}
                 rematchRandomSeed={rematchRandomSeed}
                 changeSetup={changeSetup}
+                archiveStatus={archiveStatus}
+                packageChecksum={packageChecksum}
+                canDownloadHandHistory={canDownloadHandHistory}
+                downloadHandHistory={downloadHandHistory}
+                viewHandHistories={viewHandHistories}
               />
             </div>
           )}
@@ -474,11 +489,21 @@ function SessionResult({
   rematchSameSeed,
   rematchRandomSeed,
   changeSetup,
+  archiveStatus,
+  packageChecksum,
+  canDownloadHandHistory,
+  downloadHandHistory,
+  viewHandHistories,
 }: {
   summary: NonNullable<LocalSoloSessionSnapshot['summary']>
   rematchSameSeed: () => void
   rematchRandomSeed: () => void
   changeSetup: () => void
+  archiveStatus: string
+  packageChecksum?: string
+  canDownloadHandHistory: boolean
+  downloadHandHistory: () => void
+  viewHandHistories: () => void
 }) {
   return (
     <section className="session-result" aria-label="Session result">
@@ -492,7 +517,12 @@ function SessionResult({
       <dl className="result-grid">
         <Metric label="Hands" value={summary.handsPlayed} />
         <Metric label="Seed" value={String(summary.seed)} />
+        <Metric label="Save status" value={archiveStatus} />
+        <Metric label="Package checksum" value={packageChecksum ?? 'Preparing'} />
       </dl>
+      <p className="export-note">
+        Local archive may include your private hand history. Download exports the public package only.
+      </p>
       <div className="stats-list" aria-label="Per-seat stats">
         {summary.stats.map((stat) => (
           <div key={stat.seatId}>
@@ -505,6 +535,12 @@ function SessionResult({
         ))}
       </div>
       <div className="result-actions">
+        <button type="button" className="primary" onClick={downloadHandHistory} disabled={!canDownloadHandHistory}>
+          Download Hand History JSON
+        </button>
+        <button type="button" onClick={viewHandHistories}>
+          View in Hand Histories
+        </button>
         <button type="button" className="primary" onClick={rematchSameSeed}>
           Rematch same seed
         </button>

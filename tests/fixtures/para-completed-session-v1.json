@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "para-completed-session-v1",
+  "source": {
+    "app": "parapoker-official-client",
+    "appVersion": "0.0.0",
+    "packageCreationVersion": "para-completed-session-v1",
+    "packageCreatedAt": "1970-01-01T00:00:00.000Z",
+    "sourceAuthority": "local-browser",
+    "sourceMatchId": "fixture-match",
+    "sourceTableId": "fixture-match:table",
+    "blueprintId": "local-heads-up-blueprint",
+    "gameVisibility": "private"
+  },
+  "rules": {
+    "rulesContractVersion": "para-poker-rules-v0",
+    "eventSchemaVersion": "poker-event-v1",
+    "mode": "heads-up",
+    "format": "freezeout",
+    "blinds": {
+      "smallBlind": 1,
+      "bigBlind": 2
+    },
+    "startingStack": 200
+  },
+  "participants": [
+    {
+      "seatId": "human",
+      "displayName": "You",
+      "kind": "human",
+      "position": "BTN/SB",
+      "startingStack": 200,
+      "finalStack": 199
+    },
+    {
+      "seatId": "npc-1",
+      "displayName": "Maven",
+      "kind": "npc",
+      "position": "BB",
+      "startingStack": 200,
+      "finalStack": 201,
+      "npcDefinitionId": "maven",
+      "npcStrategyProfileId": "balanced-v1",
+      "npcStrategyProfileVersion": 1
+    }
+  ],
+  "hands": [
+    {
+      "handId": "hand-1",
+      "handNumber": 1,
+      "dealerSeatId": "human",
+      "participantSeatIds": ["human", "npc-1"],
+      "board": [],
+      "revealedCards": {},
+      "potAwards": [
+        {
+          "seatId": "npc-1",
+          "amount": 3
+        }
+      ]
+    }
+  ],
+  "orderedPublicEvents": [
+    {
+      "schemaVersion": "poker-event-v1",
+      "eventId": "hand-1-event-1",
+      "sequenceNumber": 1,
+      "handId": 1,
+      "visibility": "public",
+      "type": "handStarted",
+      "payload": {
+        "dealerSeatId": "human",
+        "participantSeatIds": ["human", "npc-1"]
+      }
+    },
+    {
+      "schemaVersion": "poker-event-v1",
+      "eventId": "hand-1-event-2",
+      "sequenceNumber": 2,
+      "handId": 1,
+      "visibility": "public",
+      "type": "blindPosted",
+      "payload": {
+        "seatId": "human",
+        "blind": "small",
+        "amount": 1
+      }
+    },
+    {
+      "schemaVersion": "poker-event-v1",
+      "eventId": "hand-1-event-3",
+      "sequenceNumber": 3,
+      "handId": 1,
+      "visibility": "public",
+      "type": "blindPosted",
+      "payload": {
+        "seatId": "npc-1",
+        "blind": "big",
+        "amount": 2
+      }
+    },
+    {
+      "schemaVersion": "poker-event-v1",
+      "eventId": "hand-1-event-4",
+      "sequenceNumber": 4,
+      "handId": 1,
+      "visibility": "public",
+      "type": "actionApplied",
+      "payload": {
+        "seatId": "human",
+        "action": "fold",
+        "amount": 0,
+        "targetContribution": 1
+      }
+    },
+    {
+      "schemaVersion": "poker-event-v1",
+      "eventId": "hand-1-event-5",
+      "sequenceNumber": 5,
+      "handId": 1,
+      "visibility": "public",
+      "type": "potAwarded",
+      "payload": {
+        "winners": [
+          {
+            "seatId": "npc-1",
+            "amount": 3
+          }
+        ]
+      }
+    }
+  ],
+  "resultSummary": {
+    "winnerSeatId": "npc-1",
+    "winnerName": "Maven",
+    "handsPlayed": 1,
+    "finalStacks": {
+      "human": 199,
+      "npc-1": 201
+    },
+    "stats": [],
+    "mode": "heads-up"
+  },
+  "paraPokerSite": {
+    "targetVersion": "para-poker-site-import-v1",
+    "metadata": {
+      "sessionCode": "fixture-match",
+      "seasonCode": "LOCAL",
+      "tableName": "ParaPoker Heads-Up Solo",
+      "format": "ParaPoker completed-session package",
+      "handsCount": 1,
+      "playersCount": 2
+    },
+    "players": [
+      {
+        "raw_name": "You",
+        "display_name": "You",
+        "seat_id": "human",
+        "kind": "human"
+      },
+      {
+        "raw_name": "Maven",
+        "display_name": "Maven",
+        "seat_id": "npc-1",
+        "kind": "npc",
+        "npc_definition_id": "maven",
+        "npc_strategy_profile_id": "balanced-v1",
+        "npc_strategy_profile_version": 1
+      }
+    ],
+    "hands": [],
+    "actions": [],
+    "sessionResults": [],
+    "playerSessionStats": [],
+    "rawText": "Hand #1 hand-1\n\"Maven\" collected 3 from pot"
+  },
+  "integrity": {
+    "checksumAlgorithm": "stable-json-fnv1a32",
+    "checksum": "00000000",
+    "eventCount": 5,
+    "handCount": 1
+  }
+}

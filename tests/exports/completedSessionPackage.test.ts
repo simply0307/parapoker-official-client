@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { LocalSoloSession, type LocalSoloSessionConfig } from '../../src/table-controllers/local-single-player/LocalSoloSession'
 
 const baseConfig: LocalSoloSessionConfig = {
@@ -30,6 +31,10 @@ describe('completed session package export', () => {
     const exportJson = JSON.stringify(exported)
 
     expect(exported.schemaVersion).toBe('para-completed-session-v1')
+    expect(exported.source.sourceAuthority).toBe('local-browser')
+    expect(exported.source.packageCreationVersion).toBe('para-completed-session-v1')
+    expect(exported.source.blueprintId).toBe('local-heads-up-blueprint')
+    expect(exported.source.gameVisibility).toBe('private')
     expect(exported.paraPokerSite.targetVersion).toBe('para-poker-site-import-v1')
     expect(exported.paraPokerSite.metadata.sessionCode).toBe('export-match')
     expect(exported.paraPokerSite.players.map((player) => player.display_name)).toContain('Maven')
@@ -58,6 +63,34 @@ describe('completed session package export', () => {
     const second = await session.exportCompletedSessionPackage()
 
     expect(second).toEqual(first)
+  })
+
+  it('keeps the generated package and deterministic fixture aligned with the public schema shape', async () => {
+    const schema = JSON.parse(readFileSync('schemas/para-completed-session-v1.schema.json', 'utf8')) as Record<string, unknown>
+    const fixture = JSON.parse(readFileSync('tests/fixtures/para-completed-session-v1.json', 'utf8')) as Record<string, unknown>
+    const session = await completedSession({ ...baseConfig, matchId: 'schema-export' })
+    const exported = await session.exportCompletedSessionPackage()
+
+    expect(schema).toEqual(expect.objectContaining({
+      title: 'ParaPoker Completed Session Package v1',
+      required: expect.arrayContaining(['schemaVersion', 'source', 'rules', 'participants', 'hands', 'orderedPublicEvents', 'integrity']),
+    }))
+    for (const packageCandidate of [fixture, exported]) {
+      const json = JSON.stringify(packageCandidate)
+      expect(packageCandidate.schemaVersion).toBe('para-completed-session-v1')
+      expect(packageCandidate.source).toEqual(expect.objectContaining({
+        app: 'parapoker-official-client',
+        sourceAuthority: 'local-browser',
+        packageCreationVersion: 'para-completed-session-v1',
+      }))
+      expect(packageCandidate.integrity).toEqual(expect.objectContaining({
+        checksumAlgorithm: 'stable-json-fnv1a32',
+      }))
+      expect(json).not.toContain('holeCardsDealt')
+      expect(json).not.toContain('deck')
+      expect(json).not.toContain('rngState')
+      expect(json).not.toContain('entropy')
+    }
   })
 })
 

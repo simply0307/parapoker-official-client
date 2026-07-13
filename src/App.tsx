@@ -27,7 +27,7 @@ function App() {
           Admin
         </button>
       </nav>
-      {screen === 'admin' ? <AdminPortal /> : <PokerTable />}
+      {screen === 'admin' ? <AdminPortal /> : <PokerTable openAdmin={() => setScreen('admin')} />}
     </>
   )
 }
