@@ -26,6 +26,10 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
     expect(screen.getByText('Seed heads-up-solo')).toBeInTheDocument()
     expect(screen.getByLabelText('Table flow')).toHaveTextContent('Maven posts big blind 2')
+    expect(screen.getByLabelText('Table utility bar')).toBeInTheDocument()
+    expect(screen.getByLabelText('Player actions')).toHaveClass('action-dock')
+    expect(screen.getByLabelText('Opponent seat')).toHaveClass('opponent-1')
+    expect(screen.getByLabelText('Hero seat')).toHaveClass('hero')
   })
 
   it('validates setup before creating a match', () => {
@@ -83,9 +87,18 @@ describe('PokerTable', () => {
     expect(await screen.findByText("Six-Max No-Limit Hold'em")).toBeInTheDocument()
     expect(screen.getAllByLabelText('Opponent seat')).toHaveLength(5)
     expect(screen.getByText('Vega')).toBeInTheDocument()
-    expect(screen.getByText('Measured caller - Steady')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Opponent seat')[0]).toHaveAttribute('title', 'Measured caller - Steady')
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('You')
-    expect(screen.getByLabelText('Poker table')).toHaveClass('six-max-table')
+    expect(screen.getByLabelText('Poker table')).toHaveClass('six-max-layout')
+    expect(screen.getAllByLabelText('Opponent seat').map((seat) => seat.className)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('opponent-1'),
+        expect.stringContaining('opponent-2'),
+        expect.stringContaining('opponent-3'),
+        expect.stringContaining('opponent-4'),
+        expect.stringContaining('opponent-5'),
+      ]),
+    )
     expect(screen.getByLabelText('Hero seat')).toHaveTextContent('BTN')
     for (const position of ['SB', 'BB', 'UTG', 'HJ', 'CO']) {
       expect(screen.getByLabelText('Poker table')).toHaveTextContent(position)
@@ -119,6 +132,44 @@ describe('PokerTable', () => {
     expect(flow).toHaveTextContent('You call 1')
     expect(flow).toHaveTextContent('Maven')
     expect(flow).not.toHaveTextContent('posts big blind')
+  })
+
+  it('keeps opponent cards hidden and hero cards visible before showdown', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByLabelText('Hero seat')).toHaveTextContent(/\w[cdhs]/)
+    expect(screen.getByLabelText('Opponent seat').querySelectorAll('.card.back')).toHaveLength(2)
+  })
+
+  it('collapses and expands stored hand history', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    const toggle = await screen.findByRole('button', { name: /History/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Your hole cards:')).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Hand history')).toBeInTheDocument()
+    expect(screen.getByText(/Your hole cards:/)).toBeInTheDocument()
+  })
+
+  it('applies seat presentation classes for acting and folded states', async () => {
+    render(<PokerTable />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByLabelText('Hero seat')).toHaveClass('acting')
+    fireEvent.click(screen.getByRole('button', { name: 'Fold' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Hero seat')).toHaveClass('status-folded')
+    })
   })
 
   it('requires confirmation before abandoning an active match for setup', async () => {

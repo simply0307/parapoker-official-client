@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type WheelEvent } from 'react'
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction, type WheelEvent } from 'react'
 import { cardToString, type Card, type HandHistoryEvent, type LegalAction, type PublicSeatView } from '../poker-engine'
 import { localNpcPresentation, localNpcPresentationForDefinition } from '../npc/roster'
 import {
@@ -39,6 +39,7 @@ export function PokerTable() {
   const [setupError, setSetupError] = useState('')
   const [amounts, setAmounts] = useState<Record<string, number>>({})
   const [presentationEvents, setPresentationEvents] = useState<PresentationEvent[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -168,119 +169,345 @@ export function PokerTable() {
   }
 
   return (
-    <main className="table-shell">
-      <section className="history" aria-label="Hand history">
-        <div className="section-heading">
-          <h2>Hand history</h2>
-          <span>{snapshot.heroView.events.length} events</span>
-        </div>
-        <ol>
-          {snapshot.heroView.events.slice(-14).map((event) => (
-            <li key={event.eventId}>{describeEvent(event)}</li>
-          ))}
-        </ol>
-      </section>
+    <PokerClientShell
+      scene={scene}
+      snapshot={snapshot}
+      tableTitle={tableTitle}
+      statusText={statusText}
+      toCall={toCall}
+      stackLead={stackLead}
+      lastResult={lastResult}
+      handResult={handResult}
+      presentationEvents={presentationEvents}
+      historyOpen={historyOpen}
+      setHistoryOpen={setHistoryOpen}
+      changeSetup={changeSetup}
+      startNext={() => void startNext()}
+      rematchSameSeed={rematchSameSeed}
+      rematchRandomSeed={rematchRandomSeed}
+      submit={(command) => void submit(command)}
+      amounts={amounts}
+      setAmounts={setAmounts}
+      heroSeat={heroSeat}
+      opponentSeats={opponentSeats}
+      pendingSeat={pendingSeat}
+      canStartNextHand={canStartNextHand}
+    />
+  )
+}
 
-      <section className={`felt ${snapshot.mode === 'six-max' ? 'six-max-table' : ''}`} aria-label="Poker table">
-        <div className="opponents">
-          {opponentSeats.map((seat) => (
-            <SeatPanel
-              key={seat.id}
-              seat={seat}
-              npcDefinitionId={snapshot.blueprint.seats.find((entry) => entry.seatId === seat.id)?.npcDefinitionId}
-              cards={seat.revealedCards}
-              hiddenCards={!seat.revealedCards}
-              label="Opponent seat"
-              active={pendingSeat?.id === seat.id}
-            />
-          ))}
-        </div>
-
-        <div className="board">
-          <div className="pot">Pot {formatChips(snapshot.publicView.pot)}</div>
-          <div className="community" aria-label="Community cards">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <PlayingCard key={index} card={snapshot.publicView.communityCards[index]} placeholder="Board" />
-            ))}
-          </div>
-          <div className="street">{snapshot.publicView.street ?? 'Waiting'}</div>
-        </div>
-
-        {heroSeat && (
-          <SeatPanel
-            seat={heroSeat}
-            cards={snapshot.heroView.holeCards}
-            label="Hero seat"
-            active={pendingSeat?.id === heroSeat.id}
-          />
-        )}
-      </section>
-
-      <aside className="right-rail" aria-label="Table controls">
-        <section className="scoreboard" aria-label="Match state">
-          <div className="title-block">
-            <p className="eyebrow">ParaPoker Play Money</p>
-            <h1>{tableTitle}</h1>
-            <p className="seed-note">Seed {String(snapshot.seed)}</p>
-          </div>
-          <div className="match-summary">
-            <div className="status-pill">{statusText}</div>
-            <dl className="metric-grid" aria-label="Match metrics">
-              <Metric label="Hand" value={snapshot.publicView.handNumber} />
-              <Metric label="Pot" value={formatChips(snapshot.publicView.pot)} />
-              <Metric label="To call" value={formatChips(toCall)} />
-              <Metric label="Stack lead" value={stackLead} />
-            </dl>
-          </div>
-          <button type="button" onClick={changeSetup}>
-            Change setup
-          </button>
-        </section>
-
-        <section className="controls" aria-label="Player actions">
-          <div className="controls-header">
-            <div>
-              <h2>{scene === 'betweenHand' ? 'Hand result' : 'Actions'}</h2>
-              <p>{handResult?.label ?? lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</p>
-            </div>
-            <span className="round-pill">{titleCase(snapshot.publicView.street ?? snapshot.publicView.status)}</span>
-          </div>
-          {(scene === 'betweenHand' || scene === 'matchResult') && handResult && (
-            <HandResultPanel result={handResult} />
-          )}
-          <PresentationQueue events={presentationEvents} />
-          <div className="action-row">
-            {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && scene !== 'matchResult' && (
-              <span className="muted">Waiting for the table authority.</span>
-            )}
-            {scene === 'playing' && snapshot.heroView.legalActions.map((action) => (
-              <ActionControl
-                key={action.type}
-                action={action}
-                amount={amounts[action.type]}
-                setAmount={(amount) => setAmounts((current) => ({ ...current, [action.type]: amount }))}
-                submit={(command) => void submit(command)}
-              />
-            ))}
-            {scene === 'betweenHand' && (
-              <button type="button" className="primary" onClick={() => void startNext()}>
-                Next hand
-              </button>
-            )}
-          </div>
-          {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
-        </section>
-
-        {scene === 'matchResult' && snapshot.summary && (
+function PokerClientShell({
+  scene,
+  snapshot,
+  tableTitle,
+  statusText,
+  toCall,
+  stackLead,
+  lastResult,
+  handResult,
+  presentationEvents,
+  historyOpen,
+  setHistoryOpen,
+  changeSetup,
+  startNext,
+  rematchSameSeed,
+  rematchRandomSeed,
+  submit,
+  amounts,
+  setAmounts,
+  heroSeat,
+  opponentSeats,
+  pendingSeat,
+  canStartNextHand,
+}: {
+  scene: SoloScene
+  snapshot: LocalSoloSessionSnapshot
+  tableTitle: string
+  statusText: string
+  toCall: number
+  stackLead: string
+  lastResult?: string
+  handResult?: HandResultSummary
+  presentationEvents: PresentationEvent[]
+  historyOpen: boolean
+  setHistoryOpen: (open: boolean) => void
+  changeSetup: () => void
+  startNext: () => void
+  rematchSameSeed: () => void
+  rematchRandomSeed: () => void
+  submit: (command: HumanCommand) => void
+  amounts: Record<string, number>
+  setAmounts: Dispatch<SetStateAction<Record<string, number>>>
+  heroSeat?: PublicSeatView
+  opponentSeats: PublicSeatView[]
+  pendingSeat?: PublicSeatView
+  canStartNextHand: boolean
+}) {
+  return (
+    <main className="poker-client-shell">
+      <TableUtilityBar
+        snapshot={snapshot}
+        tableTitle={tableTitle}
+        statusText={statusText}
+        toCall={toCall}
+        stackLead={stackLead}
+        changeSetup={changeSetup}
+      />
+      <PokerTableSurface
+        snapshot={snapshot}
+        heroSeat={heroSeat}
+        opponentSeats={opponentSeats}
+        pendingSeat={pendingSeat}
+        handResult={handResult}
+        scene={scene}
+      />
+      <ActionDock
+        scene={scene}
+        snapshot={snapshot}
+        pendingSeat={pendingSeat}
+        handResult={handResult}
+        lastResult={lastResult}
+        presentationEvents={presentationEvents}
+        amounts={amounts}
+        setAmounts={setAmounts}
+        submit={submit}
+        startNext={startNext}
+        canStartNextHand={canStartNextHand}
+      />
+      <HandHistoryDrawer
+        events={snapshot.heroView.events}
+        presentationEvents={presentationEvents}
+        open={historyOpen}
+        setOpen={setHistoryOpen}
+      />
+      {scene === 'matchResult' && snapshot.summary && (
+        <div className="table-overlay">
           <SessionResult
             summary={snapshot.summary}
             rematchSameSeed={rematchSameSeed}
             rematchRandomSeed={rematchRandomSeed}
             changeSetup={changeSetup}
           />
-        )}
-      </aside>
+        </div>
+      )}
     </main>
+  )
+}
+
+function TableUtilityBar({
+  snapshot,
+  tableTitle,
+  statusText,
+  toCall,
+  stackLead,
+  changeSetup,
+}: {
+  snapshot: LocalSoloSessionSnapshot
+  tableTitle: string
+  statusText: string
+  toCall: number
+  stackLead: string
+  changeSetup: () => void
+}) {
+  return (
+    <header className="table-utility-bar" aria-label="Table utility bar">
+      <div className="utility-brand">
+        <span>ParaPoker Play Money</span>
+        <strong>{tableTitle}</strong>
+      </div>
+      <dl className="utility-metrics">
+        <Metric label="Hand" value={snapshot.publicView.handNumber} />
+        <Metric label="Blinds" value={`${snapshot.config.smallBlind}/${snapshot.config.bigBlind}`} />
+        <Metric label="To call" value={formatChips(toCall)} />
+        <Metric label="Lead" value={stackLead} />
+      </dl>
+      <div className="utility-status">
+        <span>{statusText}</span>
+        <details>
+          <summary>Details</summary>
+          <p>Seed {String(snapshot.seed)}</p>
+          <p>{snapshot.blueprint.visibility}</p>
+        </details>
+      </div>
+      <label className="layout-picker">
+        <span>Layout</span>
+        <select aria-label="Table layout" value="1" onChange={() => undefined}>
+          <option value="1">1 table</option>
+          <option value="2" disabled>2 tables planned</option>
+          <option value="4" disabled>4 tables planned</option>
+        </select>
+      </label>
+      <button type="button" onClick={changeSetup}>
+        Change setup
+      </button>
+    </header>
+  )
+}
+
+function PokerTableSurface({
+  snapshot,
+  heroSeat,
+  opponentSeats,
+  pendingSeat,
+  handResult,
+  scene,
+}: {
+  snapshot: LocalSoloSessionSnapshot
+  heroSeat?: PublicSeatView
+  opponentSeats: PublicSeatView[]
+  pendingSeat?: PublicSeatView
+  handResult?: HandResultSummary
+  scene: SoloScene
+}) {
+  const winnerSeatIds = new Set(handResult?.winners.map((winner) => seatIdByName(snapshot.publicView.seats, winner.name)) ?? [])
+
+  return (
+    <section
+      className={`poker-table-surface ${snapshot.mode === 'six-max' ? 'six-max-layout' : 'heads-up-layout'}`}
+      aria-label="Poker table"
+    >
+      <div className="felt-oval" aria-hidden="true" />
+      {opponentSeats.map((seat, index) => (
+        <CompactSeatPod
+          key={seat.id}
+          seat={seat}
+          npcDefinitionId={snapshot.blueprint.seats.find((entry) => entry.seatId === seat.id)?.npcDefinitionId}
+          cards={seat.revealedCards}
+          hiddenCards={!seat.revealedCards}
+          label="Opponent seat"
+          anchor={`opponent-${index + 1}`}
+          active={pendingSeat?.id === seat.id}
+          winner={winnerSeatIds.has(seat.id)}
+        />
+      ))}
+      <CommunityBoard snapshot={snapshot} />
+      {heroSeat && (
+        <CompactSeatPod
+          seat={heroSeat}
+          cards={snapshot.heroView.holeCards}
+          label="Hero seat"
+          anchor="hero"
+          active={pendingSeat?.id === heroSeat.id}
+          winner={winnerSeatIds.has(heroSeat.id)}
+          hero
+        />
+      )}
+      {(scene === 'betweenHand' || scene === 'matchResult') && handResult && (
+        <HandResultOverlay result={handResult} />
+      )}
+    </section>
+  )
+}
+
+function CommunityBoard({ snapshot }: { snapshot: LocalSoloSessionSnapshot }) {
+  return (
+    <div className="community-board" aria-label="Community board">
+      <PotDisplay amount={snapshot.publicView.pot} street={snapshot.publicView.street ?? snapshot.publicView.status} />
+      <div className="community" aria-label="Community cards">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <PlayingCard key={index} card={snapshot.publicView.communityCards[index]} placeholder="Board" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PotDisplay({ amount, street }: { amount: number; street: string }) {
+  return (
+    <div className="pot-display">
+      <strong>Pot {formatChips(amount)}</strong>
+      <span>{titleCase(street)}</span>
+    </div>
+  )
+}
+
+function ActionDock({
+  scene,
+  snapshot,
+  pendingSeat,
+  handResult,
+  lastResult,
+  presentationEvents,
+  amounts,
+  setAmounts,
+  submit,
+  startNext,
+  canStartNextHand,
+}: {
+  scene: SoloScene
+  snapshot: LocalSoloSessionSnapshot
+  pendingSeat?: PublicSeatView
+  handResult?: HandResultSummary
+  lastResult?: string
+  presentationEvents: PresentationEvent[]
+  amounts: Record<string, number>
+  setAmounts: Dispatch<SetStateAction<Record<string, number>>>
+  submit: (command: HumanCommand) => void
+  startNext: () => void
+  canStartNextHand: boolean
+}) {
+  return (
+    <section className="action-dock" aria-label="Player actions">
+      <div className="dock-status">
+        <strong>{scene === 'betweenHand' ? 'Hand result' : 'Actions'}</strong>
+        <span>{handResult?.label ?? lastResult ?? (pendingSeat ? `${pendingSeat.name} is next` : 'Resolving hand')}</span>
+      </div>
+      <PresentationQueue events={presentationEvents} />
+      <div className="dock-actions">
+        {snapshot.heroView.legalActions.length === 0 && !canStartNextHand && scene !== 'matchResult' && (
+          <span className="muted">Waiting for the table authority.</span>
+        )}
+        {scene === 'playing' && snapshot.heroView.legalActions.map((action) => (
+          <ActionControl
+            key={action.type}
+            action={action}
+            amount={amounts[action.type]}
+            setAmount={(amount) => setAmounts((current) => ({ ...current, [action.type]: amount }))}
+            submit={submit}
+          />
+        ))}
+        {scene === 'betweenHand' && (
+          <button type="button" className="primary" onClick={startNext}>
+            Next hand
+          </button>
+        )}
+      </div>
+      {snapshot.lastError && <p className="error">{snapshot.lastError}</p>}
+    </section>
+  )
+}
+
+function HandHistoryDrawer({
+  events,
+  presentationEvents,
+  open,
+  setOpen,
+}: {
+  events: LocalSinglePlayerSnapshot['heroView']['events']
+  presentationEvents: PresentationEvent[]
+  open: boolean
+  setOpen: (open: boolean) => void
+}) {
+  return (
+    <aside className={`history-drawer ${open ? 'open' : ''}`} aria-label="Hand history">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? 'Hide history' : `History (${events.length})`}
+      </button>
+      {open && (
+        <div className="history-drawer-panel">
+          <div className="section-heading">
+            <h2>Hand history</h2>
+            <span>{events.length} events</span>
+          </div>
+          <PresentationQueue events={presentationEvents} />
+          <ol>
+            {events.slice(-24).map((event) => (
+              <li key={event.eventId}>{describeEvent(event)}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </aside>
   )
 }
 
@@ -388,31 +615,6 @@ function PresentationQueue({ events }: { events: PresentationEvent[] }) {
   )
 }
 
-function HandResultPanel({ result }: { result: HandResultSummary }) {
-  return (
-    <div className="hand-result-card" aria-label="Latest hand result">
-      <div>
-        <strong>{result.label}</strong>
-        {result.winners.map((winner) => (
-          <span key={`${winner.name}-${winner.amount}`}>
-            {winner.name} wins {winner.amount}
-            {winner.handName ? ` with ${winner.handName}` : ''}
-          </span>
-        ))}
-      </div>
-      {result.revealed.length > 0 && (
-        <div className="revealed-list" aria-label="Revealed cards">
-          {result.revealed.map((entry) => (
-            <span key={entry.name}>
-              {entry.name}: {entry.cards.map(cardToString).join(' ')}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function SessionResult({
   summary,
   rematchSameSeed,
@@ -463,13 +665,29 @@ function SessionResult({
   )
 }
 
-function SeatPanel({
+function HandResultOverlay({ result }: { result: HandResultSummary }) {
+  return (
+    <div className="hand-result-overlay" aria-label="Latest hand result">
+      <strong>{result.label}</strong>
+      <span>
+        {result.winners
+          .map((winner) => `${winner.name} wins ${winner.amount}${winner.handName ? ` with ${winner.handName}` : ''}`)
+          .join(', ')}
+      </span>
+    </div>
+  )
+}
+
+function CompactSeatPod({
   seat,
   cards,
   hiddenCards = false,
   label,
   active = false,
   npcDefinitionId,
+  anchor,
+  hero = false,
+  winner = false,
 }: {
   seat: PublicSeatView
   cards?: PublicSeatView['revealedCards']
@@ -477,6 +695,9 @@ function SeatPanel({
   label: string
   active?: boolean
   npcDefinitionId?: string
+  anchor: string
+  hero?: boolean
+  winner?: boolean
 }) {
   const presentation = seat.kind === 'npc'
     ? npcDefinitionId
@@ -488,13 +709,21 @@ function SeatPanel({
     : presentation
       ? `${presentation.archetype} - ${titleCase(presentation.difficulty)}`
       : 'NPC opponent'
+  const className = [
+    'seat-pod',
+    anchor,
+    `status-${seat.status}`,
+    active ? 'acting' : '',
+    hero ? 'hero-seat' : '',
+    winner ? 'winner-seat' : '',
+  ].filter(Boolean).join(' ')
 
   return (
-    <div className={`seat ${seat.id}${active ? ' active-seat' : ''}`} aria-label={label}>
+    <div className={className} aria-label={label} title={seatDescriptor}>
       <div className="seat-meta">
         <div>
           <strong>{seat.name}</strong>
-          <span className="seat-role">{seatDescriptor}</span>
+          <span className="seat-role">{seat.kind === 'human' ? 'Hero' : 'NPC'}</span>
         </div>
         <span>{formatChips(seat.stack)}</span>
       </div>
@@ -510,6 +739,7 @@ function SeatPanel({
         )}
         <span>{titleCase(seat.status)}</span>
         {active && <span>Acting</span>}
+        {winner && <span>Winner</span>}
       </div>
       <div className="hole-cards">
         {hiddenCards ? (
@@ -524,7 +754,9 @@ function SeatPanel({
           </>
         )}
       </div>
-      <div className="contribution">Bet {formatChips(seat.streetContribution)}</div>
+      <div className="contribution" aria-label={`${seat.name} street contribution`}>
+        Bet {formatChips(seat.streetContribution)}
+      </div>
     </div>
   )
 }
@@ -680,6 +912,10 @@ function getStackLead(seats: PublicSeatView[], heroSeatId: string): string {
     return 'Even'
   }
   return difference > 0 ? `You +${difference}` : `${comparisonSeat.name} +${Math.abs(difference)}`
+}
+
+function seatIdByName(seats: PublicSeatView[], name: string): string {
+  return seats.find((seat) => seat.name === name)?.id ?? name
 }
 
 function getLastResultText(snapshot: LocalSinglePlayerSnapshot): string | undefined {
