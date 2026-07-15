@@ -45,6 +45,14 @@ describe('local single-player controller', () => {
           chooseAction(context: NpcDecisionContext) {
             expect(context.config).toEqual(runtime.strategyProfile.policyConfig)
             expect(context.preflopStrategy).toEqual(runtime.strategyProfile.preflopStrategy)
+            expect(context.memory.rangeState).toEqual(expect.objectContaining({
+              schemaVersion: 'npc-range-state-v1',
+              heroSeatId: runtime.seatId,
+            }))
+            expect(context.memory.rangeState?.seats[runtime.seatId].knownHandClass).toEqual(expect.any(String))
+            expect(Object.values(context.memory.rangeState?.seats ?? {})
+              .filter((seat) => seat.seatId !== runtime.seatId)
+              .every((seat) => seat.knownHandClass === undefined)).toBe(true)
             return { type: 'fold', seatId: context.view.heroSeatId, source: 'npc' }
           },
         }

@@ -3,6 +3,7 @@ import { evaluateBestHand } from '../poker-engine'
 import type { Card, EngineCommand, LegalAction, PrivateSeatView, Rank, SeatId } from '../poker-engine'
 import type { NpcPreflopStrategy } from './config'
 import { choosePreflopRangeDecision } from './preflopRanges'
+import type { NpcRangeState } from './rangeTracking'
 
 export interface NpcPolicyConfig {
   preflopAggression: number
@@ -13,6 +14,7 @@ export interface NpcPolicyConfig {
 
 export interface NpcTableMemory {
   readonly handsObserved?: number
+  readonly rangeState?: NpcRangeState
 }
 
 export interface NpcDecisionContext {

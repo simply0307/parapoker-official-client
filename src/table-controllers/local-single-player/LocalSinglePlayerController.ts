@@ -6,6 +6,7 @@ import {
   type NpcTableMemory,
 } from '../../npc/basicNpc'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
+import { updateNpcRangeMemory } from '../../npc/rangeTracking'
 import {
   DEFAULT_SIX_MAX_NPC_LINEUP,
   localNpcDefinition,
@@ -174,6 +175,7 @@ export class LocalSinglePlayerController {
         return
       }
       const view = getSeatView(this.state, pendingSeatId)
+      controller.memory = updateNpcRangeMemory(controller.memory, view)
       const command = controller.policy.chooseAction(
         createNpcDecisionContext(
           view,
