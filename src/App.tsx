@@ -87,6 +87,12 @@ function App() {
           identityResolved={identityResolved}
           openAdmin={() => setScreen('admin')}
           onLeaveTable={leaveTable}
+          onActivateTable={(tableId) => {
+            const table = activeTables.find((candidate) => candidate.tableId === tableId)
+            if (table) {
+              setJoinedTable(table)
+            }
+          }}
         />
       </div>
     </>

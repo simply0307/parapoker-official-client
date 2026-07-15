@@ -48,6 +48,27 @@ describe('SupabaseIdentityWidget', () => {
     })
   })
 
+  it('does not resolve a signed-in account as a guest before its profile is created', async () => {
+    const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
+    const { client } = createClientMock(session)
+    const repository = createRepositoryMock(null)
+    const onIdentityChange = vi.fn()
+    const onIdentityLoading = vi.fn()
+
+    render(
+      <SupabaseIdentityWidget
+        clientFactory={() => client}
+        repositoryFactory={() => repository}
+        onIdentityChange={onIdentityChange}
+        onIdentityLoading={onIdentityLoading}
+      />,
+    )
+
+    expect(await screen.findByText('Signed in. Create your local Para profile shell.')).toBeInTheDocument()
+    expect(onIdentityLoading).toHaveBeenCalled()
+    expect(onIdentityChange).not.toHaveBeenCalledWith(null)
+  })
+
   it('loads and saves the signed-in player profile shell without binding seat authority', async () => {
     const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
     const { client } = createClientMock(session)
@@ -94,6 +115,7 @@ describe('SupabaseIdentityWidget', () => {
     await waitFor(() => {
       expect(repository.upsertOwnProfile).toHaveBeenCalledWith({
         accountId: 'account-1',
+        email: 'player@example.com',
         screenName: 'RiverCoach',
         avatarUrl: 'https://example.com/avatar.png',
         visibility: 'public',
@@ -213,6 +235,7 @@ function createRepositoryMock(initialProfile: PlayerProfileRow | null) {
   const getOwnProfile = vi.fn(async () => initialProfile)
   const upsertOwnProfile = vi.fn(async (draft: {
     accountId: string
+    email?: string | null
     screenName: string
     avatarUrl?: string | null
     visibility?: PlayerProfileRow['visibility']

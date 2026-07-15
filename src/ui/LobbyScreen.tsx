@@ -66,7 +66,6 @@ export function LobbyScreen({
         <dl className="lobby-metrics">
           <Metric label="Open" value={openTables.length} />
           <Metric label="Active" value={`${activeCount}/4`} />
-          <Metric label="Stored" value={tables.length} />
         </dl>
         <button type="button" onClick={() => void refreshLobby()}>
           Refresh lobby

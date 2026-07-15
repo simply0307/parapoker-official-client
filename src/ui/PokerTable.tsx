@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { HandHistoryEvent, PublicSeatView } from '../poker-engine'
 import {
   PokerClientShell,
@@ -19,7 +19,10 @@ import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-singl
 import { IndexedDbHandHistoryArchiveStore } from '../persistence'
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
-import type { LobbyTableInstance } from '../game-config/gameBlueprintStore'
+import {
+  IndexedDbGameBlueprintStore,
+  type LobbyTableInstance,
+} from '../game-config/gameBlueprintStore'
 import { assignHumanPlayerIdentity, type HumanPlayerIdentity } from '../game-config/gameBlueprint'
 import type { ClientPlayerIdentity } from '../integrations/supabase/identityRepository'
 
@@ -33,6 +36,7 @@ export function PokerTable({
   identityResolved = true,
   openAdmin = () => {},
   onLeaveTable = () => {},
+  onActivateTable = () => {},
 }: {
   joinedTable?: LobbyTableInstance | null
   joinedTables?: LobbyTableInstance[]
@@ -40,10 +44,13 @@ export function PokerTable({
   identityResolved?: boolean
   openAdmin?: () => void
   onLeaveTable?: (tableId: string) => void
+  onActivateTable?: (tableId: string) => void
 }) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
   const lobbySessionRefs = useRef(new Map<string, LocalSoloSession>())
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
+  const blueprintStoreRef = useRef(new IndexedDbGameBlueprintStore())
+  const closedLobbyTableIdsRef = useRef(new Set<string>())
   const startedLobbyTableIdRef = useRef<string | null>(null)
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
   const [useRandomSeed, setUseRandomSeed] = useState(false)
@@ -56,6 +63,14 @@ export function PokerTable({
   const [tableLayout, setTableLayout] = useState<TableWindowLayout>('1')
   const [completedPackage, setCompletedPackage] = useState<CompletedSessionPackage | null>(null)
   const [lobbySnapshots, setLobbySnapshots] = useState<Record<string, LocalSoloSessionSnapshot>>({})
+
+  const closeJoinedLobbyTable = useCallback(async (reason: string) => {
+    if (!joinedTable || closedLobbyTableIdsRef.current.has(joinedTable.tableId)) {
+      return
+    }
+    await blueprintStoreRef.current.closeLobbyTable(joinedTable.tableId, reason)
+    closedLobbyTableIdsRef.current.add(joinedTable.tableId)
+  }, [joinedTable])
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -104,6 +119,7 @@ export function PokerTable({
           const tableSession = await LocalSoloSession.create(configForLobbyTable(table, playerIdentity), {
             archiveStore: archiveStoreRef.current,
           })
+          await blueprintStoreRef.current.startLobbyTable(table.tableId)
           if (cancelled) {
             return
           }
@@ -161,6 +177,13 @@ export function PokerTable({
       cancelled = true
     }
   }, [snapshot?.matchId, snapshot?.summary])
+
+  useEffect(() => {
+    if (!joinedTable || !snapshot?.summary || closedLobbyTableIdsRef.current.has(joinedTable.tableId)) {
+      return
+    }
+    void closeJoinedLobbyTable('match-complete')
+  }, [closeJoinedLobbyTable, joinedTable, snapshot?.summary])
 
   const statusText = useMemo(() => {
     if (!snapshot) {
@@ -236,6 +259,7 @@ export function PokerTable({
         return
       }
       await sessionRef.current?.concede()
+      await closeJoinedLobbyTable('player-conceded')
     }
     if (joinedTable) {
       lobbySessionRefs.current.delete(joinedTable.tableId)
@@ -340,6 +364,7 @@ export function PokerTable({
       }}
       viewHandHistories={openAdmin}
       secondaryTables={secondaryTables}
+      onActivateTable={onActivateTable}
     />
   )
 }

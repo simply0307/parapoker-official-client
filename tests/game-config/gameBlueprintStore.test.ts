@@ -69,6 +69,45 @@ describe('game blueprint store', () => {
     expect(cancelled.blueprint.id).toBe('local-heads-up-blueprint')
   })
 
+  it('closes a completed freezeout so it is no longer an open lobby table', async () => {
+    const store = new InMemoryGameBlueprintStore()
+    const table = await store.createLobbyTable(
+      createGameBlueprint({
+        mode: 'heads-up',
+        startingStack: 200,
+        smallBlind: 1,
+        bigBlind: 2,
+        seed: 'complete-table',
+      }),
+    )
+
+    const closed = await store.closeLobbyTable(table.tableId, 'match-complete')
+
+    expect(closed.status).toBe('closed')
+    expect(closed.closeReason).toBe('match-complete')
+    expect(closed.closedAt).toBeTruthy()
+    expect((await store.listLobbyTables()).filter((candidate) => candidate.status === 'open')).toHaveLength(0)
+  })
+
+  it('removes a single-use freezeout from the open lobby while it is running', async () => {
+    const store = new InMemoryGameBlueprintStore()
+    const table = await store.createLobbyTable(
+      createGameBlueprint({
+        mode: 'heads-up',
+        startingStack: 200,
+        smallBlind: 1,
+        bigBlind: 2,
+        seed: 'running-table',
+      }),
+    )
+
+    const running = await store.startLobbyTable(table.tableId)
+
+    expect(running.status).toBe('running')
+    expect((await store.listLobbyTables()).filter((candidate) => candidate.status === 'open')).toHaveLength(0)
+    await expect(store.startLobbyTable(table.tableId)).resolves.toEqual(running)
+  })
+
   it('rejects invalid blueprint rules before persistence', () => {
     const blueprint = createGameBlueprint({
       mode: 'heads-up',

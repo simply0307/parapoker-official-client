@@ -13,6 +13,7 @@ export interface PlayerProfileRow {
 
 export interface PlayerProfileDraft {
   accountId: string
+  email?: string | null
   screenName: string
   avatarUrl?: string | null
   visibility?: PlayerProfileRow['visibility']
@@ -71,11 +72,12 @@ export class SupabaseIdentityRepository {
     const normalized = normalizeProfileDraft(profile)
     const { data, error } = await this.client
       .from('profiles')
-      .update({
+      .upsert({
+        id: normalized.accountId,
+        email: normalized.email,
         display_name: normalized.screenName,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', normalized.accountId)
+      }, { onConflict: 'id' })
       .select('id, display_name, email, created_at, updated_at')
       .single<DeployedProfileRow>()
     throwIfError(error)
@@ -117,6 +119,7 @@ export function normalizeProfileDraft(profile: PlayerProfileDraft): Required<Pla
   }
   return {
     accountId: profile.accountId,
+    email: profile.email?.trim() || null,
     screenName,
     avatarUrl: profile.avatarUrl ?? null,
     visibility: profile.visibility ?? 'private',

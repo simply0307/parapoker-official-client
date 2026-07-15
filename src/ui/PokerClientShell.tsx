@@ -74,6 +74,7 @@ export interface PokerClientShellProps {
   downloadHandHistory: () => void
   viewHandHistories: () => void
   secondaryTables?: SecondaryTableWindow[]
+  onActivateTable?: (tableId: string) => void
 }
 
 export function PokerClientShell({
@@ -107,6 +108,7 @@ export function PokerClientShell({
   downloadHandHistory,
   viewHandHistories,
   secondaryTables = [],
+  onActivateTable = () => {},
 }: PokerClientShellProps) {
   const tableCount = Number(tableLayout)
   const density = tableLayout === '1' ? 'large' : 'compact'
@@ -186,7 +188,12 @@ export function PokerClientShell({
                 status={secondaryTable.status}
                 active
                 density={density}
-                footer={<ReadOnlyTableFooter snapshot={secondaryTable.snapshot} />}
+                footer={(
+                  <ReadOnlyTableFooter
+                    snapshot={secondaryTable.snapshot}
+                    activate={() => onActivateTable(secondaryTable.tableId)}
+                  />
+                )}
               >
                 <PokerTableSurface
                   snapshot={secondaryTable.snapshot}
@@ -393,12 +400,18 @@ function InactiveTableFooter() {
   )
 }
 
-function ReadOnlyTableFooter({ snapshot }: { snapshot: LocalSoloSessionSnapshot }) {
+function ReadOnlyTableFooter({
+  snapshot,
+  activate,
+}: {
+  snapshot: LocalSoloSessionSnapshot
+  activate: () => void
+}) {
   const pendingSeat = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
   return (
     <div className="inactive-table-footer">
       <strong>{pendingSeat ? `${pendingSeat.name} to act` : titleCase(snapshot.publicView.status)}</strong>
-      <span>Open the table from the lobby list to act here.</span>
+      <button type="button" onClick={activate}>Open table</button>
     </div>
   )
 }

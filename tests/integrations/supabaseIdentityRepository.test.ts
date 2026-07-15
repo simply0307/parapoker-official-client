@@ -14,6 +14,7 @@ describe('Supabase identity repository boundary', () => {
       screenName: '  RiverPort  ',
     })).toEqual({
       accountId: 'account-1',
+      email: null,
       screenName: 'RiverPort',
       avatarUrl: null,
       visibility: 'private',
@@ -56,7 +57,7 @@ describe('Supabase identity repository boundary', () => {
     }))
     expect(client.calls).toContainEqual(expect.objectContaining({
       table: 'profiles',
-      operation: 'update',
+      operation: 'upsert',
     }))
     expect(JSON.stringify(client.calls)).not.toContain('service_role')
     expect(JSON.stringify(client.calls)).not.toContain('SERVICE_ROLE')

@@ -6,7 +6,7 @@ export const GAME_BLUEPRINT_RECORD_SCHEMA_VERSION = 'para-game-blueprint-record-
 export const LOBBY_TABLE_INSTANCE_SCHEMA_VERSION = 'para-lobby-table-instance-v1' as const
 
 export type GameBlueprintRecordStatus = 'draft' | 'open' | 'retired'
-export type LobbyTableStatus = 'draft' | 'open' | 'cancelled' | 'closed'
+export type LobbyTableStatus = 'draft' | 'open' | 'running' | 'cancelled' | 'closed'
 
 export interface GameBlueprintRecord {
   schemaVersion: typeof GAME_BLUEPRINT_RECORD_SCHEMA_VERSION
@@ -42,7 +42,9 @@ export interface GameBlueprintStore {
   upsertBlueprint(blueprint: GameBlueprint, status?: GameBlueprintRecordStatus): Promise<GameBlueprintRecord>
   retireBlueprint(blueprintId: string): Promise<GameBlueprintRecord>
   createLobbyTable(blueprint: GameBlueprint, status?: Extract<LobbyTableStatus, 'draft' | 'open'>): Promise<LobbyTableInstance>
+  startLobbyTable(tableId: string): Promise<LobbyTableInstance>
   cancelLobbyTable(tableId: string, reason?: string): Promise<LobbyTableInstance>
+  closeLobbyTable(tableId: string, reason?: string): Promise<LobbyTableInstance>
   snapshot(): Promise<GameBlueprintStoreSnapshot>
 }
 
@@ -130,6 +132,46 @@ export class InMemoryGameBlueprintStore implements GameBlueprintStore {
     }
     this.lobbyTables.set(tableId, clone(cancelled))
     return clone(cancelled)
+  }
+
+  async startLobbyTable(tableId: string): Promise<LobbyTableInstance> {
+    const existing = this.lobbyTables.get(tableId)
+    if (!existing) {
+      throw new Error(`Unknown lobby table: ${tableId}`)
+    }
+    if (existing.status === 'running') {
+      return clone(existing)
+    }
+    if (existing.status !== 'open') {
+      throw new Error(`Only an open lobby table can start: ${tableId}`)
+    }
+    const running: LobbyTableInstance = {
+      ...existing,
+      status: 'running',
+      updatedAt: new Date().toISOString(),
+    }
+    this.lobbyTables.set(tableId, clone(running))
+    return clone(running)
+  }
+
+  async closeLobbyTable(tableId: string, reason = 'match-complete'): Promise<LobbyTableInstance> {
+    const existing = this.lobbyTables.get(tableId)
+    if (!existing) {
+      throw new Error(`Unknown lobby table: ${tableId}`)
+    }
+    if (existing.status === 'closed') {
+      return clone(existing)
+    }
+    const now = new Date().toISOString()
+    const closed: LobbyTableInstance = {
+      ...existing,
+      status: 'closed',
+      updatedAt: now,
+      closedAt: now,
+      closeReason: reason,
+    }
+    this.lobbyTables.set(tableId, clone(closed))
+    return clone(closed)
   }
 
   async snapshot(): Promise<GameBlueprintStoreSnapshot> {
@@ -240,6 +282,52 @@ export class IndexedDbGameBlueprintStore implements GameBlueprintStore {
     }
     await this.put('lobbyTables', cancelled)
     return clone(cancelled)
+  }
+
+  async startLobbyTable(tableId: string): Promise<LobbyTableInstance> {
+    if (this.fallback) {
+      return this.fallback.startLobbyTable(tableId)
+    }
+    const existing = (await this.listLobbyTables()).find((table) => table.tableId === tableId)
+    if (!existing) {
+      throw new Error(`Unknown lobby table: ${tableId}`)
+    }
+    if (existing.status === 'running') {
+      return clone(existing)
+    }
+    if (existing.status !== 'open') {
+      throw new Error(`Only an open lobby table can start: ${tableId}`)
+    }
+    const running: LobbyTableInstance = {
+      ...existing,
+      status: 'running',
+      updatedAt: new Date().toISOString(),
+    }
+    await this.put('lobbyTables', running)
+    return clone(running)
+  }
+
+  async closeLobbyTable(tableId: string, reason = 'match-complete'): Promise<LobbyTableInstance> {
+    if (this.fallback) {
+      return this.fallback.closeLobbyTable(tableId, reason)
+    }
+    const existing = (await this.listLobbyTables()).find((table) => table.tableId === tableId)
+    if (!existing) {
+      throw new Error(`Unknown lobby table: ${tableId}`)
+    }
+    if (existing.status === 'closed') {
+      return clone(existing)
+    }
+    const now = new Date().toISOString()
+    const closed: LobbyTableInstance = {
+      ...existing,
+      status: 'closed',
+      updatedAt: now,
+      closedAt: now,
+      closeReason: reason,
+    }
+    await this.put('lobbyTables', closed)
+    return clone(closed)
   }
 
   async snapshot(): Promise<GameBlueprintStoreSnapshot> {

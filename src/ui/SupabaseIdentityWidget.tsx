@@ -59,14 +59,16 @@ export function SupabaseIdentityWidget({
       setScreenName(loadedProfile?.screen_name ?? '')
       setAvatarUrl(loadedProfile?.avatar_url ?? '')
       setVisibility(loadedProfile?.visibility ?? 'private')
-      onIdentityChange(loadedProfile ? clientPlayerIdentityFromProfile(loadedProfile) : null)
-      if (!loadedProfile) {
+      if (loadedProfile) {
+        onIdentityChange(clientPlayerIdentityFromProfile(loadedProfile))
+      } else {
+        onIdentityLoading()
         setMessage('Signed in. Create your local Para profile shell.')
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
     }
-  }, [onIdentityChange, repository])
+  }, [onIdentityChange, onIdentityLoading, repository])
 
   useEffect(() => {
     if (!client) {
@@ -159,6 +161,7 @@ export function SupabaseIdentityWidget({
     try {
       const savedProfile = await repository.upsertOwnProfile({
         accountId: session.user.id,
+        email: session.user.email,
         screenName,
         avatarUrl: avatarUrl.trim() || null,
         visibility,
