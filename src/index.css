@@ -80,7 +80,8 @@ button.primary {
   top: 10px;
   left: 10px;
   z-index: 20;
-  max-width: min(500px, calc(100vw - 220px));
+  width: min(360px, calc(100vw - 240px));
+  max-height: calc(100svh - 20px);
   min-height: 42px;
   padding: 6px 8px;
   border: 1px solid #cbd5cf;
@@ -91,6 +92,7 @@ button.primary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
+  overflow: auto;
 }
 
 .identity-widget form,
@@ -115,8 +117,20 @@ button.primary {
   justify-content: space-between;
 }
 
+.identity-profile-details {
+  min-width: 0;
+}
+
+.identity-profile-details summary {
+  color: #40524a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .identity-profile-form {
   flex-wrap: wrap;
+  padding-top: 5px;
 }
 
 .identity-widget label {
@@ -134,9 +148,15 @@ button.primary {
   line-height: 1.1;
 }
 
+.identity-widget p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .identity-widget input,
 .identity-widget select {
-  width: min(230px, 40vw);
+  width: min(160px, 38vw);
   min-height: 30px;
   border: 1px solid #9ead9f;
   border-radius: 6px;
@@ -146,7 +166,7 @@ button.primary {
 }
 
 .identity-widget select {
-  width: 112px;
+  width: 102px;
 }
 
 .identity-widget button {

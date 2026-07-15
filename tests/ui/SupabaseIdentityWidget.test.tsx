@@ -63,6 +63,7 @@ describe('SupabaseIdentityWidget', () => {
     render(<SupabaseIdentityWidget clientFactory={() => client} repositoryFactory={() => repository} />)
 
     expect(await screen.findByText('RiverPort')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Profile'))
     fireEvent.change(screen.getByLabelText('Player screen name'), {
       target: { value: 'RiverCoach' },
     })

@@ -169,43 +169,46 @@ export function SupabaseIdentityWidget({
               Sign out
             </button>
           </div>
-          <form className="identity-profile-form" onSubmit={(event) => void saveProfile(event)} aria-label="Player profile shell">
-            <label>
-              <span>Screen name</span>
-              <input
-                aria-label="Player screen name"
-                value={screenName}
-                onChange={(event) => setScreenName(event.target.value)}
-                disabled={status === 'loading'}
-                minLength={3}
-                maxLength={32}
-              />
-            </label>
-            <label>
-              <span>Avatar URL</span>
-              <input
-                aria-label="Player avatar URL"
-                value={avatarUrl}
-                onChange={(event) => setAvatarUrl(event.target.value)}
-                disabled={status === 'loading'}
-              />
-            </label>
-            <label>
-              <span>Visibility</span>
-              <select
-                aria-label="Player profile visibility"
-                value={visibility}
-                onChange={(event) => setVisibility(event.target.value as PlayerProfileRow['visibility'])}
-                disabled={status === 'loading'}
-              >
-                <option value="private">Private</option>
-                <option value="public">Public</option>
-              </select>
-            </label>
-            <button type="submit" disabled={status === 'loading'}>
-              Save profile
-            </button>
-          </form>
+          <details className="identity-profile-details">
+            <summary>Profile</summary>
+            <form className="identity-profile-form" onSubmit={(event) => void saveProfile(event)} aria-label="Player profile shell">
+              <label>
+                <span>Screen name</span>
+                <input
+                  aria-label="Player screen name"
+                  value={screenName}
+                  onChange={(event) => setScreenName(event.target.value)}
+                  disabled={status === 'loading'}
+                  minLength={3}
+                  maxLength={32}
+                />
+              </label>
+              <label>
+                <span>Avatar URL</span>
+                <input
+                  aria-label="Player avatar URL"
+                  value={avatarUrl}
+                  onChange={(event) => setAvatarUrl(event.target.value)}
+                  disabled={status === 'loading'}
+                />
+              </label>
+              <label>
+                <span>Visibility</span>
+                <select
+                  aria-label="Player profile visibility"
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as PlayerProfileRow['visibility'])}
+                  disabled={status === 'loading'}
+                >
+                  <option value="private">Private</option>
+                  <option value="public">Public</option>
+                </select>
+              </label>
+              <button type="submit" disabled={status === 'loading'}>
+                Save profile
+              </button>
+            </form>
+          </details>
         </div>
       ) : (
         <form onSubmit={(event) => void submitEmail(event)}>
