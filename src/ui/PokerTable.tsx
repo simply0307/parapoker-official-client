@@ -18,7 +18,7 @@ import {
 import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-single-player/LocalSinglePlayerController'
 import { IndexedDbHandHistoryArchiveStore } from '../persistence'
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
-import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
+import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
 import type { LobbyTableInstance } from '../game-config/gameBlueprintStore'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
@@ -329,7 +329,7 @@ function configForLobbyTable(table: LobbyTableInstance): LocalSoloSessionConfig 
 }
 
 function downloadCompletedPackage(completedPackage: CompletedSessionPackage) {
-  const csv = completedSessionPackageToPokerNowCsv(completedPackage)
+  const csv = completedSessionPackageToParaPokerSiteCsv(completedPackage)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')

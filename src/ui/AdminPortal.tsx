@@ -20,7 +20,7 @@ import {
   type ArchivedSessionRecord,
   type HandHistoryArchiveStatus,
 } from '../persistence'
-import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
+import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
 
 interface AdminGameDraft {
   mode: GameBlueprintMode
@@ -195,7 +195,7 @@ export function AdminPortal() {
     if (!session.publicPackage) {
       return
     }
-    const csv = completedSessionPackageToPokerNowCsv(session.publicPackage)
+    const csv = completedSessionPackageToParaPokerSiteCsv(session.publicPackage)
     downloadText(`parapoker-${session.matchId}-hand-history.csv`, csv, 'text/csv;charset=utf-8')
     await setImportStatus(session.matchId, 'csv-generated')
   }
