@@ -15,7 +15,7 @@ import {
   sanitizeArchivedSessionForPublicList,
 } from './handHistoryArchive'
 
-type ImportStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | 'imported' | 'import-failed'>
+type ImportStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>
 
 export class InMemoryHandHistoryArchiveStore implements HandHistoryArchiveStore {
   private readonly sessions = new Map<string, ArchivedSessionRecord>()

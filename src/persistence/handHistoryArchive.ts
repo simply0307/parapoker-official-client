@@ -14,6 +14,8 @@ export type HandHistoryArchiveStatus =
   | 'abandoned'
   | 'complete'
   | 'export-ready'
+  | 'csv-generated'
+  | 'submitted'
   | 'imported'
   | 'import-failed'
 
@@ -90,7 +92,7 @@ export interface ArchivedSessionRecord {
   startedAt: string
   completedAt?: string
   packageChecksum?: string
-  importStatus?: Extract<HandHistoryArchiveStatus, 'export-ready' | 'imported' | 'import-failed'>
+  importStatus?: Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>
   resultSummary?: Omit<LocalSoloSessionSummary, 'seed'>
   privateMetadata?: {
     localSeed: string | number
@@ -137,7 +139,7 @@ export interface HandHistoryArchiveStore {
   listArchivedSessions(): Promise<ArchivedSessionRecord[]>
   readArchivedSession(matchId: string): Promise<ArchivedSessionDetail | undefined>
   deleteArchivedSession(matchId: string): Promise<void>
-  updateImportStatus(matchId: string, status: Extract<HandHistoryArchiveStatus, 'export-ready' | 'imported' | 'import-failed'>): Promise<ArchivedSessionRecord>
+  updateImportStatus(matchId: string, status: Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>): Promise<ArchivedSessionRecord>
 }
 
 export function buildArchiveParticipants(blueprint: GameBlueprint): ArchivedParticipant[] {

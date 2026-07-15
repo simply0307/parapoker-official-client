@@ -12,6 +12,7 @@ import {
   IndexedDbHandHistoryArchiveStore,
   type ArchivedSessionDetail,
   type ArchivedSessionRecord,
+  type HandHistoryArchiveStatus,
 } from '../persistence'
 import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
 
@@ -32,6 +33,8 @@ interface AdminGameDraft {
   seed: string
   npcLineup: NpcSeatAssignment[]
 }
+
+type ImportWorkflowStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>
 
 export function AdminPortal() {
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
@@ -56,6 +59,7 @@ export function AdminPortal() {
   }))
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionRecord[]>([])
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
+  const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
 
   const activeNpcDrafts = npcDrafts.filter((npc) => npc.status === 'active')
   const npcDefinitions = useMemo<NpcDefinition[]>(
@@ -131,26 +135,42 @@ export function AdminPortal() {
     await refreshArchives()
   }
 
-  async function markImported(matchId: string) {
-    await archiveStoreRef.current.updateImportStatus(matchId, 'imported')
+  async function setImportStatus(matchId: string, status: ImportWorkflowStatus) {
+    await archiveStoreRef.current.updateImportStatus(matchId, status)
     await refreshArchives()
     await openArchive(matchId)
+    setOperatorMessage(`Archive ${matchId} marked ${status}.`)
   }
 
-  function downloadArchivePackage(session: ArchivedSessionRecord) {
+  async function generatePublicCsv(session: ArchivedSessionRecord) {
     if (!session.publicPackage) {
       return
     }
     const csv = completedSessionPackageToPokerNowCsv(session.publicPackage)
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `parapoker-${session.matchId}-hand-history.csv`
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadText(`parapoker-${session.matchId}-hand-history.csv`, csv, 'text/csv;charset=utf-8')
+    await setImportStatus(session.matchId, 'csv-generated')
+  }
+
+  function downloadPublicPackage(session: ArchivedSessionRecord) {
+    if (!session.publicPackage) {
+      return
+    }
+    downloadText(
+      `parapoker-${session.matchId}-public-package.json`,
+      JSON.stringify(session.publicPackage, null, 2),
+      'application/json;charset=utf-8',
+    )
+  }
+
+  function downloadRestrictedArchive(detail: ArchivedSessionDetail) {
+    if (!detail.session.authorityArchive) {
+      return
+    }
+    downloadText(
+      `parapoker-${detail.session.matchId}-restricted-authority-archive.json`,
+      JSON.stringify(detail.session.authorityArchive, null, 2),
+      'application/json;charset=utf-8',
+    )
   }
 
   return (
@@ -165,16 +185,17 @@ export function AdminPortal() {
 
       <section className="admin-panel admin-history-panel" aria-label="Archived hand histories">
         <div className="section-heading">
-          <h2>Hand Histories</h2>
+          <h2>Operator Hand Histories</h2>
           <span>{archivedSessions.length} archived matches</span>
         </div>
+        <p className="muted">{operatorMessage}</p>
         <div className="admin-list">
           {archivedSessions.length === 0 && <p className="muted">No completed local histories have been retained yet.</p>}
           {archivedSessions.map((session) => (
             <article className="admin-row history-row" key={session.matchId}>
               <div>
                 <strong>{session.matchId}</strong>
-                <span>{session.mode} - {session.status}</span>
+                <span>{session.mode} - {session.status} - {session.importStatus ?? 'not-submitted'}</span>
               </div>
               <div>
                 <span>{session.participants.map((participant) => participant.displayName).join(', ')}</span>
@@ -189,11 +210,20 @@ export function AdminPortal() {
                 <button type="button" onClick={() => void openArchive(session.matchId)}>
                   Open details
                 </button>
-                <button type="button" onClick={() => downloadArchivePackage(session)} disabled={!session.publicPackage}>
-                  Download public CSV
+                <button type="button" onClick={() => void generatePublicCsv(session)} disabled={!session.publicPackage}>
+                  Generate CSV
                 </button>
-                <button type="button" onClick={() => void markImported(session.matchId)} disabled={!session.publicPackage}>
+                <button type="button" onClick={() => downloadPublicPackage(session)} disabled={!session.publicPackage}>
+                  Public package
+                </button>
+                <button type="button" onClick={() => void setImportStatus(session.matchId, 'submitted')} disabled={!session.publicPackage}>
+                  Mark submitted
+                </button>
+                <button type="button" onClick={() => void setImportStatus(session.matchId, 'imported')} disabled={!session.publicPackage}>
                   Mark imported
+                </button>
+                <button type="button" onClick={() => void setImportStatus(session.matchId, 'import-failed')} disabled={!session.publicPackage}>
+                  Mark failed
                 </button>
                 <button type="button" className="danger" onClick={() => void deleteArchive(session.matchId)}>
                   Delete local archive
@@ -213,7 +243,35 @@ export function AdminPortal() {
               <Metric label="Import" value={selectedArchive.session.importStatus ?? 'not exported'} />
               <Metric label="Checksum" value={selectedArchive.session.packageChecksum ?? 'none'} />
               <Metric label="Authority" value={selectedArchive.session.sourceAuthority} />
+              <Metric label="Restricted" value={selectedArchive.session.authorityArchive ? 'retained' : 'missing'} />
+              <Metric label="Events" value={String(selectedArchive.session.authorityArchive?.events.length ?? 0)} />
+              <Metric label="Private hands" value={String(selectedArchive.privateHands.length)} />
             </dl>
+            <div className="history-actions">
+              <button type="button" onClick={() => downloadPublicPackage(selectedArchive.session)} disabled={!selectedArchive.session.publicPackage}>
+                Download public package
+              </button>
+              <button type="button" onClick={() => void generatePublicCsv(selectedArchive.session)} disabled={!selectedArchive.session.publicPackage}>
+                Generate public CSV
+              </button>
+              <button type="button" onClick={() => downloadRestrictedArchive(selectedArchive)} disabled={!selectedArchive.session.authorityArchive}>
+                Download restricted archive
+              </button>
+            </div>
+            {selectedArchive.session.authorityArchive && (
+              <div className="strategy-card">
+                <div>
+                  <strong>Authority Archive</strong>
+                  <span>{selectedArchive.session.authorityArchive.integrity.checksum}</span>
+                </div>
+                <p>
+                  {selectedArchive.session.authorityArchive.authorityClass} - {selectedArchive.session.authorityArchive.closure.reason} - {selectedArchive.session.authorityArchive.integrity.eventCount} events
+                </p>
+                <p>
+                  Commands {selectedArchive.session.authorityArchive.integrity.commandCount} - Hands {selectedArchive.session.authorityArchive.integrity.handCount} - Closed {selectedArchive.session.authorityArchive.closure.closedAt}
+                </p>
+              </div>
+            )}
             <div className="admin-list">
               {selectedArchive.hands.map((hand) => (
                 <article className="strategy-card" key={hand.handId}>
@@ -369,6 +427,18 @@ export function AdminPortal() {
       </section>
     </main>
   )
+}
+
+function downloadText(filename: string, text: string, type: string) {
+  const blob = new Blob([text], { type })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

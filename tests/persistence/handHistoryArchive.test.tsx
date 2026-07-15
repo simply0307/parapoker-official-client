@@ -126,6 +126,28 @@ describe('hand-history archive stores', () => {
     expect(JSON.stringify(listed)).not.toContain('holeCardsDealt')
   })
 
+  it('tracks local operator hand-history submission workflow statuses', async () => {
+    const archiveStore = new InMemoryHandHistoryArchiveStore()
+    const session = await playToCompletion({
+      ...archiveConfig,
+      startingStack: 1,
+      smallBlind: 1,
+      bigBlind: 1,
+      matchId: 'operator-status-archive',
+    }, archiveStore)
+
+    await archiveStore.updateImportStatus('operator-status-archive', 'csv-generated')
+    await archiveStore.updateImportStatus('operator-status-archive', 'submitted')
+    await archiveStore.updateImportStatus('operator-status-archive', 'imported')
+
+    const archive = await session.getArchivedSession()
+    const listed = await archiveStore.listArchivedSessions()
+
+    expect(archive?.session.status).toBe('imported')
+    expect(archive?.session.importStatus).toBe('imported')
+    expect(listed.find((record) => record.matchId === 'operator-status-archive')?.importStatus).toBe('imported')
+  })
+
   it('retains IndexedDB-backed records across store re-instantiation', async () => {
     const databaseName = `test-archive-${Date.now()}`
     const blueprint = createGameBlueprint({
