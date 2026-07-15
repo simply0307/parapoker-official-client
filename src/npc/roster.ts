@@ -1,5 +1,6 @@
 import type { SeatId } from '../poker-engine'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from './config'
+import { createPostflopStrategy } from './postflopStrategy'
 import { createMultiFormatPreflopStrategy } from './preflopRanges'
 
 export interface LocalNpcPresentation {
@@ -12,8 +13,8 @@ export interface LocalNpcPresentation {
 
 export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
   {
-    id: 'strategy-balanced-caller-v2',
-    version: 2,
+    id: 'strategy-balanced-caller-v3',
+    version: 3,
     name: 'Balanced Caller',
     status: 'active',
     difficulty: 'steady',
@@ -22,6 +23,8 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       { id: 'preflop-range', enabled: true, weight: 0.55 },
       { id: 'draw-selection', enabled: true, weight: 0.45 },
       { id: 'pot-control', enabled: true, weight: 0.65 },
+      { id: 'continuation-bet', enabled: true, weight: 0.55 },
+      { id: 'probe-bet', enabled: true, weight: 0.35 },
     ],
     policyConfig: {
       preflopAggression: 0.52,
@@ -35,10 +38,22 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       looseness: 0.36,
       aggression: 0.52,
     }),
+    postflopStrategy: createPostflopStrategy({
+      id: 'balanced-caller-postflop-v1',
+      aggression: 0.44,
+      frequencies: { pureBluff: 0.07, valueRaise: 0.66 },
+      sizing: {
+        dryFlopPotFraction: 0.42,
+        dynamicFlopPotFraction: 0.55,
+        wetFlopPotFraction: 0.66,
+        turnPotFraction: 0.58,
+        riverPotFraction: 0.62,
+      },
+    }),
   },
   {
-    id: 'strategy-pressure-raiser-v2',
-    version: 2,
+    id: 'strategy-pressure-raiser-v3',
+    version: 3,
     name: 'Pressure Raiser',
     status: 'active',
     difficulty: 'steady',
@@ -47,6 +62,9 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       { id: 'preflop-pressure', enabled: true, weight: 0.8 },
       { id: 'value-pressure', enabled: true, weight: 0.65 },
       { id: 'preflop-range', enabled: true, weight: 0.45 },
+      { id: 'continuation-bet', enabled: true, weight: 0.85 },
+      { id: 'barrel-selection', enabled: true, weight: 0.75 },
+      { id: 'bluff-selection', enabled: true, weight: 0.65 },
     ],
     policyConfig: {
       preflopAggression: 0.78,
@@ -65,10 +83,28 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
         threeBetOutOfPositionMultiplier: 4,
       },
     }),
+    postflopStrategy: createPostflopStrategy({
+      id: 'pressure-raiser-postflop-v1',
+      aggression: 0.78,
+      frequencies: {
+        cBetFlop: 0.82,
+        turnBarrel: 0.7,
+        riverBarrel: 0.52,
+        pureBluff: 0.2,
+        checkRaise: 0.38,
+      },
+      sizing: {
+        dynamicFlopPotFraction: 0.68,
+        wetFlopPotFraction: 0.78,
+        turnPotFraction: 0.74,
+        riverPotFraction: 0.82,
+        raiseToMultiplier: 2.8,
+      },
+    }),
   },
   {
-    id: 'strategy-board-watcher-v2',
-    version: 2,
+    id: 'strategy-board-watcher-v3',
+    version: 3,
     name: 'Board Watcher',
     status: 'active',
     difficulty: 'steady',
@@ -77,6 +113,9 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       { id: 'postflop-made-hand', enabled: true, weight: 0.7 },
       { id: 'draw-selection', enabled: true, weight: 0.75 },
       { id: 'pot-control', enabled: true, weight: 0.5 },
+      { id: 'continuation-bet', enabled: true, weight: 0.6 },
+      { id: 'probe-bet', enabled: true, weight: 0.6 },
+      { id: 'bluff-selection', enabled: true, weight: 0.55 },
     ],
     policyConfig: {
       preflopAggression: 0.46,
@@ -90,10 +129,17 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       looseness: 0.42,
       aggression: 0.46,
     }),
+    postflopStrategy: createPostflopStrategy({
+      id: 'board-watcher-postflop-v1',
+      aggression: 0.64,
+      frequencies: { semiBluff: 0.78, probeBet: 0.46 },
+      sizing: { dynamicFlopPotFraction: 0.64, wetFlopPotFraction: 0.74 },
+      modifiers: { wetBoardBluffPenalty: 0.05 },
+    }),
   },
   {
-    id: 'strategy-pot-controller-v2',
-    version: 2,
+    id: 'strategy-pot-controller-v3',
+    version: 3,
     name: 'Pot Controller',
     status: 'active',
     difficulty: 'steady',
@@ -102,6 +148,8 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       { id: 'pot-control', enabled: true, weight: 0.85 },
       { id: 'preflop-range', enabled: true, weight: 0.5 },
       { id: 'postflop-made-hand', enabled: true, weight: 0.5 },
+      { id: 'continuation-bet', enabled: true, weight: 0.4 },
+      { id: 'barrel-selection', enabled: true, weight: 0.25 },
     ],
     policyConfig: {
       preflopAggression: 0.4,
@@ -119,10 +167,30 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
         isolationRaiseBigBlinds: 2.75,
       },
     }),
+    postflopStrategy: createPostflopStrategy({
+      id: 'pot-controller-postflop-v1',
+      aggression: 0.3,
+      frequencies: {
+        cBetFlop: 0.48,
+        turnBarrel: 0.3,
+        riverBarrel: 0.2,
+        semiBluff: 0.28,
+        pureBluff: 0.03,
+        checkRaise: 0.08,
+      },
+      sizing: {
+        dryFlopPotFraction: 0.36,
+        dynamicFlopPotFraction: 0.48,
+        wetFlopPotFraction: 0.58,
+        turnPotFraction: 0.52,
+        riverPotFraction: 0.58,
+        raiseToMultiplier: 2.2,
+      },
+    }),
   },
   {
-    id: 'strategy-value-hunter-v2',
-    version: 2,
+    id: 'strategy-value-hunter-v3',
+    version: 3,
     name: 'Value Hunter',
     status: 'active',
     difficulty: 'steady',
@@ -131,6 +199,8 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       { id: 'postflop-made-hand', enabled: true, weight: 0.78 },
       { id: 'value-pressure', enabled: true, weight: 0.58 },
       { id: 'draw-selection', enabled: true, weight: 0.35 },
+      { id: 'continuation-bet', enabled: true, weight: 0.55 },
+      { id: 'barrel-selection', enabled: true, weight: 0.5 },
     ],
     policyConfig: {
       preflopAggression: 0.58,
@@ -144,6 +214,17 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       looseness: 0.3,
       aggression: 0.58,
     }),
+    postflopStrategy: createPostflopStrategy({
+      id: 'value-hunter-postflop-v1',
+      aggression: 0.56,
+      frequencies: { pureBluff: 0.04, valueRaise: 0.82, checkRaise: 0.2 },
+      thresholds: {
+        valueBetStrength: 0.56,
+        thinValueStrength: 0.42,
+        valueRaiseStrength: 0.72,
+      },
+      sizing: { turnPotFraction: 0.7, riverPotFraction: 0.78 },
+    }),
   },
 ]
 
@@ -154,7 +235,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Measured caller',
     description: 'A careful regular who prefers clean prices and steady value.',
     avatarKey: 'maven',
-    strategyProfileId: 'strategy-balanced-caller-v2',
+    strategyProfileId: 'strategy-balanced-caller-v3',
     status: 'active',
   },
   {
@@ -163,7 +244,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pressure raiser',
     description: 'A table captain who tests passive lines before and after the flop.',
     avatarKey: 'rook',
-    strategyProfileId: 'strategy-pressure-raiser-v2',
+    strategyProfileId: 'strategy-pressure-raiser-v3',
     status: 'active',
   },
   {
@@ -172,7 +253,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Board watcher',
     description: 'A texture-aware opponent who respects coordinated boards.',
     avatarKey: 'quinn',
-    strategyProfileId: 'strategy-board-watcher-v2',
+    strategyProfileId: 'strategy-board-watcher-v3',
     status: 'active',
   },
   {
@@ -181,7 +262,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pot controller',
     description: 'A low-variance opponent who keeps marginal spots contained.',
     avatarKey: 'sol',
-    strategyProfileId: 'strategy-pot-controller-v2',
+    strategyProfileId: 'strategy-pot-controller-v3',
     status: 'active',
   },
   {
@@ -190,7 +271,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Value hunter',
     description: 'A value-first opponent who leans into made hands.',
     avatarKey: 'vega',
-    strategyProfileId: 'strategy-value-hunter-v2',
+    strategyProfileId: 'strategy-value-hunter-v3',
     status: 'active',
   },
 ]

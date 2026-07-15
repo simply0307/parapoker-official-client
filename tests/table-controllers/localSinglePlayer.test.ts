@@ -45,6 +45,7 @@ describe('local single-player controller', () => {
           chooseAction(context: NpcDecisionContext) {
             expect(context.config).toEqual(runtime.strategyProfile.policyConfig)
             expect(context.preflopStrategy).toEqual(runtime.strategyProfile.preflopStrategy)
+            expect(context.postflopStrategy).toEqual(runtime.strategyProfile.postflopStrategy)
             expect(context.memory.rangeState).toEqual(expect.objectContaining({
               schemaVersion: 'npc-range-state-v1',
               heroSeatId: runtime.seatId,

@@ -183,6 +183,7 @@ export class LocalSinglePlayerController {
           controller.config,
           controller.memory,
           controller.strategyProfile.preflopStrategy,
+          controller.strategyProfile.postflopStrategy,
         ),
       )
       const result = applyAction(this.state, command)

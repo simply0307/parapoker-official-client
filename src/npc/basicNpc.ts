@@ -1,7 +1,11 @@
 import type { Rng } from '../shared/rng'
 import { evaluateBestHand } from '../poker-engine'
 import type { Card, EngineCommand, LegalAction, PrivateSeatView, Rank, SeatId } from '../poker-engine'
-import type { NpcPreflopStrategy } from './config'
+import type { NpcPostflopStrategy, NpcPreflopStrategy } from './config'
+import {
+  chooseProactivePostflopDecision,
+  type NpcPostflopHandAssessment,
+} from './postflopStrategy'
 import { choosePreflopRangeDecision } from './preflopRanges'
 import type { NpcRangeState } from './rangeTracking'
 
@@ -24,6 +28,7 @@ export interface NpcDecisionContext {
   memory: NpcTableMemory
   rng: Rng
   preflopStrategy?: NpcPreflopStrategy
+  postflopStrategy?: NpcPostflopStrategy
 }
 
 export interface NpcPolicy {
@@ -55,19 +60,13 @@ const RANK_VALUES: Record<Rank, number> = {
 
 type PreflopTier = 'premium' | 'strong' | 'playable' | 'speculative' | 'trash'
 
-interface PostflopAssessment {
-  madeStrength: number
-  hasStrongDraw: boolean
-  hasAnyDraw: boolean
-  boardWetness: number
-}
-
 export function createNpcDecisionContext(
   view: PrivateSeatView,
   rng: Rng,
   config: Partial<NpcPolicyConfig> = {},
   memory: NpcTableMemory = {},
   preflopStrategy?: NpcPreflopStrategy,
+  postflopStrategy?: NpcPostflopStrategy,
 ): NpcDecisionContext {
   return {
     view,
@@ -76,6 +75,7 @@ export function createNpcDecisionContext(
     memory,
     rng,
     ...(preflopStrategy ? { preflopStrategy } : {}),
+    ...(postflopStrategy ? { postflopStrategy } : {}),
   }
 }
 
@@ -171,6 +171,19 @@ function choosePostflopAction(context: NpcDecisionContext): EngineCommand {
   const { view, legalActions } = context
   const seatId = view.heroSeatId
   const assessment = assessPostflop(view)
+  if (context.postflopStrategy && context.memory.rangeState) {
+    const proactiveDecision = chooseProactivePostflopDecision({
+      view,
+      legalActions,
+      strategy: context.postflopStrategy,
+      rangeState: context.memory.rangeState,
+      assessment,
+      rng: context.rng,
+    })
+    if (proactiveDecision) {
+      return proactiveDecision.command
+    }
+  }
   const call = findAction(legalActions, 'call')
   const fold = findAction(legalActions, 'fold')
   const check = findAction(legalActions, 'check')
@@ -262,7 +275,7 @@ function chooseFallbackAction(context: NpcDecisionContext): EngineCommand {
   throw new Error('NPC was asked to act with no legal actions.')
 }
 
-function assessPostflop(view: PrivateSeatView): PostflopAssessment {
+function assessPostflop(view: PrivateSeatView): NpcPostflopHandAssessment {
   const allCards = [...view.holeCards, ...view.communityCards]
   const handValue = evaluateBestHand(allCards)
   const madeStrength = madeHandStrength(handValue.category, handValue.tiebreakers)
@@ -354,7 +367,7 @@ function getBoardWetness(communityCards: Card[]): number {
 function postflopBetAmount(
   action: Extract<LegalAction, { type: 'bet' }>,
   context: NpcDecisionContext,
-  assessment: PostflopAssessment,
+  assessment: NpcPostflopHandAssessment,
 ): number {
   const potFraction = assessment.boardWetness >= 2 ? 0.72 : 0.62
   const target = Math.max(action.min, Math.ceil(context.view.pot * potFraction))

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BasicNpcPolicy, createNpcDecisionContext } from '../../src/npc/basicNpc'
+import { createPostflopStrategy } from '../../src/npc/postflopStrategy'
+import { updateNpcRangeMemory } from '../../src/npc/rangeTracking'
 import { createRng } from '../../src/shared/rng'
 import {
   applyAction,
@@ -184,6 +186,36 @@ describe('basic NPC policy', () => {
     const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(view, createRng('postflop-air')))
 
     expect(command).toEqual({ type: 'check', seatId: 'npc-1', source: 'npc' })
+  })
+
+  it('uses a configured proactive profile to continuation-bet weak range holdings', () => {
+    let state = mustStart([
+      c('Q', 'clubs'),
+      c('7', 'spades'),
+      c('J', 'hearts'),
+      c('2', 'hearts'),
+      c('A', 'clubs'),
+      c('K', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('9', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    state = mustApply(state, { type: 'bet', seatId: 'npc-1', amount: 6, source: 'npc' })
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    const view = getSeatView(state, 'npc-1')
+    const memory = updateNpcRangeMemory({}, view)
+    const strategy = createPostflopStrategy({
+      id: 'integration-cbet',
+      aggression: 0.5,
+      frequencies: { cBetFlop: 1, pureBluff: 0 },
+      sizing: { dryFlopPotFraction: 0.45 },
+    })
+    const command = new BasicNpcPolicy().chooseAction(
+      createNpcDecisionContext(view, createRng('configured-cbet'), {}, memory, undefined, strategy),
+    )
+
+    expect(command).toEqual({ type: 'bet', seatId: 'npc-1', amount: 5, source: 'npc' })
   })
 
   it('continues postflop with a strong draw at a fair price', () => {

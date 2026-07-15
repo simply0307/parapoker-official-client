@@ -1,4 +1,5 @@
 import type { NpcDefinition, NpcDefinitionStatus, NpcStrategyProfile } from './config'
+import { validatePostflopStrategy } from './postflopStrategy'
 import { validatePreflopStrategy } from './preflopRanges'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from './roster'
 
@@ -240,6 +241,9 @@ export function normalizeStrategyProfile(profile: NpcStrategyProfile): NpcStrate
   }
   if (profile.preflopStrategy) {
     validatePreflopStrategy(profile.preflopStrategy)
+  }
+  if (profile.postflopStrategy) {
+    validatePostflopStrategy(profile.postflopStrategy)
   }
   return clone({
     ...profile,

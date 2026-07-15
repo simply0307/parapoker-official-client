@@ -9,6 +9,10 @@ export type NpcStrategyModuleId =
   | 'draw-selection'
   | 'pot-control'
   | 'value-pressure'
+  | 'continuation-bet'
+  | 'probe-bet'
+  | 'barrel-selection'
+  | 'bluff-selection'
 
 export interface NpcDefinition {
   id: string
@@ -77,6 +81,52 @@ export interface NpcPreflopStrategy {
   sizing: NpcPreflopSizingConfig
 }
 
+export interface NpcPostflopFrequencies {
+  cBetFlop: number
+  delayedCBetTurn: number
+  probeBet: number
+  turnBarrel: number
+  riverBarrel: number
+  semiBluff: number
+  pureBluff: number
+  valueRaise: number
+  checkRaise: number
+}
+
+export interface NpcPostflopSizingConfig {
+  dryFlopPotFraction: number
+  dynamicFlopPotFraction: number
+  wetFlopPotFraction: number
+  turnPotFraction: number
+  riverPotFraction: number
+  raiseToMultiplier: number
+}
+
+export interface NpcPostflopThresholds {
+  valueBetStrength: number
+  thinValueStrength: number
+  valueRaiseStrength: number
+}
+
+export interface NpcPostflopModifiers {
+  rangeAdvantageWeight: number
+  positionBonus: number
+  multiwayPenalty: number
+  wetBoardBluffPenalty: number
+  shortStackAggressionBonus: number
+}
+
+export interface NpcPostflopStrategy {
+  schemaVersion: 'npc-postflop-v1'
+  id: string
+  version: number
+  description?: string
+  frequencies: NpcPostflopFrequencies
+  sizing: NpcPostflopSizingConfig
+  thresholds: NpcPostflopThresholds
+  modifiers: NpcPostflopModifiers
+}
+
 export interface NpcStrategyProfile {
   id: string
   version: number
@@ -87,6 +137,7 @@ export interface NpcStrategyProfile {
   modules: NpcStrategyModule[]
   policyConfig: NpcPolicyConfig
   preflopStrategy?: NpcPreflopStrategy
+  postflopStrategy?: NpcPostflopStrategy
 }
 
 export interface NpcSeatAssignment {
