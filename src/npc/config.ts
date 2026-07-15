@@ -13,6 +13,7 @@ export type NpcStrategyModuleId =
   | 'probe-bet'
   | 'barrel-selection'
   | 'bluff-selection'
+  | 'mdf-defense'
 
 export interface NpcDefinition {
   id: string
@@ -116,6 +117,18 @@ export interface NpcPostflopModifiers {
   shortStackAggressionBonus: number
 }
 
+export interface NpcPostflopDefenseConfig {
+  mdfAdherence: number
+  foldBias: number
+  madeHandWeight: number
+  drawWeight: number
+  potOddsDiscipline: number
+  positionBonus: number
+  rangeDisadvantagePenalty: number
+  multiwayPenalty: number
+  shortStackCommitmentBonus: number
+}
+
 export interface NpcPostflopStrategy {
   schemaVersion: 'npc-postflop-v1'
   id: string
@@ -125,6 +138,7 @@ export interface NpcPostflopStrategy {
   sizing: NpcPostflopSizingConfig
   thresholds: NpcPostflopThresholds
   modifiers: NpcPostflopModifiers
+  defense?: NpcPostflopDefenseConfig
 }
 
 export interface NpcStrategyProfile {

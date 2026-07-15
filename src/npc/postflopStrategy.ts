@@ -2,6 +2,7 @@ import type { EngineCommand, LegalAction, PrivateSeatView, Street } from '../pok
 import type { Rng } from '../shared/rng'
 import type {
   NpcPostflopFrequencies,
+  NpcPostflopDefenseConfig,
   NpcPostflopModifiers,
   NpcPostflopSizingConfig,
   NpcPostflopStrategy,
@@ -48,6 +49,7 @@ export interface CreatePostflopStrategyInput {
   sizing?: Partial<NpcPostflopSizingConfig>
   thresholds?: Partial<NpcPostflopThresholds>
   modifiers?: Partial<NpcPostflopModifiers>
+  defense?: Partial<NpcPostflopDefenseConfig>
 }
 
 export interface ProactivePostflopDecisionInput {
@@ -57,6 +59,18 @@ export interface ProactivePostflopDecisionInput {
   rangeState: NpcRangeState
   assessment: NpcPostflopHandAssessment
   rng: Rng
+}
+
+export const DEFAULT_POSTFLOP_DEFENSE_CONFIG: NpcPostflopDefenseConfig = {
+  mdfAdherence: 0.8,
+  foldBias: 0,
+  madeHandWeight: 0.75,
+  drawWeight: 0.7,
+  potOddsDiscipline: 0.8,
+  positionBonus: 0.08,
+  rangeDisadvantagePenalty: 0.3,
+  multiwayPenalty: 0.1,
+  shortStackCommitmentBonus: 0.12,
 }
 
 export function createPostflopStrategy(input: CreatePostflopStrategyInput): NpcPostflopStrategy {
@@ -101,6 +115,10 @@ export function createPostflopStrategy(input: CreatePostflopStrategyInput): NpcP
       shortStackAggressionBonus: 0.08,
       ...input.modifiers,
     },
+    defense: {
+      ...DEFAULT_POSTFLOP_DEFENSE_CONFIG,
+      ...input.defense,
+    },
   }
 }
 
@@ -134,6 +152,18 @@ export function validatePostflopStrategy(strategy: NpcPostflopStrategy): void {
       throw new Error(`NPC postflop modifier must be between zero and one: ${name}`)
     }
   }
+  for (const [name, value] of Object.entries(resolvePostflopDefenseConfig(strategy))) {
+    const valid = name === 'foldBias'
+      ? Number.isFinite(value) && value >= -0.5 && value <= 0.5
+      : Number.isFinite(value) && value >= 0 && value <= 1
+    if (!valid) {
+      throw new Error(`NPC postflop defense value is outside its safe bounds: ${name}`)
+    }
+  }
+}
+
+export function resolvePostflopDefenseConfig(strategy: NpcPostflopStrategy): NpcPostflopDefenseConfig {
+  return { ...DEFAULT_POSTFLOP_DEFENSE_CONFIG, ...strategy.defense }
 }
 
 export function chooseProactivePostflopDecision(

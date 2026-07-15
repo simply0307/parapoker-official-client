@@ -259,6 +259,41 @@ describe('basic NPC policy', () => {
 
     expect(command).toEqual({ type: 'fold', seatId: 'npc-1', source: 'npc' })
   })
+
+  it('routes configured postflop defense through the MDF module during a real hand', () => {
+    let state = advanceToNpcFlopAction([
+      c('A', 'clubs'),
+      c('9', 'spades'),
+      c('K', 'diamonds'),
+      c('2', 'hearts'),
+      c('Q', 'clubs'),
+      c('7', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('J', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'check', seatId: 'npc-1', source: 'npc' })
+    state = mustApply(state, { type: 'bet', seatId: 'human', amount: 24, source: 'human' })
+
+    const view = getSeatView(state, 'npc-1')
+    const memory = updateNpcRangeMemory({}, view)
+    const strategy = createPostflopStrategy({
+      id: 'sticky-integration-defense',
+      aggression: 0,
+      frequencies: { checkRaise: 0, valueRaise: 0 },
+      defense: { mdfAdherence: 1, foldBias: -0.5 },
+    })
+    const command = new BasicNpcPolicy().chooseAction(createNpcDecisionContext(
+      view,
+      { next: () => 0.01, state: () => 1 },
+      {},
+      memory,
+      undefined,
+      strategy,
+    ))
+
+    expect(command).toEqual({ type: 'call', seatId: 'npc-1', source: 'npc' })
+  })
 })
 
 function advanceToNpcFlopAction(fixedDeck: Card[]): GameState {

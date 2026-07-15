@@ -6,6 +6,7 @@ import {
   chooseProactivePostflopDecision,
   type NpcPostflopHandAssessment,
 } from './postflopStrategy'
+import { choosePostflopDefenseDecision } from './postflopDefense'
 import { choosePreflopRangeDecision } from './preflopRanges'
 import type { NpcRangeState } from './rangeTracking'
 
@@ -182,6 +183,17 @@ function choosePostflopAction(context: NpcDecisionContext): EngineCommand {
     })
     if (proactiveDecision) {
       return proactiveDecision.command
+    }
+    const defenseDecision = choosePostflopDefenseDecision({
+      view,
+      legalActions,
+      strategy: context.postflopStrategy,
+      rangeState: context.memory.rangeState,
+      assessment,
+      rng: context.rng,
+    })
+    if (defenseDecision) {
+      return defenseDecision.command
     }
   }
   const call = findAction(legalActions, 'call')

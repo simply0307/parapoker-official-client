@@ -31,6 +31,17 @@ describe('NPC proactive postflop strategy', () => {
     const invalid = structuredClone(strategy)
     invalid.frequencies.cBetFlop = 1.1
     expect(() => validatePostflopStrategy(invalid)).toThrow(/frequency/i)
+
+    const unsafeDefense = structuredClone(strategy)
+    if (!unsafeDefense.defense) {
+      throw new Error('Expected a generated defense configuration.')
+    }
+    unsafeDefense.defense.foldBias = 0.75
+    expect(() => validatePostflopStrategy(unsafeDefense)).toThrow(/defense/i)
+
+    const legacy = structuredClone(strategy)
+    delete legacy.defense
+    expect(() => validatePostflopStrategy(legacy)).not.toThrow()
   })
 
   it('continuation-bets as the preflop aggressor with profile-owned sizing', () => {
