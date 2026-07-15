@@ -17,9 +17,11 @@ interface SupabaseIdentityWidgetProps {
 
 type RequestStatus = 'idle' | 'loading'
 
+const defaultRepositoryFactory = (client: SupabaseBrowserClient) => new SupabaseIdentityRepository(client)
+
 export function SupabaseIdentityWidget({
   clientFactory = createSupabaseBrowserClient,
-  repositoryFactory = (client) => new SupabaseIdentityRepository(client),
+  repositoryFactory = defaultRepositoryFactory,
 }: SupabaseIdentityWidgetProps) {
   const client = useMemo(() => clientFactory(), [clientFactory])
   const repository = useMemo(() => (client ? repositoryFactory(client) : null), [client, repositoryFactory])

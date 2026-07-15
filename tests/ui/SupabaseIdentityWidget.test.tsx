@@ -85,9 +85,32 @@ describe('SupabaseIdentityWidget', () => {
     })
     expect(screen.getByText('Profile saved. Seat ownership still requires table authority binding.')).toBeInTheDocument()
   })
+
+  it('keeps the default repository factory stable after a signed-in profile render', async () => {
+    const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
+    const { client, getSession, onAuthStateChange } = createClientMock(session, {
+      player_profiles: {
+        id: 'profile-1',
+        account_id: 'account-1',
+        screen_name: 'StableRiver',
+        avatar_url: null,
+        visibility: 'private',
+        created_at: '2026-07-15T12:00:00.000Z',
+        updated_at: '2026-07-15T12:00:00.000Z',
+      },
+    })
+
+    render(<SupabaseIdentityWidget clientFactory={() => client} />)
+
+    expect(await screen.findByText('StableRiver')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledTimes(1)
+      expect(onAuthStateChange).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
-function createClientMock(initialSession: Session | null = null) {
+function createClientMock(initialSession: Session | null = null, dataByTable: Record<string, unknown> = {}) {
   const signInWithOtp = vi.fn(async () => ({ error: null }))
   const signOut = vi.fn(async () => ({ error: null }))
   const getSession = vi.fn(async () => ({ data: { session: initialSession }, error: null }))
@@ -103,9 +126,29 @@ function createClientMock(initialSession: Session | null = null) {
       signInWithOtp,
       signOut,
     },
+    from(table: string) {
+      return createQueryBuilder(dataByTable[table] ?? null)
+    },
   } as unknown as SupabaseBrowserClient
 
   return { client, getSession, onAuthStateChange, signInWithOtp, signOut, unsubscribe }
+}
+
+function createQueryBuilder(tableData: unknown) {
+  const builder = {
+    select: () => builder,
+    insert: () => builder,
+    upsert: () => builder,
+    update: () => builder,
+    eq: () => builder,
+    order: () => builder,
+    limit: () => builder,
+    maybeSingle: async () => ({ data: tableData, error: null }),
+    single: async () => ({ data: tableData, error: null }),
+    then: (onfulfilled: (value: unknown) => unknown, onrejected?: (reason: unknown) => unknown) =>
+      Promise.resolve({ data: tableData, error: null }).then(onfulfilled, onrejected),
+  }
+  return builder
 }
 
 function createRepositoryMock(initialProfile: PlayerProfileRow | null) {
