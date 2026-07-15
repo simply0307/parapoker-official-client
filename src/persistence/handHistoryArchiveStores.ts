@@ -28,6 +28,17 @@ export class InMemoryHandHistoryArchiveStore implements HandHistoryArchiveStore 
     return clone(record)
   }
 
+  async abandonSession(matchId: string, completedAt = new Date().toISOString()): Promise<ArchivedSessionRecord> {
+    const session = this.requireSession(matchId)
+    const updated: ArchivedSessionRecord = {
+      ...session,
+      status: 'abandoned',
+      completedAt,
+    }
+    this.sessions.set(matchId, updated)
+    return clone(updated)
+  }
+
   async upsertCompletedHand(hand: ArchivedHandRecord): Promise<void> {
     this.hands.set(handKey(hand.matchId, hand.handNumber), clone(hand))
     await this.updateHandCount(hand.matchId)
@@ -152,6 +163,23 @@ export class IndexedDbHandHistoryArchiveStore implements HandHistoryArchiveStore
     const record = createArchivedSessionRecord(input)
     await this.put('sessions', record)
     return clone(record)
+  }
+
+  async abandonSession(matchId: string, completedAt = new Date().toISOString()): Promise<ArchivedSessionRecord> {
+    if (this.fallback) {
+      return this.fallback.abandonSession(matchId, completedAt)
+    }
+    const session = await this.getSession(matchId)
+    if (!session) {
+      throw new Error(`Unknown archived session ${matchId}.`)
+    }
+    const updated: ArchivedSessionRecord = {
+      ...session,
+      status: 'abandoned',
+      completedAt,
+    }
+    await this.put('sessions', updated)
+    return clone(updated)
   }
 
   async upsertCompletedHand(hand: ArchivedHandRecord): Promise<void> {

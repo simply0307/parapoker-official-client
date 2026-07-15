@@ -115,6 +115,7 @@ export function PokerClientShell({
   return (
     <main className="poker-client-shell">
       <TableUtilityBar
+        scene={scene}
         snapshot={snapshot}
         tableTitle={tableTitle}
         statusText={statusText}
@@ -259,6 +260,7 @@ function TableWindow({
 }
 
 function TableUtilityBar({
+  scene,
   snapshot,
   tableTitle,
   statusText,
@@ -268,6 +270,7 @@ function TableUtilityBar({
   setTableLayout,
   changeSetup,
 }: {
+  scene: SoloScene
   snapshot: LocalSoloSessionSnapshot
   tableTitle: string
   statusText: string
@@ -310,7 +313,7 @@ function TableUtilityBar({
         </select>
       </label>
       <button type="button" onClick={changeSetup}>
-        Change setup
+        {scene === 'matchResult' ? 'Leave table' : 'Concede match'}
       </button>
     </header>
   )
@@ -596,7 +599,7 @@ function SessionResult({
           New random match
         </button>
         <button type="button" onClick={changeSetup}>
-          Change setup
+          Leave table
         </button>
       </div>
     </section>

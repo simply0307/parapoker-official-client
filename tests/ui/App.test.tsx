@@ -119,4 +119,21 @@ describe('App navigation', () => {
     expect(screen.getAllByLabelText('Poker table')).toHaveLength(2)
     expect(screen.getByLabelText('Table 2 footer')).not.toHaveTextContent('No active session')
   })
+
+  it('keeps a room authority alive while the player visits the lobby', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(screen.getByLabelText('Current player identity')).toHaveTextContent('Playing as'))
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+    expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Fold' }))
+    expect(await screen.findByRole('button', { name: 'Next hand' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lobby' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+
+    expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next hand' })).toBeInTheDocument()
+  })
 })

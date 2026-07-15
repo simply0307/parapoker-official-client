@@ -64,7 +64,6 @@ export function SupabaseIdentityWidget({
         setMessage('Signed in. Create your local Para profile shell.')
       }
     } catch (error) {
-      onIdentityChange(null)
       setMessage(error instanceof Error ? error.message : String(error))
     }
   }, [onIdentityChange, repository])

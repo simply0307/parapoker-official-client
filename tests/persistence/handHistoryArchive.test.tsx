@@ -32,6 +32,16 @@ describe('hand-history archive stores', () => {
     expect(archive?.session.participants.map((participant) => participant.displayName)).toContain('Maven')
   })
 
+  it('marks an active room abandoned when its player concedes', async () => {
+    const archiveStore = new InMemoryHandHistoryArchiveStore()
+    const session = await LocalSoloSession.create({ ...archiveConfig, matchId: 'conceded-match' }, { archiveStore })
+
+    await session.concede()
+
+    expect((await session.getMatchRecord())?.status).toBe('cancelled')
+    expect((await session.getArchivedSession())?.session.status).toBe('abandoned')
+  })
+
   it('saves a completed hand before the match completes and keeps private hero cards separate', async () => {
     const archiveStore = new InMemoryHandHistoryArchiveStore()
     const session = await LocalSoloSession.create({ ...archiveConfig, matchId: 'incremental-archive' }, { archiveStore })

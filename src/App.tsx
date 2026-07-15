@@ -31,6 +31,15 @@ function App() {
     setScreen('play')
   }
 
+  function leaveTable(tableId: string) {
+    const remaining = activeTables.filter((table) => table.tableId !== tableId)
+    setActiveTables(remaining)
+    setJoinedTable((selected) => selected?.tableId === tableId ? (remaining[0] ?? null) : selected)
+    if (remaining.length === 0) {
+      setScreen('lobby')
+    }
+  }
+
   return (
     <>
       <SupabaseIdentityWidget
@@ -70,15 +79,16 @@ function App() {
           onJoinTable={joinTable}
         />
       )}
-      {screen === 'play' && (
+      <div hidden={screen !== 'play'}>
         <PokerTable
           joinedTable={joinedTable}
           joinedTables={activeTables}
           playerIdentity={playerIdentity}
           identityResolved={identityResolved}
           openAdmin={() => setScreen('admin')}
+          onLeaveTable={leaveTable}
         />
-      )}
+      </div>
     </>
   )
 }

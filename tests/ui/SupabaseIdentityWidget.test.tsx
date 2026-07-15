@@ -149,12 +149,10 @@ describe('SupabaseIdentityWidget', () => {
   it('keeps the default repository factory stable after a signed-in profile render', async () => {
     const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
     const { client, getSession, onAuthStateChange } = createClientMock(session, {
-      player_profiles: {
-        id: 'profile-1',
-        account_id: 'account-1',
-        screen_name: 'StableRiver',
-        avatar_url: null,
-        visibility: 'private',
+      profiles: {
+        id: 'account-1',
+        display_name: 'StableRiver',
+        email: 'player@example.com',
         created_at: '2026-07-15T12:00:00.000Z',
         updated_at: '2026-07-15T12:00:00.000Z',
       },

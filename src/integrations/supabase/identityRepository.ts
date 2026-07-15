@@ -18,6 +18,14 @@ export interface PlayerProfileDraft {
   visibility?: PlayerProfileRow['visibility']
 }
 
+interface DeployedProfileRow {
+  id: string
+  display_name: string | null
+  email: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ClientPlayerIdentity {
   profileId: string
   accountId: string
@@ -51,32 +59,30 @@ export class SupabaseIdentityRepository {
 
   async getOwnProfile(accountId: string): Promise<PlayerProfileRow | null> {
     const { data, error } = await this.client
-      .from('player_profiles')
-      .select('id, account_id, screen_name, avatar_url, visibility, created_at, updated_at')
-      .eq('account_id', accountId)
-      .maybeSingle<PlayerProfileRow>()
+      .from('profiles')
+      .select('id, display_name, email, created_at, updated_at')
+      .eq('id', accountId)
+      .maybeSingle<DeployedProfileRow>()
     throwIfError(error)
-    return data
+    return data ? deployedProfileToPlayerProfile(data) : null
   }
 
   async upsertOwnProfile(profile: PlayerProfileDraft): Promise<PlayerProfileRow> {
     const normalized = normalizeProfileDraft(profile)
     const { data, error } = await this.client
-      .from('player_profiles')
-      .upsert({
-        account_id: normalized.accountId,
-        screen_name: normalized.screenName,
-        avatar_url: normalized.avatarUrl,
-        visibility: normalized.visibility,
+      .from('profiles')
+      .update({
+        display_name: normalized.screenName,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'account_id' })
-      .select('id, account_id, screen_name, avatar_url, visibility, created_at, updated_at')
-      .single<PlayerProfileRow>()
+      })
+      .eq('id', normalized.accountId)
+      .select('id, display_name, email, created_at, updated_at')
+      .single<DeployedProfileRow>()
     throwIfError(error)
     if (!data) {
       throw new Error('Supabase profile upsert returned no profile row.')
     }
-    return data
+    return deployedProfileToPlayerProfile(data)
   }
 
   async listOwnArchiveMetadata(accountId: string): Promise<RestrictedArchiveMetadataRow[]> {
@@ -88,6 +94,19 @@ export class SupabaseIdentityRepository {
       .limit(100) as SupabaseQueryResult<RestrictedArchiveMetadataRow[]>
     throwIfError(result.error)
     return result.data ?? []
+  }
+}
+
+function deployedProfileToPlayerProfile(profile: DeployedProfileRow): PlayerProfileRow {
+  const emailName = profile.email?.split('@')[0]?.trim()
+  return {
+    id: profile.id,
+    account_id: profile.id,
+    screen_name: profile.display_name?.trim() || emailName || 'Player',
+    avatar_url: null,
+    visibility: 'private',
+    created_at: profile.created_at,
+    updated_at: profile.updated_at,
   }
 }
 

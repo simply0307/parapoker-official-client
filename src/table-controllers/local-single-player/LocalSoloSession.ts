@@ -194,6 +194,24 @@ export class LocalSoloSession {
     return this.getSnapshot()
   }
 
+  async concede(): Promise<void> {
+    if (this.completed) {
+      return
+    }
+    const snapshot = this.controller.getSnapshot()
+    const completedAt = new Date().toISOString()
+    this.completed = true
+    await this.matchStore.completeMatch(this.matchId, {
+      status: 'cancelled',
+      winnerSeatIds: [],
+      finalStacks: finalStacks(snapshot.publicView.seats),
+      completedAt,
+    })
+    if (this.archiveStore && this.archiveRecord) {
+      this.archiveRecord = await this.archiveStore.abandonSession(this.matchId, completedAt)
+    }
+  }
+
   async listPublicSessionEvents(): Promise<EventRecord[]> {
     return this.eventStore.listPublicEvents(this.matchId)
   }

@@ -133,6 +133,7 @@ export interface FinalizeArchiveSessionInput {
 
 export interface HandHistoryArchiveStore {
   createActiveSession(input: CreateArchiveSessionInput): Promise<ArchivedSessionRecord>
+  abandonSession(matchId: string, completedAt?: string): Promise<ArchivedSessionRecord>
   upsertCompletedHand(hand: ArchivedHandRecord): Promise<void>
   upsertSeatPrivateHand(privateHand: SeatPrivateHandArchive): Promise<void>
   finalizeCompletedSession(input: FinalizeArchiveSessionInput): Promise<ArchivedSessionRecord>

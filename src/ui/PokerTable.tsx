@@ -32,12 +32,14 @@ export function PokerTable({
   playerIdentity = null,
   identityResolved = true,
   openAdmin = () => {},
+  onLeaveTable = () => {},
 }: {
   joinedTable?: LobbyTableInstance | null
   joinedTables?: LobbyTableInstance[]
   playerIdentity?: ClientPlayerIdentity | null
   identityResolved?: boolean
   openAdmin?: () => void
+  onLeaveTable?: (tableId: string) => void
 }) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
   const lobbySessionRefs = useRef(new Map<string, LocalSoloSession>())
@@ -226,13 +228,24 @@ export function PokerTable({
     setSetupError('')
   }
 
-  function changeSetup() {
+  async function changeSetup() {
     const abandoningActiveMatch = snapshot?.publicView.status === 'handInProgress' || snapshot?.publicView.status === 'waitingForHand'
     if (abandoningActiveMatch && !snapshot.summary) {
-      const confirmed = window.confirm('Abandon this local match and return to setup?')
+      const confirmed = window.confirm('Concede this match and leave the table?')
       if (!confirmed) {
         return
       }
+      await sessionRef.current?.concede()
+    }
+    if (joinedTable) {
+      lobbySessionRefs.current.delete(joinedTable.tableId)
+      setLobbySnapshots((current) => {
+        const next = { ...current }
+        delete next[joinedTable.tableId]
+        return next
+      })
+      startedLobbyTableIdRef.current = null
+      onLeaveTable(joinedTable.tableId)
     }
     sessionRef.current = null
     setSnapshot(null)
@@ -306,7 +319,7 @@ export function PokerTable({
       setHistoryOpen={setHistoryOpen}
       tableLayout={tableLayout}
       setTableLayout={setTableLayout}
-      changeSetup={changeSetup}
+      changeSetup={() => void changeSetup()}
       startNext={() => void startNext()}
       rematchSameSeed={rematchSameSeed}
       rematchRandomSeed={rematchRandomSeed}

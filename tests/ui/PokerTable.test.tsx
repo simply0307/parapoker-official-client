@@ -83,8 +83,8 @@ describe('PokerTable', () => {
 
     expect(await screen.findByText('Seed trimmed-seed')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
-    fireEvent.change(screen.getByLabelText('Seed'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Concede match' }))
+    fireEvent.change(await screen.findByLabelText('Seed'), { target: { value: '' } })
     fireEvent.click(screen.getByText('Random local seed'))
     expect(screen.getByLabelText('Seed')).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
@@ -237,21 +237,21 @@ describe('PokerTable', () => {
     })
   })
 
-  it('requires confirmation before abandoning an active match for setup', async () => {
+  it('requires confirmation before conceding an active match', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<PokerTable />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
     expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Concede match' }))
 
-    expect(confirm).toHaveBeenCalledWith('Abandon this local match and return to setup?')
+    expect(confirm).toHaveBeenCalledWith('Concede this match and leave the table?')
     expect(screen.getByLabelText('Poker table')).toBeInTheDocument()
 
     confirm.mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Change setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Concede match' }))
 
-    expect(screen.getByText('Start a Local Solo Match')).toBeInTheDocument()
+    expect(await screen.findByText('Start a Local Solo Match')).toBeInTheDocument()
     expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
   })
 

@@ -21,9 +21,9 @@ describe('Supabase identity repository boundary', () => {
     expect(() => normalizeProfileDraft({ accountId: 'account-1', screenName: 'ab' })).toThrow('Screen name')
   })
 
-  it('reads and upserts only the signed-in account profile surface', async () => {
+  it('adapts the deployed profiles table into the client player identity surface', async () => {
     const profile: PlayerProfileRow = {
-      id: 'profile-1',
+      id: 'account-1',
       account_id: 'account-1',
       screen_name: 'RiverPort',
       avatar_url: null,
@@ -32,7 +32,13 @@ describe('Supabase identity repository boundary', () => {
       updated_at: '2026-07-15T12:00:00.000Z',
     }
     const client = createMockClient({
-      player_profiles: profile,
+      profiles: {
+        id: 'account-1',
+        display_name: 'RiverPort',
+        email: 'player@example.com',
+        created_at: '2026-07-15T12:00:00.000Z',
+        updated_at: '2026-07-15T12:00:00.000Z',
+      },
     })
     const repository = new SupabaseIdentityRepository(client)
 
@@ -44,9 +50,13 @@ describe('Supabase identity repository boundary', () => {
     })).resolves.toEqual(profile)
 
     expect(client.calls).toContainEqual(expect.objectContaining({
-      table: 'player_profiles',
+      table: 'profiles',
       operation: 'eq',
-      args: ['account_id', 'account-1'],
+      args: ['id', 'account-1'],
+    }))
+    expect(client.calls).toContainEqual(expect.objectContaining({
+      table: 'profiles',
+      operation: 'update',
     }))
     expect(JSON.stringify(client.calls)).not.toContain('service_role')
     expect(JSON.stringify(client.calls)).not.toContain('SERVICE_ROLE')
