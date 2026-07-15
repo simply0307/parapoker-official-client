@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  completedSessionPackageToParaPokerSiteCsv,
-  stableSessionNumber,
-} from '../../src/exports/paraPokerSiteCsv'
+import { completedSessionPackageToParaPokerSiteCsv } from '../../src/exports/paraPokerSiteCsv'
 import { LocalSoloSession, type LocalSoloSessionConfig } from '../../src/table-controllers/local-single-player/LocalSoloSession'
 
 const baseConfig: LocalSoloSessionConfig = {
@@ -15,62 +12,25 @@ const baseConfig: LocalSoloSessionConfig = {
 }
 
 describe('Para Poker site CSV export', () => {
-  it('exports normalized rows with required session metadata for site import', async () => {
+  it('exports Poker Now-style rows with hand boundaries recognized by the site importer', async () => {
     const session = await completedSession(baseConfig)
     const exported = await session.exportCompletedSessionPackage()
     const csv = completedSessionPackageToParaPokerSiteCsv(exported)
-    const lines = csv.split('\n')
-    const headers = lines[0].split(',')
-    const firstRow = parseCsvLine(lines[1])
-    const column = (name: string) => firstRow[headers.indexOf(name)]
+    const rows = parseCsv(csv)
+    const entries = rows.map((row) => row.entry)
+    const startingHands = entries.filter((entry) => /-- starting hand #\d+/i.test(entry))
+    const endingHands = entries.filter((entry) => /-- ending hand #\d+/i.test(entry))
 
-    expect(headers).toEqual([
-      'session_number',
-      'session_code',
-      'season_code',
-      'table_name',
-      'format',
-      'played_at',
-      'hand_no',
-      'hand_code',
-      'start_time',
-      'board',
-      'winner_name',
-      'pot_collected',
-      'winning_hand',
-      'showdown',
-      'raw_result',
-      'log_order',
-      'street',
-      'player_name',
-      'action',
-      'amount',
-      'target_contribution',
-      'raise_to',
-      'all_in',
-      'raw_entry',
-    ])
-    expect(Number(column('session_number'))).toBeGreaterThan(0)
-    expect(Number(column('session_number'))).toBeLessThanOrEqual(2_000_000_000)
-    expect(column('session_code')).toBe('local-match-1784123964485-118673')
-    expect(column('season_code')).toBe('LOCAL')
-    expect(column('hand_no')).toMatch(/^\d+$/)
-    expect(column('player_name')).not.toBe('')
-    expect(column('action')).not.toBe('')
-    expect(column('raw_entry')).not.toBe('')
+    expect(csv.split('\n')[0]).toBe('entry,at,order')
+    expect(startingHands).toHaveLength(exported.hands.length)
+    expect(endingHands).toHaveLength(exported.hands.length)
+    expect(entries.some((entry) => /collected \d+ from pot/i.test(entry))).toBe(true)
+    expect(entries.some((entry) => /posts a (small|big) blind of \d+/i.test(entry))).toBe(true)
+    expect(rows.every((row) => Number.isFinite(Number(row.order)))).toBe(true)
     expect(csv).not.toContain('para-site-csv-seed-must-not-leak')
     expect(csv).not.toContain('holeCardsDealt')
     expect(csv).not.toContain('deck')
     expect(csv).not.toContain('rngState')
-  })
-
-  it('derives stable positive session numbers from session codes', () => {
-    expect(stableSessionNumber('local-match-1784123964485-118673')).toBe(
-      stableSessionNumber('local-match-1784123964485-118673'),
-    )
-    expect(stableSessionNumber('local-match-1784123964485-118673')).not.toBe(
-      stableSessionNumber('local-match-1784123964485-118674'),
-    )
   })
 })
 
@@ -94,6 +54,15 @@ async function completedSession(config: LocalSoloSessionConfig): Promise<LocalSo
 
   expect(session.getSnapshot().summary).toBeTruthy()
   return session
+}
+
+function parseCsv(csv: string): Array<Record<string, string>> {
+  const lines = csv.split('\n')
+  const headers = parseCsvLine(lines[0])
+  return lines.slice(1).filter(Boolean).map((line) => {
+    const values = parseCsvLine(line)
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
+  })
 }
 
 function parseCsvLine(line: string): string[] {
