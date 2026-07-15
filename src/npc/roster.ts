@@ -1,6 +1,6 @@
 import type { SeatId } from '../poker-engine'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from './config'
-import { createHeadsUpPreflopStrategy } from './preflopRanges'
+import { createMultiFormatPreflopStrategy } from './preflopRanges'
 
 export interface LocalNpcPresentation {
   seatId: SeatId
@@ -12,8 +12,8 @@ export interface LocalNpcPresentation {
 
 export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
   {
-    id: 'strategy-balanced-caller-v1',
-    version: 1,
+    id: 'strategy-balanced-caller-v2',
+    version: 2,
     name: 'Balanced Caller',
     status: 'active',
     difficulty: 'steady',
@@ -29,15 +29,16 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.44,
       pressureRaiseMultiplier: 2.6,
     },
-    preflopStrategy: createHeadsUpPreflopStrategy({
-      id: 'balanced-caller-hu-preflop-v1',
+    preflopStrategy: createMultiFormatPreflopStrategy({
+      id: 'balanced-caller-preflop-v2',
+      version: 2,
       looseness: 0.36,
       aggression: 0.52,
     }),
   },
   {
-    id: 'strategy-pressure-raiser-v1',
-    version: 1,
+    id: 'strategy-pressure-raiser-v2',
+    version: 2,
     name: 'Pressure Raiser',
     status: 'active',
     difficulty: 'steady',
@@ -53,8 +54,9 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.58,
       pressureRaiseMultiplier: 3.4,
     },
-    preflopStrategy: createHeadsUpPreflopStrategy({
-      id: 'pressure-raiser-hu-preflop-v1',
+    preflopStrategy: createMultiFormatPreflopStrategy({
+      id: 'pressure-raiser-preflop-v2',
+      version: 2,
       looseness: 0.31,
       aggression: 0.78,
       sizing: {
@@ -65,8 +67,8 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-board-watcher-v1',
-    version: 1,
+    id: 'strategy-board-watcher-v2',
+    version: 2,
     name: 'Board Watcher',
     status: 'active',
     difficulty: 'steady',
@@ -82,15 +84,16 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.64,
       pressureRaiseMultiplier: 2.8,
     },
-    preflopStrategy: createHeadsUpPreflopStrategy({
-      id: 'board-watcher-hu-preflop-v1',
+    preflopStrategy: createMultiFormatPreflopStrategy({
+      id: 'board-watcher-preflop-v2',
+      version: 2,
       looseness: 0.42,
       aggression: 0.46,
     }),
   },
   {
-    id: 'strategy-pot-controller-v1',
-    version: 1,
+    id: 'strategy-pot-controller-v2',
+    version: 2,
     name: 'Pot Controller',
     status: 'active',
     difficulty: 'steady',
@@ -106,8 +109,9 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.34,
       pressureRaiseMultiplier: 2.3,
     },
-    preflopStrategy: createHeadsUpPreflopStrategy({
-      id: 'pot-controller-hu-preflop-v1',
+    preflopStrategy: createMultiFormatPreflopStrategy({
+      id: 'pot-controller-preflop-v2',
+      version: 2,
       looseness: 0.28,
       aggression: 0.4,
       sizing: {
@@ -117,8 +121,8 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-value-hunter-v1',
-    version: 1,
+    id: 'strategy-value-hunter-v2',
+    version: 2,
     name: 'Value Hunter',
     status: 'active',
     difficulty: 'steady',
@@ -134,8 +138,9 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.52,
       pressureRaiseMultiplier: 2.9,
     },
-    preflopStrategy: createHeadsUpPreflopStrategy({
-      id: 'value-hunter-hu-preflop-v1',
+    preflopStrategy: createMultiFormatPreflopStrategy({
+      id: 'value-hunter-preflop-v2',
+      version: 2,
       looseness: 0.3,
       aggression: 0.58,
     }),
@@ -149,7 +154,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Measured caller',
     description: 'A careful regular who prefers clean prices and steady value.',
     avatarKey: 'maven',
-    strategyProfileId: 'strategy-balanced-caller-v1',
+    strategyProfileId: 'strategy-balanced-caller-v2',
     status: 'active',
   },
   {
@@ -158,7 +163,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pressure raiser',
     description: 'A table captain who tests passive lines before and after the flop.',
     avatarKey: 'rook',
-    strategyProfileId: 'strategy-pressure-raiser-v1',
+    strategyProfileId: 'strategy-pressure-raiser-v2',
     status: 'active',
   },
   {
@@ -167,7 +172,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Board watcher',
     description: 'A texture-aware opponent who respects coordinated boards.',
     avatarKey: 'quinn',
-    strategyProfileId: 'strategy-board-watcher-v1',
+    strategyProfileId: 'strategy-board-watcher-v2',
     status: 'active',
   },
   {
@@ -176,7 +181,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pot controller',
     description: 'A low-variance opponent who keeps marginal spots contained.',
     avatarKey: 'sol',
-    strategyProfileId: 'strategy-pot-controller-v1',
+    strategyProfileId: 'strategy-pot-controller-v2',
     status: 'active',
   },
   {
@@ -185,7 +190,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Value hunter',
     description: 'A value-first opponent who leans into made hands.',
     avatarKey: 'vega',
-    strategyProfileId: 'strategy-value-hunter-v1',
+    strategyProfileId: 'strategy-value-hunter-v2',
     status: 'active',
   },
 ]

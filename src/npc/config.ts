@@ -33,6 +33,7 @@ export type NpcPreflopSituation =
   | 'unopened'
   | 'facingLimp'
   | 'facingOpen'
+  | 'facingOpenWithCallers'
   | 'facingRaiseAfterLimp'
   | 'facingThreeBet'
   | 'facingFourBet'
@@ -51,6 +52,9 @@ export interface NpcPreflopRangeNode {
   stackDepths: NpcPreflopStackDepth[]
   situations: NpcPreflopSituation[]
   raiseSizeBuckets?: NpcPreflopRaiseSizeBucket[]
+  aggressorPositions?: PositionLabel[]
+  minimumLimpers?: number
+  minimumCallers?: number
   hands: Record<string, NpcPreflopActionFrequency[]>
 }
 
@@ -59,6 +63,8 @@ export interface NpcPreflopSizingConfig {
   isolationRaiseBigBlinds: number
   threeBetInPositionMultiplier: number
   threeBetOutOfPositionMultiplier: number
+  squeezeInPositionMultiplier: number
+  squeezeOutOfPositionMultiplier: number
   fourBetMultiplier: number
 }
 

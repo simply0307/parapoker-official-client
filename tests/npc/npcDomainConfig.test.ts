@@ -36,6 +36,9 @@ describe('NPC domain configuration', () => {
         schemaVersion: 'npc-preflop-v1',
         version: expect.any(Number),
       }))
+      expect(new Set(profile?.preflopStrategy?.nodes.flatMap((node) => node.formats))).toEqual(
+        new Set(['heads-up', 'six-max']),
+      )
     }
   })
 
@@ -54,9 +57,9 @@ describe('NPC domain configuration', () => {
   })
 
   it('lets archetypes alter strategy through profile-owned policy config', () => {
-    const maven = localNpcStrategyProfile('strategy-balanced-caller-v1')
-    const rook = localNpcStrategyProfile('strategy-pressure-raiser-v1')
-    const quinn = localNpcStrategyProfile('strategy-board-watcher-v1')
+    const maven = localNpcStrategyProfile('strategy-balanced-caller-v2')
+    const rook = localNpcStrategyProfile('strategy-pressure-raiser-v2')
+    const quinn = localNpcStrategyProfile('strategy-board-watcher-v2')
 
     expect(maven?.policyConfig).not.toEqual(rook?.policyConfig)
     expect(quinn?.policyConfig).not.toEqual(rook?.policyConfig)
@@ -78,7 +81,7 @@ describe('NPC domain configuration', () => {
       minRaise: 2,
       events: [],
     } as unknown as PrivateSeatView
-    const profile = localNpcStrategyProfile('strategy-pressure-raiser-v1')
+    const profile = localNpcStrategyProfile('strategy-pressure-raiser-v2')
     const rng = createRng('npc-domain-context')
     const context = createNpcDecisionContext(
       view,

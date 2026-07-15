@@ -31,7 +31,7 @@ describe('NPC registry store', () => {
       id: 'npc-maven',
       name: 'Maven Prime',
       archetypeLabel: 'Measured caller',
-      strategyProfileId: 'strategy-balanced-caller-v1',
+      strategyProfileId: 'strategy-balanced-caller-v2',
       status: 'active',
     })
     updated.name = 'Mutated'
@@ -76,7 +76,7 @@ describe('NPC registry store', () => {
       id: 'npc-maven',
       name: 'Maven Persisted',
       archetypeLabel: 'Measured caller',
-      strategyProfileId: 'strategy-balanced-caller-v1',
+      strategyProfileId: 'strategy-balanced-caller-v2',
       status: 'active',
     })
 
