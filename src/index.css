@@ -93,11 +93,30 @@ button.primary {
   gap: 3px;
 }
 
-.identity-widget form {
+.identity-widget form,
+.identity-account-shell,
+.identity-account-summary {
   min-width: 0;
+}
+
+.identity-widget form,
+.identity-account-summary {
   display: flex;
   align-items: end;
   gap: 6px;
+}
+
+.identity-account-shell {
+  display: grid;
+  gap: 5px;
+}
+
+.identity-account-summary {
+  justify-content: space-between;
+}
+
+.identity-profile-form {
+  flex-wrap: wrap;
 }
 
 .identity-widget label {
@@ -115,7 +134,8 @@ button.primary {
   line-height: 1.1;
 }
 
-.identity-widget input {
+.identity-widget input,
+.identity-widget select {
   width: min(230px, 40vw);
   min-height: 30px;
   border: 1px solid #9ead9f;
@@ -125,13 +145,17 @@ button.primary {
   font-weight: 700;
 }
 
+.identity-widget select {
+  width: 112px;
+}
+
 .identity-widget button {
   min-height: 30px;
   padding: 0 10px;
   font-size: 12px;
 }
 
-.identity-widget > span {
+.identity-account-summary > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
