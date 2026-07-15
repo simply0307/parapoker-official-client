@@ -24,4 +24,13 @@ describe('Supabase browser client boundary', () => {
     expect(createSupabaseBrowserClient({ url: 'https://example.supabase.co' })).toBeNull()
     expect(createSupabaseBrowserClient({ publishableKey: 'publishable-key' })).toBeNull()
   })
+
+  it('reuses one auth client per public configuration', () => {
+    const config = {
+      url: 'https://singleton-test.supabase.co',
+      publishableKey: 'publishable-singleton-test-key',
+    }
+
+    expect(createSupabaseBrowserClient(config)).toBe(createSupabaseBrowserClient(config))
+  })
 })

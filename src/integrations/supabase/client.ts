@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
 export interface SupabasePublicConfig {
   url?: string
@@ -20,6 +20,9 @@ export interface SupabaseAuthApi {
     options?: { emailRedirectTo?: string }
   }) => Promise<{ error: SupabaseAuthError | null }>
   signOut: () => Promise<{ error: SupabaseAuthError | null }>
+  updateUser: (input: {
+    data: Record<string, unknown>
+  }) => Promise<{ data: { user: User | null }; error: SupabaseAuthError | null }>
 }
 
 export interface SupabaseBrowserClient {
@@ -48,6 +51,12 @@ export interface SupabaseQueryBuilder {
   ) => PromiseLike<TResult1 | TResult2>
 }
 
+const clientCacheGlobal = globalThis as typeof globalThis & {
+  __paraPokerSupabaseClients?: Map<string, SupabaseBrowserClient>
+}
+const browserClients = clientCacheGlobal.__paraPokerSupabaseClients ?? new Map<string, SupabaseBrowserClient>()
+clientCacheGlobal.__paraPokerSupabaseClients = browserClients
+
 export function getSupabasePublicConfig(env: Partial<ImportMetaEnv> = import.meta.env): SupabasePublicConfig {
   return {
     url: env.VITE_SUPABASE_URL?.trim(),
@@ -66,11 +75,19 @@ export function createSupabaseBrowserClient(
     return null
   }
 
-  return createClient(config.url, config.publishableKey, {
+  const cacheKey = `${config.url}\n${config.publishableKey}`
+  const existing = browserClients.get(cacheKey)
+  if (existing) {
+    return existing
+  }
+
+  const client = createClient(config.url, config.publishableKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
   }) as unknown as SupabaseBrowserClient
+  browserClients.set(cacheKey, client)
+  return client
 }

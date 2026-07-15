@@ -135,6 +135,31 @@ export function clientPlayerIdentityFromProfile(profile: PlayerProfileRow): Clie
   }
 }
 
+export function clientPlayerIdentityFromAuthUser(
+  user: { id: string; user_metadata?: Record<string, unknown> },
+): ClientPlayerIdentity | null {
+  const metadata = user.user_metadata ?? {}
+  const screenName = firstString(metadata.display_name, metadata.screen_name, metadata.full_name)
+  if (!screenName) {
+    return null
+  }
+  return {
+    profileId: user.id,
+    accountId: user.id,
+    screenName,
+    avatarUrl: firstString(metadata.avatar_url, metadata.picture),
+  }
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return null
+}
+
 function throwIfError(error: { message: string } | null): void {
   if (error) {
     throw new Error(error.message)

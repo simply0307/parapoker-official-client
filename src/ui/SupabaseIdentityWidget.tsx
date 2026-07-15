@@ -7,6 +7,7 @@ import {
 } from '../integrations/supabase/client'
 import {
   clientPlayerIdentityFromProfile,
+  clientPlayerIdentityFromAuthUser,
   SupabaseIdentityRepository,
   type ClientPlayerIdentity,
   type PlayerProfileRow,
@@ -62,8 +63,16 @@ export function SupabaseIdentityWidget({
       if (loadedProfile) {
         onIdentityChange(clientPlayerIdentityFromProfile(loadedProfile))
       } else {
-        onIdentityLoading()
-        setMessage('Signed in. Create your local Para profile shell.')
+        const authIdentity = clientPlayerIdentityFromAuthUser(nextSession.user)
+        if (authIdentity) {
+          setScreenName(authIdentity.screenName)
+          setAvatarUrl(authIdentity.avatarUrl ?? '')
+          onIdentityChange(authIdentity)
+          setMessage('Signed in with your saved Para identity.')
+        } else {
+          onIdentityLoading()
+          setMessage('Signed in. Create your local Para profile shell.')
+        }
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
@@ -152,26 +161,51 @@ export function SupabaseIdentityWidget({
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!repository || !session?.user.id) {
+    if (!client || !repository || !session?.user.id) {
       setMessage('Sign in before saving a profile.')
       return
     }
 
     setStatus('loading')
     try {
-      const savedProfile = await repository.upsertOwnProfile({
-        accountId: session.user.id,
-        email: session.user.email,
-        screenName,
-        avatarUrl: avatarUrl.trim() || null,
-        visibility,
+      const normalizedName = screenName.trim()
+      const normalizedAvatarUrl = avatarUrl.trim() || null
+      if (normalizedName.length < 3 || normalizedName.length > 32) {
+        throw new Error('Screen name must be between 3 and 32 characters.')
+      }
+      const { data, error } = await client.auth.updateUser({
+        data: {
+          display_name: normalizedName,
+          avatar_url: normalizedAvatarUrl,
+        },
       })
-      setProfile(savedProfile)
-      setScreenName(savedProfile.screen_name)
-      setAvatarUrl(savedProfile.avatar_url ?? '')
-      setVisibility(savedProfile.visibility)
-      onIdentityChange(clientPlayerIdentityFromProfile(savedProfile))
-      setMessage('Profile saved. Seat ownership still requires table authority binding.')
+      if (error) {
+        throw new Error(error.message)
+      }
+      const authIdentity = data.user ? clientPlayerIdentityFromAuthUser(data.user) : null
+      if (!authIdentity) {
+        throw new Error('Supabase did not return the saved player identity.')
+      }
+
+      try {
+        const savedProfile = await repository.upsertOwnProfile({
+          accountId: session.user.id,
+          email: session.user.email,
+          screenName: normalizedName,
+          avatarUrl: normalizedAvatarUrl,
+          visibility,
+        })
+        setProfile(savedProfile)
+        setVisibility(savedProfile.visibility)
+        onIdentityChange(clientPlayerIdentityFromProfile(savedProfile))
+        setMessage('Profile saved. Seat ownership still requires table authority binding.')
+      } catch {
+        setProfile(null)
+        onIdentityChange(authIdentity)
+        setMessage('Screen name saved. Public profile synchronization is currently unavailable.')
+      }
+      setScreenName(authIdentity.screenName)
+      setAvatarUrl(authIdentity.avatarUrl ?? '')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))
     } finally {

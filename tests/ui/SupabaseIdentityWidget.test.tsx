@@ -69,6 +69,33 @@ describe('SupabaseIdentityWidget', () => {
     expect(onIdentityChange).not.toHaveBeenCalledWith(null)
   })
 
+  it('keeps the saved auth identity usable when public profile synchronization fails', async () => {
+    const session = { user: { id: 'account-1', email: 'player@example.com', user_metadata: {} } } as Session
+    const { client } = createClientMock(session)
+    const repository = createRepositoryMock(null)
+    repository.upsertOwnProfile.mockRejectedValueOnce(new Error('profile row policy mismatch'))
+    const onIdentityChange = vi.fn()
+
+    render(
+      <SupabaseIdentityWidget
+        clientFactory={() => client}
+        repositoryFactory={() => repository}
+        onIdentityChange={onIdentityChange}
+      />,
+    )
+
+    await screen.findByText('Signed in. Create your local Para profile shell.')
+    fireEvent.click(screen.getByText('Profile'))
+    fireEvent.change(screen.getByLabelText('Player screen name'), { target: { value: 'Simply' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    expect(await screen.findByText('Screen name saved. Public profile synchronization is currently unavailable.')).toBeInTheDocument()
+    expect(onIdentityChange).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: 'account-1',
+      screenName: 'Simply',
+    }))
+  })
+
   it('loads and saves the signed-in player profile shell without binding seat authority', async () => {
     const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
     const { client } = createClientMock(session)
@@ -193,6 +220,18 @@ describe('SupabaseIdentityWidget', () => {
 function createClientMock(initialSession: Session | null = null, dataByTable: Record<string, unknown> = {}) {
   const signInWithOtp = vi.fn(async () => ({ error: null }))
   const signOut = vi.fn(async () => ({ error: null }))
+  const updateUser = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+    data: {
+      user: initialSession ? {
+        ...initialSession.user,
+        user_metadata: {
+          ...initialSession.user.user_metadata,
+          ...data,
+        },
+      } : null,
+    },
+    error: null,
+  }))
   const getSession = vi.fn(async () => ({ data: { session: initialSession }, error: null }))
   const unsubscribe = vi.fn()
   const onAuthStateChange = vi.fn(() => ({
@@ -205,13 +244,14 @@ function createClientMock(initialSession: Session | null = null, dataByTable: Re
       onAuthStateChange,
       signInWithOtp,
       signOut,
+      updateUser,
     },
     from(table: string) {
       return createQueryBuilder(dataByTable[table] ?? null)
     },
   } as unknown as SupabaseBrowserClient
 
-  return { client, getSession, onAuthStateChange, signInWithOtp, signOut, unsubscribe }
+  return { client, getSession, onAuthStateChange, signInWithOtp, signOut, updateUser, unsubscribe }
 }
 
 function createQueryBuilder(tableData: unknown) {

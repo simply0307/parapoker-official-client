@@ -107,6 +107,7 @@ function createMockClient(dataByTable: TableData): SupabaseBrowserClient & { cal
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
       signInWithOtp: async () => ({ error: null }),
       signOut: async () => ({ error: null }),
+      updateUser: async () => ({ data: { user: null }, error: null }),
     },
     from(table: string) {
       return createBuilder(table, dataByTable[table] ?? null, calls)
