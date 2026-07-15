@@ -12,6 +12,7 @@
     "hands",
     "orderedPublicEvents",
     "resultSummary",
+    "result",
     "paraPokerSite",
     "integrity"
   ],
@@ -62,11 +63,40 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["handId", "handNumber", "dealerSeatId", "participantSeatIds", "board", "revealedCards", "potAwards"]
+        "required": [
+          "handId",
+          "handNumber",
+          "startedAt",
+          "endedAt",
+          "dealerSeatId",
+          "participantSeatIds",
+          "blinds",
+          "positions",
+          "stackCheckpoints",
+          "contributions",
+          "board",
+          "revealedCards",
+          "potSummary",
+          "potAwards"
+        ],
+        "properties": {
+          "stackCheckpoints": {
+            "type": "object",
+            "required": ["initial", "final"]
+          },
+          "potSummary": {
+            "type": "object",
+            "required": ["totalContributed", "totalAwarded", "pots", "refunds"]
+          }
+        }
       }
     },
     "orderedPublicEvents": {
       "type": "array"
+    },
+    "result": {
+      "type": "object",
+      "required": ["winnerSeatIds", "finalStacks", "finishOrder", "eliminationOrder"]
     },
     "integrity": {
       "type": "object",

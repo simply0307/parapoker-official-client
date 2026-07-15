@@ -23,6 +23,7 @@ export interface MatchRecordDraft {
     smallBlind: number
     bigBlind: number
   }
+  createdAt?: string
 }
 
 export interface HandRecordDraft {
@@ -44,10 +45,13 @@ export interface MatchResultDraft {
   status: Extract<MatchRecordStatus, 'complete' | 'cancelled'>
   winnerSeatIds: SeatId[]
   finalStacks: Record<SeatId, number>
+  completedAt?: string
 }
 
 export interface MatchRecord extends MatchRecordDraft {
   status: MatchRecordStatus
+  createdAt: string
+  completedAt?: string
   hands: HandRecordDraft[]
   result?: MatchResultDraft
 }
@@ -56,6 +60,7 @@ export interface EventRecordDraft {
   matchId: string
   tableId: string
   event: HandHistoryEvent
+  recordedAt?: string
 }
 
 export interface EventRecord extends EventRecordDraft {
@@ -63,6 +68,7 @@ export interface EventRecord extends EventRecordDraft {
   handId: number
   sequenceNumber: number
   visibility: HandHistoryEvent['visibility']
+  recordedAt: string
   visibilitySeatId?: SeatId
   privacyClass: EventPrivacyClass
 }

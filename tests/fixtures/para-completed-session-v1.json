@@ -47,10 +47,47 @@
     {
       "handId": "hand-1",
       "handNumber": 1,
+      "startedAt": "1970-01-01T00:01:40.001Z",
+      "endedAt": "1970-01-01T00:01:40.005Z",
       "dealerSeatId": "human",
       "participantSeatIds": ["human", "npc-1"],
+      "blinds": {
+        "smallBlindSeatId": "human",
+        "bigBlindSeatId": "npc-1",
+        "smallBlind": 1,
+        "bigBlind": 2
+      },
+      "positions": {
+        "human": "BTN/SB",
+        "npc-1": "BB"
+      },
+      "stackCheckpoints": {
+        "initial": {
+          "human": 200,
+          "npc-1": 200
+        },
+        "final": {
+          "human": 199,
+          "npc-1": 201
+        }
+      },
+      "contributions": {
+        "human": 1,
+        "npc-1": 2
+      },
       "board": [],
       "revealedCards": {},
+      "potSummary": {
+        "totalContributed": 3,
+        "totalAwarded": 3,
+        "pots": [
+          {
+            "amount": 3,
+            "eligibleSeatIds": ["npc-1"]
+          }
+        ],
+        "refunds": []
+      },
       "potAwards": [
         {
           "seatId": "npc-1",
@@ -140,6 +177,26 @@
     "stats": [],
     "mode": "heads-up"
   },
+  "result": {
+    "winnerSeatIds": ["npc-1"],
+    "finalStacks": {
+      "human": 199,
+      "npc-1": 201
+    },
+    "finishOrder": [
+      {
+        "seatId": "npc-1",
+        "finish": 1,
+        "finalStack": 201
+      },
+      {
+        "seatId": "human",
+        "finish": 2,
+        "finalStack": 199
+      }
+    ],
+    "eliminationOrder": ["human", "npc-1"]
+  },
   "paraPokerSite": {
     "targetVersion": "para-poker-site-import-v1",
     "metadata": {
@@ -148,7 +205,8 @@
       "tableName": "ParaPoker Heads-Up Solo",
       "format": "ParaPoker completed-session package",
       "handsCount": 1,
-      "playersCount": 2
+      "playersCount": 2,
+      "playedAt": "1970-01-01T00:01:40.001Z"
     },
     "players": [
       {

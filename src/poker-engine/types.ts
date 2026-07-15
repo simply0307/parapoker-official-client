@@ -148,7 +148,12 @@ export type HandHistoryPayload =
       targetContribution: number
     }
   | { type: 'streetAdvanced'; street: Street; communityCards: Card[] }
-  | { type: 'potAwarded'; winners: ShowdownResult['winners'] }
+  | {
+      type: 'potAwarded'
+      winners: ShowdownResult['winners']
+      pots?: Pot[]
+      refunds?: Array<{ seatId: SeatId; amount: number }>
+    }
   | { type: 'showdown'; revealedCards: Record<SeatId, Card[]> }
   | { type: 'matchComplete'; winnerSeatId: SeatId }
 
@@ -175,7 +180,12 @@ export type HandHistoryEvent =
       targetContribution: number
     }>
   | EventEnvelope<{ type: 'streetAdvanced'; street: Street; communityCards: Card[] }>
-  | EventEnvelope<{ type: 'potAwarded'; winners: ShowdownResult['winners'] }>
+  | EventEnvelope<{
+      type: 'potAwarded'
+      winners: ShowdownResult['winners']
+      pots?: Pot[]
+      refunds?: Array<{ seatId: SeatId; amount: number }>
+    }>
   | EventEnvelope<{ type: 'showdown'; revealedCards: Record<SeatId, Card[]> }>
   | EventEnvelope<{ type: 'matchComplete'; winnerSeatId: SeatId }>
 

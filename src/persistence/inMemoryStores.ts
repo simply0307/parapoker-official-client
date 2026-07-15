@@ -26,6 +26,7 @@ export class InMemoryMatchRecordStore implements MatchRecordStore {
   async createMatch(record: MatchRecordDraft): Promise<MatchRecord> {
     const match: MatchRecord = {
       ...clone(record),
+      createdAt: record.createdAt ?? new Date().toISOString(),
       status: 'active',
       hands: [],
     }
@@ -48,6 +49,7 @@ export class InMemoryMatchRecordStore implements MatchRecordStore {
     const updated: MatchRecord = {
       ...match,
       status: result.status,
+      completedAt: result.completedAt ?? new Date().toISOString(),
       result: clone(result),
     }
     this.matches.set(matchId, updated)
@@ -263,10 +265,12 @@ export function createEventRecordDrafts(
   tableId: string,
   events: HandHistoryEvent[],
 ): EventRecordDraft[] {
-  return events.map((event) => ({
+  const recordedAtBase = Date.now()
+  return events.map((event, index) => ({
     matchId,
     tableId,
     event,
+    recordedAt: new Date(recordedAtBase + index).toISOString(),
   }))
 }
 
@@ -285,6 +289,7 @@ function toEventRecord(draft: EventRecordDraft): EventRecord {
     handId: event.handId,
     sequenceNumber: event.sequenceNumber,
     visibility: event.visibility,
+    recordedAt: draft.recordedAt ?? new Date().toISOString(),
     ...(visibilitySeatId ? { visibilitySeatId } : {}),
     privacyClass: privacyClassForEvent(event),
   }

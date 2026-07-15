@@ -379,7 +379,12 @@ function settleUncontested(state: GameState, winnerSeatId: SeatId): void {
     pots: [{ amount, eligibleSeatIds: [winnerSeatId] }],
     revealedCards: {},
   }
-  appendEvent(hand, { type: 'potAwarded', winners: hand.result.winners }, 'public')
+  appendEvent(hand, {
+    type: 'potAwarded',
+    winners: hand.result.winners,
+    pots: hand.result.pots,
+    refunds: [],
+  }, 'public')
   finishHand(state)
 }
 
@@ -408,7 +413,12 @@ function settleShowdown(state: GameState): void {
   hand.street = 'showdown'
   hand.result = result
   appendEvent(hand, { type: 'showdown', revealedCards }, 'public')
-  appendEvent(hand, { type: 'potAwarded', winners: awards }, 'public')
+  appendEvent(hand, {
+    type: 'potAwarded',
+    winners: awards,
+    pots: pots.pots,
+    refunds: pots.refunds,
+  }, 'public')
   finishHand(state)
 }
 

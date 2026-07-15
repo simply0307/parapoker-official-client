@@ -22,10 +22,36 @@ export interface CompletedSessionParticipant {
 export interface CompletedSessionHand {
   handId: string
   handNumber: number
+  startedAt: string
+  endedAt: string
   dealerSeatId: SeatId
   participantSeatIds: SeatId[]
+  blinds: {
+    smallBlindSeatId?: SeatId
+    bigBlindSeatId?: SeatId
+    smallBlind: number
+    bigBlind: number
+  }
+  positions: Record<SeatId, string>
+  stackCheckpoints: {
+    initial: Record<SeatId, number>
+    final: Record<SeatId, number>
+  }
+  contributions: Record<SeatId, number>
   board: string[]
   revealedCards: Record<SeatId, string[]>
+  potSummary: {
+    totalContributed: number
+    totalAwarded: number
+    pots: Array<{
+      amount: number
+      eligibleSeatIds: SeatId[]
+    }>
+    refunds: Array<{
+      seatId: SeatId
+      amount: number
+    }>
+  }
   potAwards: Array<{
     seatId: SeatId
     amount: number
@@ -44,6 +70,8 @@ export interface ParaPokerSiteImportActionPreview {
   player_name: string
   action: string
   amount: number
+  target_contribution: number
+  raise_to?: number
   all_in: boolean
   raw_entry: string
 }
@@ -51,6 +79,7 @@ export interface ParaPokerSiteImportActionPreview {
 export interface ParaPokerSiteImportHandPreview {
   hand_no: number
   hand_code: string
+  start_time: string
   board: string
   winner_name: string
   pot_collected: number
@@ -88,6 +117,16 @@ export interface CompletedSessionPackage {
   hands: CompletedSessionHand[]
   orderedPublicEvents: HandHistoryEvent[]
   resultSummary: CompletedSessionResultSummary
+  result: {
+    winnerSeatIds: SeatId[]
+    finalStacks: Record<SeatId, number>
+    finishOrder: Array<{
+      seatId: SeatId
+      finish: number
+      finalStack: number
+    }>
+    eliminationOrder: SeatId[]
+  }
   paraPokerSite: {
     targetVersion: typeof PARA_SITE_IMPORT_TARGET_VERSION
     metadata: {
@@ -97,6 +136,7 @@ export interface CompletedSessionPackage {
       format: string
       handsCount: number
       playersCount: number
+      playedAt?: string
     }
     players: Array<{
       raw_name: string
@@ -142,18 +182,23 @@ export function buildCompletedSessionPackage(input: BuildCompletedSessionPackage
     throw new Error('Completed-session export requires a completed match.')
   }
 
-  const orderedPublicEvents = input.publicEvents.map((record) => record.event)
+  const orderedPublicRecords = [...input.publicEvents].sort(compareEventRecords)
+  const orderedPublicEvents = orderedPublicRecords.map((record) => record.event)
   const participants = buildParticipants(input)
-  const hands = buildHands(orderedPublicEvents)
+  const hands = buildHands(orderedPublicRecords, participants, input.match.startingStacks, input.match.blinds)
   const siteHands = hands.map((hand) => toSiteHandPreview(hand, orderedPublicEvents, participants))
   const siteActions = siteHands.flatMap((hand) => hand.actions)
+  const packageCreatedAt = input.match.completedAt
+    ?? orderedPublicRecords.at(-1)?.recordedAt
+    ?? input.match.createdAt
+    ?? new Date().toISOString()
   const packageWithoutIntegrity = {
     schemaVersion: COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION,
     source: {
       app: 'parapoker-official-client' as const,
       appVersion: input.appVersion,
       packageCreationVersion: COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION,
-      packageCreatedAt: '1970-01-01T00:00:00.000Z',
+      packageCreatedAt,
       sourceAuthority: 'local-browser' as const,
       sourceMatchId: input.match.matchId,
       sourceTableId: input.match.tableId,
@@ -172,6 +217,7 @@ export function buildCompletedSessionPackage(input: BuildCompletedSessionPackage
     hands,
     orderedPublicEvents,
     resultSummary: sanitizeSummary(input.summary),
+    result: buildResult(input.match, participants),
     paraPokerSite: {
       targetVersion: PARA_SITE_IMPORT_TARGET_VERSION,
       metadata: {
@@ -181,6 +227,7 @@ export function buildCompletedSessionPackage(input: BuildCompletedSessionPackage
         format: 'ParaPoker completed-session package',
         handsCount: hands.length,
         playersCount: participants.length,
+        playedAt: hands[0]?.startedAt ?? packageCreatedAt,
       },
       players: participants.map((participant) => ({
         raw_name: participant.displayName,
@@ -263,47 +310,114 @@ function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedS
   })
 }
 
-function buildHands(events: HandHistoryEvent[]): CompletedSessionHand[] {
-  const byHand = new Map<number, HandHistoryEvent[]>()
-  for (const event of events) {
-    const handEvents = byHand.get(event.handId) ?? []
-    handEvents.push(event)
-    byHand.set(event.handId, handEvents)
+function buildHands(
+  records: EventRecord[],
+  participants: CompletedSessionParticipant[],
+  startingStacks: Record<SeatId, number>,
+  blinds: { smallBlind: number; bigBlind: number },
+): CompletedSessionHand[] {
+  const byHand = new Map<number, EventRecord[]>()
+  for (const record of records) {
+    const handRecords = byHand.get(record.handId) ?? []
+    handRecords.push(record)
+    byHand.set(record.handId, handRecords)
   }
 
-  return [...byHand.entries()].map(([handNumber, handEvents]) => {
-    const started = handEvents.find((event) => event.type === 'handStarted')
-    const street = [...handEvents].reverse().find((event) => event.type === 'streetAdvanced')
-    const showdown = [...handEvents].reverse().find((event) => event.type === 'showdown')
-    const awarded = [...handEvents].reverse().find((event) => event.type === 'potAwarded')
-    const board = street && street.type === 'streetAdvanced'
-      ? street.payload.communityCards.map(cardToString)
-      : []
+  const stacks = new Map<SeatId, number>(
+    participants.map((participant) => [
+      participant.seatId,
+      startingStacks[participant.seatId] ?? participant.startingStack,
+    ]),
+  )
 
-    return {
-      handId: `hand-${handNumber}`,
-      handNumber,
-      dealerSeatId: started && started.type === 'handStarted' ? started.payload.dealerSeatId : '',
-      participantSeatIds: started && started.type === 'handStarted' ? started.payload.participantSeatIds : [],
-      board,
-      revealedCards: showdown && showdown.type === 'showdown'
-        ? Object.fromEntries(
-            Object.entries(showdown.payload.revealedCards).map(([seatId, cards]) => [
-              seatId,
-              cards.map(cardToString),
-            ]),
-          )
-        : {},
-      potAwards: awarded && awarded.type === 'potAwarded'
+  return [...byHand.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([handNumber, handRecords]) => {
+      const sortedRecords = [...handRecords].sort(compareEventRecords)
+      const handEvents = sortedRecords.map((record) => record.event)
+      const started = handEvents.find((event) => event.type === 'handStarted')
+      const street = [...handEvents].reverse().find((event) => event.type === 'streetAdvanced')
+      const showdown = [...handEvents].reverse().find((event) => event.type === 'showdown')
+      const awarded = [...handEvents].reverse().find((event) => event.type === 'potAwarded')
+      const participantSeatIds = started?.type === 'handStarted' ? started.payload.participantSeatIds : []
+      const initialStacks = Object.fromEntries(participantSeatIds.map((seatId) => [seatId, stacks.get(seatId) ?? 0]))
+      const contributions = contributionTotals(handEvents, participantSeatIds)
+      const potAwards = awarded?.type === 'potAwarded'
         ? awarded.payload.winners.map((winner) => ({
             seatId: winner.seatId,
             amount: winner.amount,
             ...(winner.handName ? { handName: winner.handName } : {}),
             ...(winner.cards ? { cards: winner.cards.map(cardToString) } : {}),
           }))
-        : [],
-    }
-  })
+        : []
+      const refunds = awarded?.type === 'potAwarded'
+        ? awarded.payload.refunds ?? inferRefunds(contributions, potAwards)
+        : []
+
+      for (const seatId of participantSeatIds) {
+        const nextStack = (stacks.get(seatId) ?? 0)
+          - (contributions[seatId] ?? 0)
+          + potAwards.filter((award) => award.seatId === seatId).reduce((sum, award) => sum + award.amount, 0)
+          + refunds.filter((refund) => refund.seatId === seatId).reduce((sum, refund) => sum + refund.amount, 0)
+        stacks.set(seatId, nextStack)
+      }
+
+      const board = street && street.type === 'streetAdvanced'
+        ? street.payload.communityCards.map(cardToString)
+        : []
+      const smallBlindPosted = handEvents.find(
+        (event): event is Extract<HandHistoryEvent, { type: 'blindPosted' }> =>
+          event.type === 'blindPosted' && event.payload.blind === 'small',
+      )
+      const bigBlindPosted = handEvents.find(
+        (event): event is Extract<HandHistoryEvent, { type: 'blindPosted' }> =>
+          event.type === 'blindPosted' && event.payload.blind === 'big',
+      )
+
+      return {
+        handId: `hand-${handNumber}`,
+        handNumber,
+        startedAt: sortedRecords[0]?.recordedAt ?? '1970-01-01T00:00:00.000Z',
+        endedAt: sortedRecords.at(-1)?.recordedAt ?? sortedRecords[0]?.recordedAt ?? '1970-01-01T00:00:00.000Z',
+        dealerSeatId: started && started.type === 'handStarted' ? started.payload.dealerSeatId : '',
+        participantSeatIds,
+        blinds: {
+          smallBlindSeatId: smallBlindPosted?.payload.seatId,
+          bigBlindSeatId: bigBlindPosted?.payload.seatId,
+          smallBlind: blinds.smallBlind,
+          bigBlind: blinds.bigBlind,
+        },
+        positions: Object.fromEntries(
+          participantSeatIds.map((seatId) => [
+            seatId,
+            participantPosition(participants, seatId),
+          ]),
+        ),
+        stackCheckpoints: {
+          initial: initialStacks,
+          final: Object.fromEntries(participantSeatIds.map((seatId) => [seatId, stacks.get(seatId) ?? 0])),
+        },
+        contributions,
+        board,
+        revealedCards: showdown && showdown.type === 'showdown'
+          ? Object.fromEntries(
+              Object.entries(showdown.payload.revealedCards).map(([seatId, cards]) => [
+                seatId,
+                cards.map(cardToString),
+              ]),
+            )
+          : {},
+        potSummary: {
+          totalContributed: Object.values(contributions).reduce((sum, amount) => sum + amount, 0),
+          totalAwarded: potAwards.reduce((sum, award) => sum + award.amount, 0),
+          pots: awarded?.type === 'potAwarded'
+            ? awarded.payload.pots ?? potAwards.map((award) => ({ amount: award.amount, eligibleSeatIds: participantSeatIds }))
+            : [],
+          refunds,
+        },
+        potAwards,
+      }
+    })
 }
 
 function toSiteHandPreview(
@@ -328,6 +442,7 @@ function toSiteHandPreview(
   return {
     hand_no: hand.handNumber,
     hand_code: hand.handId,
+    start_time: hand.startedAt,
     board: hand.board.join(' '),
     winner_name: winnerName,
     pot_collected: biggestAward?.amount ?? 0,
@@ -355,12 +470,17 @@ function toSiteActionPreview(
       player_name: participantName(participants, event.payload.seatId),
       action,
       amount: event.payload.amount,
+      target_contribution: event.payload.amount,
       all_in: false,
       raw_entry: `"${participantName(participants, event.payload.seatId)}" ${action} ${event.payload.amount}`,
     }
   }
 
   const action = siteActionName(event.payload.action)
+  const targetContribution = event.payload.targetContribution
+  const raiseTo = event.payload.action === 'raise' || event.payload.action === 'allIn'
+    ? targetContribution
+    : undefined
   return {
     hand_no: hand.handNumber,
     hand_code: hand.handId,
@@ -369,8 +489,10 @@ function toSiteActionPreview(
     player_name: participantName(participants, event.payload.seatId),
     action,
     amount: event.payload.amount,
+    target_contribution: targetContribution,
+    ...(raiseTo ? { raise_to: raiseTo } : {}),
     all_in: event.payload.action === 'allIn',
-    raw_entry: `"${participantName(participants, event.payload.seatId)}" ${action}${event.payload.amount ? ` ${event.payload.amount}` : ''}`,
+    raw_entry: rawActionEntry(participantName(participants, event.payload.seatId), action, event.payload.amount, raiseTo),
   }
 }
 
@@ -405,8 +527,68 @@ function buildSessionResults(participants: CompletedSessionParticipant[]) {
     }))
 }
 
+function buildResult(match: MatchRecord, participants: CompletedSessionParticipant[]): CompletedSessionPackage['result'] {
+  const finishOrder = [...participants]
+    .sort((left, right) => right.finalStack - left.finalStack || left.displayName.localeCompare(right.displayName))
+    .map((participant, index) => ({
+      seatId: participant.seatId,
+      finish: index + 1,
+      finalStack: participant.finalStack,
+    }))
+
+  return {
+    winnerSeatIds: match.result?.winnerSeatIds ?? finishOrder.filter((entry) => entry.finish === 1).map((entry) => entry.seatId),
+    finalStacks: match.result?.finalStacks ?? Object.fromEntries(participants.map((participant) => [participant.seatId, participant.finalStack])),
+    finishOrder,
+    eliminationOrder: [...finishOrder]
+      .sort((left, right) => left.finalStack - right.finalStack || right.finish - left.finish)
+      .map((entry) => entry.seatId),
+  }
+}
+
+function contributionTotals(events: HandHistoryEvent[], seatIds: SeatId[]): Record<SeatId, number> {
+  const contributions = Object.fromEntries(seatIds.map((seatId) => [seatId, 0]))
+  for (const event of events) {
+    if (event.type === 'blindPosted' || event.type === 'actionApplied') {
+      contributions[event.payload.seatId] = (contributions[event.payload.seatId] ?? 0) + event.payload.amount
+    }
+  }
+  return contributions
+}
+
+function inferRefunds(
+  contributions: Record<SeatId, number>,
+  potAwards: CompletedSessionHand['potAwards'],
+): CompletedSessionHand['potSummary']['refunds'] {
+  const totalContributed = Object.values(contributions).reduce((sum, amount) => sum + amount, 0)
+  const totalAwarded = potAwards.reduce((sum, award) => sum + award.amount, 0)
+  const refundAmount = totalContributed - totalAwarded
+  if (refundAmount <= 0 || potAwards.length !== 1) {
+    return []
+  }
+  return [{ seatId: potAwards[0].seatId, amount: refundAmount }]
+}
+
+function participantPosition(participants: CompletedSessionParticipant[], seatId: SeatId): string {
+  return participants.find((participant) => participant.seatId === seatId)?.position ?? ''
+}
+
 function participantName(participants: CompletedSessionParticipant[], seatId: SeatId): string {
   return participants.find((participant) => participant.seatId === seatId)?.displayName ?? seatId
+}
+
+function rawActionEntry(playerName: string, action: string, amount: number, raiseTo?: number): string {
+  if (raiseTo) {
+    return `"${playerName}" ${action} to ${raiseTo}`
+  }
+  return `"${playerName}" ${action}${amount ? ` ${amount}` : ''}`
+}
+
+function compareEventRecords(left: EventRecord, right: EventRecord): number {
+  if (left.handId !== right.handId) {
+    return left.handId - right.handId
+  }
+  return left.sequenceNumber - right.sequenceNumber
 }
 
 export function stableChecksum(value: unknown): string {
