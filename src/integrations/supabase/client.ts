@@ -24,6 +24,28 @@ export interface SupabaseAuthApi {
 
 export interface SupabaseBrowserClient {
   auth: SupabaseAuthApi
+  from: (table: string) => SupabaseQueryBuilder
+}
+
+export interface SupabaseQueryResult<T> {
+  data: T | null
+  error: SupabaseAuthError | null
+}
+
+export interface SupabaseQueryBuilder {
+  select: (columns?: string) => SupabaseQueryBuilder
+  insert: (values: unknown) => SupabaseQueryBuilder
+  upsert: (values: unknown, options?: { onConflict?: string }) => SupabaseQueryBuilder
+  update: (values: unknown) => SupabaseQueryBuilder
+  eq: (column: string, value: unknown) => SupabaseQueryBuilder
+  order: (column: string, options?: { ascending?: boolean }) => SupabaseQueryBuilder
+  limit: (count: number) => SupabaseQueryBuilder
+  maybeSingle: <T>() => Promise<SupabaseQueryResult<T>>
+  single: <T>() => Promise<SupabaseQueryResult<T>>
+  then: <TResult1 = SupabaseQueryResult<unknown>, TResult2 = never>(
+    onfulfilled?: ((value: SupabaseQueryResult<unknown>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) => PromiseLike<TResult1 | TResult2>
 }
 
 export function getSupabasePublicConfig(env: Partial<ImportMetaEnv> = import.meta.env): SupabasePublicConfig {
