@@ -36,6 +36,24 @@ describe('PokerTable', () => {
     expect(screen.getByLabelText('Maven street contribution')).toHaveTextContent(/^2$/)
   })
 
+  it('uses the signed-in profile name throughout a newly created table', async () => {
+    render(<PokerTable playerIdentity={{
+      profileId: 'profile-river-port',
+      accountId: 'account-river-port',
+      screenName: 'RiverPort',
+      avatarUrl: null,
+    }} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(await screen.findByLabelText('Hero seat')).toHaveTextContent('RiverPort')
+    fireEvent.click(screen.getByRole('button', { name: 'Call 1' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Table flow')).toHaveTextContent('RiverPort calls 1')
+    })
+    expect(screen.getByLabelText('Poker table')).not.toHaveTextContent('You')
+  })
+
   it('validates setup before creating a match', () => {
     render(<PokerTable />)
 

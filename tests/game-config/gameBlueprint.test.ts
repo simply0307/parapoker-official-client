@@ -57,4 +57,26 @@ describe('game blueprint configuration', () => {
     expect(JSON.stringify(config)).not.toContain('visibility')
     expect(JSON.stringify(config)).not.toContain('strategyProfileId')
   })
+
+  it('uses the joined player profile as the human seat identity', () => {
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'profile-identity',
+      humanPlayer: {
+        playerId: 'profile-river-port',
+        displayName: 'RiverPort',
+      },
+    })
+
+    expect(blueprint.seats[0]).toEqual({
+      seatId: 'human',
+      kind: 'human',
+      displayName: 'RiverPort',
+      playerId: 'profile-river-port',
+    })
+    expect(gameBlueprintToControllerConfig(blueprint).seats?.[0].name).toBe('RiverPort')
+  })
 })

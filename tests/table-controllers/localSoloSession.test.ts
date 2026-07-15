@@ -4,6 +4,7 @@ import {
   LocalSoloSession,
   type LocalSoloSessionConfig,
 } from '../../src/table-controllers/local-single-player/LocalSoloSession'
+import { completedSessionPackageToParaPokerSiteCsv } from '../../src/exports/paraPokerSiteCsv'
 
 const baseConfig: LocalSoloSessionConfig = {
   mode: 'heads-up',
@@ -56,6 +57,41 @@ describe('local solo session integration', () => {
       { seatId: 'human', playerId: 'local-human' },
       { seatId: 'npc-1', npcId: 'npc-vega' },
     ])
+  })
+
+  it('retains the player profile identity through the table, archive package, and hand history', async () => {
+    const session = await LocalSoloSession.create({
+      ...baseConfig,
+      startingStack: 1,
+      smallBlind: 1,
+      bigBlind: 1,
+      matchId: 'profile-identity-match',
+      humanPlayer: {
+        playerId: 'profile-river-port',
+        displayName: 'RiverPort',
+      },
+    })
+
+    expect(session.getSnapshot().publicView.seats[0].name).toBe('RiverPort')
+    expect((await session.getMatchRecord())?.seatAssignments[0]).toEqual({
+      seatId: 'human',
+      playerId: 'profile-river-port',
+    })
+
+    const exported = await session.exportCompletedSessionPackage()
+    const human = exported.participants.find((participant) => participant.seatId === 'human')
+    const csv = completedSessionPackageToParaPokerSiteCsv(exported)
+
+    expect(human).toEqual(expect.objectContaining({
+      displayName: 'RiverPort',
+      optionalParaPlayerId: 'profile-river-port',
+    }))
+    expect(exported.paraPokerSite.players).toContainEqual(
+      expect.objectContaining({ display_name: 'RiverPort', optional_para_player_id: 'profile-river-port' }),
+    )
+    expect(exported.paraPokerSite.rawText).toContain('"RiverPort"')
+    expect(csv).toContain('""RiverPort""')
+    expect(csv).not.toContain('""You""')
   })
 
   it('isolates stats by match ID and seat ID', async () => {

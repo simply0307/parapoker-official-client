@@ -11,6 +11,7 @@ import {
   npcStrategyProfilesForBlueprint,
   type GameBlueprint,
   type GameVisibility,
+  type HumanPlayerIdentity,
 } from '../../game-config/gameBlueprint'
 import type { NpcSeatAssignment } from '../../npc/config'
 import {
@@ -48,6 +49,7 @@ export interface LocalSoloSessionConfig {
   visibility?: GameVisibility
   npcLineup?: NpcSeatAssignment[]
   blueprint?: GameBlueprint
+  humanPlayer?: HumanPlayerIdentity
 }
 
 export interface LocalSoloSessionOptions {
@@ -388,6 +390,7 @@ function createBlueprintFromSessionConfig(config: LocalSoloSessionConfig): GameB
     seed: config.seed,
     visibility: config.visibility,
     npcLineup: config.npcLineup,
+    humanPlayer: config.humanPlayer,
   })
 }
 

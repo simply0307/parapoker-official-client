@@ -6,22 +6,27 @@ import {
   type SupabaseBrowserClient,
 } from '../integrations/supabase/client'
 import {
+  clientPlayerIdentityFromProfile,
   SupabaseIdentityRepository,
+  type ClientPlayerIdentity,
   type PlayerProfileRow,
 } from '../integrations/supabase/identityRepository'
 
 interface SupabaseIdentityWidgetProps {
   clientFactory?: () => SupabaseBrowserClient | null
   repositoryFactory?: (client: SupabaseBrowserClient) => SupabaseIdentityRepository
+  onIdentityChange?: (identity: ClientPlayerIdentity | null) => void
 }
 
 type RequestStatus = 'idle' | 'loading'
 
 const defaultRepositoryFactory = (client: SupabaseBrowserClient) => new SupabaseIdentityRepository(client)
+const ignoreIdentityChange = () => {}
 
 export function SupabaseIdentityWidget({
   clientFactory = createSupabaseBrowserClient,
   repositoryFactory = defaultRepositoryFactory,
+  onIdentityChange = ignoreIdentityChange,
 }: SupabaseIdentityWidgetProps) {
   const client = useMemo(() => clientFactory(), [clientFactory])
   const repository = useMemo(() => (client ? repositoryFactory(client) : null), [client, repositoryFactory])
@@ -51,16 +56,19 @@ export function SupabaseIdentityWidget({
       setScreenName(loadedProfile?.screen_name ?? '')
       setAvatarUrl(loadedProfile?.avatar_url ?? '')
       setVisibility(loadedProfile?.visibility ?? 'private')
+      onIdentityChange(loadedProfile ? clientPlayerIdentityFromProfile(loadedProfile) : null)
       if (!loadedProfile) {
         setMessage('Signed in. Create your local Para profile shell.')
       }
     } catch (error) {
+      onIdentityChange(null)
       setMessage(error instanceof Error ? error.message : String(error))
     }
-  }, [repository])
+  }, [onIdentityChange, repository])
 
   useEffect(() => {
     if (!client) {
+      onIdentityChange(null)
       return
     }
 
@@ -75,6 +83,8 @@ export function SupabaseIdentityWidget({
       }
       if (data.session) {
         void loadProfile(data.session)
+      } else {
+        onIdentityChange(null)
       }
     })
 
@@ -83,6 +93,7 @@ export function SupabaseIdentityWidget({
     } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
       setProfile(null)
+      onIdentityChange(null)
       setMessage(nextSession ? 'Signed in to Para identity.' : 'Signed out.')
       if (nextSession) {
         void loadProfile(nextSession)
@@ -93,7 +104,7 @@ export function SupabaseIdentityWidget({
       mounted = false
       subscription.unsubscribe()
     }
-  }, [client, loadProfile])
+  }, [client, loadProfile, onIdentityChange])
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -151,6 +162,7 @@ export function SupabaseIdentityWidget({
       setScreenName(savedProfile.screen_name)
       setAvatarUrl(savedProfile.avatar_url ?? '')
       setVisibility(savedProfile.visibility)
+      onIdentityChange(clientPlayerIdentityFromProfile(savedProfile))
       setMessage('Profile saved. Seat ownership still requires table authority binding.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error))

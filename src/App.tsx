@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { AdminPortal } from './ui/AdminPortal'
 import { LobbyScreen } from './ui/LobbyScreen'
 import { PokerTable } from './ui/PokerTable'
 import { SupabaseIdentityWidget } from './ui/SupabaseIdentityWidget'
 import type { LobbyTableInstance } from './game-config/gameBlueprintStore'
+import type { ClientPlayerIdentity } from './integrations/supabase/identityRepository'
 
 type AppScreen = 'lobby' | 'play' | 'admin'
 
@@ -11,6 +12,13 @@ function App() {
   const [screen, setScreen] = useState<AppScreen>('lobby')
   const [joinedTable, setJoinedTable] = useState<LobbyTableInstance | null>(null)
   const [activeTables, setActiveTables] = useState<LobbyTableInstance[]>([])
+  const [playerIdentity, setPlayerIdentity] = useState<ClientPlayerIdentity | null>(null)
+  const [identityResolved, setIdentityResolved] = useState(false)
+
+  const handleIdentityChange = useCallback((identity: ClientPlayerIdentity | null) => {
+    setPlayerIdentity(identity)
+    setIdentityResolved(true)
+  }, [])
 
   function joinTable(table: LobbyTableInstance) {
     setJoinedTable(table)
@@ -20,7 +28,7 @@ function App() {
 
   return (
     <>
-      <SupabaseIdentityWidget />
+      <SupabaseIdentityWidget onIdentityChange={handleIdentityChange} />
       <nav className="app-nav" aria-label="Client sections">
         <button
           type="button"
@@ -58,6 +66,8 @@ function App() {
         <PokerTable
           joinedTable={joinedTable}
           joinedTables={activeTables}
+          playerIdentity={playerIdentity}
+          identityResolved={identityResolved}
           openAdmin={() => setScreen('admin')}
         />
       )}

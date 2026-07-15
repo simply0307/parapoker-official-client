@@ -31,6 +31,11 @@ export interface GameBlueprint {
   seats: GameSeatBlueprint[]
 }
 
+export interface HumanPlayerIdentity {
+  playerId: string
+  displayName: string
+}
+
 export interface CreateGameBlueprintInput {
   mode: GameBlueprintMode
   startingStack: number
@@ -39,12 +44,14 @@ export interface CreateGameBlueprintInput {
   seed: string | number
   visibility?: GameVisibility
   npcLineup?: NpcSeatAssignment[]
+  humanPlayer?: HumanPlayerIdentity
 }
 
 export function createGameBlueprint(input: CreateGameBlueprintInput): GameBlueprint {
   const npcLineup = input.npcLineup ?? defaultNpcLineup(input.mode)
+  const humanPlayer = normalizeHumanPlayer(input.humanPlayer)
   const seats: GameSeatBlueprint[] = [
-    { seatId: 'human', kind: 'human', displayName: 'You', playerId: 'local-human' },
+    { seatId: 'human', kind: 'human', ...humanPlayer },
     ...npcLineup.map((assignment) => ({
       seatId: assignment.seatId,
       kind: 'npc' as const,
@@ -63,6 +70,19 @@ export function createGameBlueprint(input: CreateGameBlueprintInput): GameBluepr
     bigBlind: input.bigBlind,
     seed: input.seed,
     seats,
+  }
+}
+
+export function assignHumanPlayerIdentity(
+  blueprint: GameBlueprint,
+  humanPlayer: HumanPlayerIdentity,
+): GameBlueprint {
+  const identity = normalizeHumanPlayer(humanPlayer)
+  return {
+    ...clone(blueprint),
+    seats: blueprint.seats.map((seat) => seat.kind === 'human'
+      ? { ...seat, ...identity }
+      : clone(seat)),
   }
 }
 
@@ -110,6 +130,13 @@ function seatName(seat: GameSeatBlueprint, npcDefinitions: readonly NpcDefinitio
   }
   return npcDefinitions.find((definition) => definition.id === seat.npcDefinitionId)?.name ??
     mustNpcDefinition(seat.npcDefinitionId).name
+}
+
+function normalizeHumanPlayer(humanPlayer?: HumanPlayerIdentity): HumanPlayerIdentity {
+  return {
+    playerId: humanPlayer?.playerId.trim() || 'local-human',
+    displayName: humanPlayer?.displayName.trim() || 'You',
+  }
 }
 
 function clone<T>(value: T): T {

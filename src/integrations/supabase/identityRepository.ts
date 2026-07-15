@@ -18,6 +18,13 @@ export interface PlayerProfileDraft {
   visibility?: PlayerProfileRow['visibility']
 }
 
+export interface ClientPlayerIdentity {
+  profileId: string
+  accountId: string
+  screenName: string
+  avatarUrl: string | null
+}
+
 export interface RestrictedArchiveMetadataRow {
   archive_id: string
   table_id: string
@@ -94,6 +101,15 @@ export function normalizeProfileDraft(profile: PlayerProfileDraft): Required<Pla
     screenName,
     avatarUrl: profile.avatarUrl ?? null,
     visibility: profile.visibility ?? 'private',
+  }
+}
+
+export function clientPlayerIdentityFromProfile(profile: PlayerProfileRow): ClientPlayerIdentity {
+  return {
+    profileId: profile.id,
+    accountId: profile.account_id,
+    screenName: profile.screen_name,
+    avatarUrl: profile.avatar_url,
   }
 }
 

@@ -60,9 +60,22 @@ describe('SupabaseIdentityWidget', () => {
       created_at: '2026-07-15T12:00:00.000Z',
       updated_at: '2026-07-15T12:00:00.000Z',
     })
-    render(<SupabaseIdentityWidget clientFactory={() => client} repositoryFactory={() => repository} />)
+    const onIdentityChange = vi.fn()
+    render(
+      <SupabaseIdentityWidget
+        clientFactory={() => client}
+        repositoryFactory={() => repository}
+        onIdentityChange={onIdentityChange}
+      />,
+    )
 
     expect(await screen.findByText('RiverPort')).toBeInTheDocument()
+    expect(onIdentityChange).toHaveBeenCalledWith({
+      profileId: 'profile-1',
+      accountId: 'account-1',
+      screenName: 'RiverPort',
+      avatarUrl: null,
+    })
     fireEvent.click(screen.getByText('Profile'))
     fireEvent.change(screen.getByLabelText('Player screen name'), {
       target: { value: 'RiverCoach' },
@@ -82,6 +95,12 @@ describe('SupabaseIdentityWidget', () => {
         avatarUrl: 'https://example.com/avatar.png',
         visibility: 'public',
       })
+    })
+    expect(onIdentityChange).toHaveBeenLastCalledWith({
+      profileId: 'profile-1',
+      accountId: 'account-1',
+      screenName: 'RiverCoach',
+      avatarUrl: 'https://example.com/avatar.png',
     })
     expect(screen.getByText('Profile saved. Seat ownership still requires table authority binding.')).toBeInTheDocument()
   })

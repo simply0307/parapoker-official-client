@@ -20,6 +20,8 @@ import { IndexedDbHandHistoryArchiveStore } from '../persistence'
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
 import type { LobbyTableInstance } from '../game-config/gameBlueprintStore'
+import { assignHumanPlayerIdentity, type HumanPlayerIdentity } from '../game-config/gameBlueprint'
+import type { ClientPlayerIdentity } from '../integrations/supabase/identityRepository'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
@@ -27,10 +29,14 @@ type SeedMode = 'form' | 'same' | 'random'
 export function PokerTable({
   joinedTable = null,
   joinedTables = [],
+  playerIdentity = null,
+  identityResolved = true,
   openAdmin = () => {},
 }: {
   joinedTable?: LobbyTableInstance | null
   joinedTables?: LobbyTableInstance[]
+  playerIdentity?: ClientPlayerIdentity | null
+  identityResolved?: boolean
   openAdmin?: () => void
 }) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
@@ -88,9 +94,12 @@ export function PokerTable({
     }
     let cancelled = false
     async function ensureJoinedSessions() {
+      if (!identityResolved) {
+        return
+      }
       for (const table of joinedTables) {
         if (!lobbySessionRefs.current.has(table.tableId)) {
-          const tableSession = await LocalSoloSession.create(configForLobbyTable(table), {
+          const tableSession = await LocalSoloSession.create(configForLobbyTable(table, playerIdentity), {
             archiveStore: archiveStoreRef.current,
           })
           if (cancelled) {
@@ -104,7 +113,7 @@ export function PokerTable({
       const currentSession = lobbySessionRefs.current.get(currentTable.tableId)
       if (currentSession && startedLobbyTableIdRef.current !== currentTable.tableId) {
         startedLobbyTableIdRef.current = currentTable.tableId
-        const nextConfig = configForLobbyTable(currentTable)
+        const nextConfig = configForLobbyTable(currentTable, playerIdentity)
         const nextSnapshot = currentSession.getSnapshot()
         sessionRef.current = currentSession
         setSetup(nextConfig)
@@ -121,7 +130,7 @@ export function PokerTable({
     return () => {
       cancelled = true
     }
-  }, [joinedTable, joinedTables])
+  }, [identityResolved, joinedTable, joinedTables, playerIdentity])
 
   useEffect(() => {
     const activeCount = joinedTables.length
@@ -166,6 +175,10 @@ export function PokerTable({
   }, [matchWinner, snapshot])
 
   async function startSession(config: LocalSoloSessionConfig, seedMode: SeedMode = 'form') {
+    if (!identityResolved) {
+      setSetupError('Player identity is still loading.')
+      return
+    }
     const shouldUseRandomSeed = seedMode === 'random' || (seedMode === 'form' && useRandomSeed)
     const validationError = validateSetup(config, shouldUseRandomSeed)
     if (validationError) {
@@ -174,7 +187,7 @@ export function PokerTable({
     }
 
     const nextConfig = {
-      ...config,
+      ...configWithPlayerIdentity(config, playerIdentity),
       seed: shouldUseRandomSeed ? createRandomLocalSeed() : String(config.seed).trim(),
     }
     const session = await LocalSoloSession.create(nextConfig, { archiveStore: archiveStoreRef.current })
@@ -313,19 +326,43 @@ export function PokerTable({
   )
 }
 
-function configForLobbyTable(table: LobbyTableInstance): LocalSoloSessionConfig {
+function configForLobbyTable(
+  table: LobbyTableInstance,
+  playerIdentity: ClientPlayerIdentity | null,
+): LocalSoloSessionConfig {
+  const humanPlayer = toHumanPlayerIdentity(playerIdentity)
+  const blueprint = assignHumanPlayerIdentity(table.blueprint, humanPlayer)
   return {
-    mode: table.blueprint.mode,
-    startingStack: table.blueprint.startingStack,
-    smallBlind: table.blueprint.smallBlind,
-    bigBlind: table.blueprint.bigBlind,
-    seed: table.blueprint.seed,
-    visibility: table.blueprint.visibility,
-    blueprint: table.blueprint,
-    npcLineup: table.blueprint.seats
+    mode: blueprint.mode,
+    startingStack: blueprint.startingStack,
+    smallBlind: blueprint.smallBlind,
+    bigBlind: blueprint.bigBlind,
+    seed: blueprint.seed,
+    visibility: blueprint.visibility,
+    blueprint,
+    humanPlayer,
+    npcLineup: blueprint.seats
       .filter((seat) => seat.kind === 'npc' && seat.npcDefinitionId)
       .map((seat) => ({ seatId: seat.seatId, npcDefinitionId: seat.npcDefinitionId ?? '' })),
   }
+}
+
+function configWithPlayerIdentity(
+  config: LocalSoloSessionConfig,
+  playerIdentity: ClientPlayerIdentity | null,
+): LocalSoloSessionConfig {
+  const humanPlayer = toHumanPlayerIdentity(playerIdentity)
+  return {
+    ...config,
+    humanPlayer,
+    ...(config.blueprint ? { blueprint: assignHumanPlayerIdentity(config.blueprint, humanPlayer) } : {}),
+  }
+}
+
+function toHumanPlayerIdentity(playerIdentity: ClientPlayerIdentity | null): HumanPlayerIdentity {
+  return playerIdentity
+    ? { playerId: playerIdentity.profileId, displayName: playerIdentity.screenName }
+    : { playerId: 'local-human', displayName: 'You' }
 }
 
 function downloadCompletedPackage(completedPackage: CompletedSessionPackage) {
@@ -483,7 +520,7 @@ function getStackLead(seats: PublicSeatView[], heroSeatId: string): string {
   if (difference === 0) {
     return 'Even'
   }
-  return difference > 0 ? `You +${difference}` : `${comparisonSeat.name} +${Math.abs(difference)}`
+  return difference > 0 ? `${hero.name} +${difference}` : `${comparisonSeat.name} +${Math.abs(difference)}`
 }
 
 function getLastResultText(snapshot: LocalSinglePlayerSnapshot): string | undefined {
@@ -551,7 +588,7 @@ function describePresentationEvent(
     case 'holeCardsDealt':
       return `${seatName(event.payload.seatId)} receives hole cards.`
     case 'actionApplied':
-      return `${seatName(event.payload.seatId)} ${event.payload.action}${event.payload.amount ? ` ${event.payload.amount}` : ''}.`
+      return `${seatName(event.payload.seatId)} ${presentationAction(event.payload.action, seatName(event.payload.seatId))}${event.payload.amount ? ` ${event.payload.amount}` : ''}.`
     case 'streetAdvanced':
       return `${titleCase(event.payload.street)} dealt.`
     case 'showdown':
@@ -563,6 +600,21 @@ function describePresentationEvent(
     case 'matchComplete':
       return `${seatName(event.payload.winnerSeatId)} wins the match.`
   }
+}
+
+function presentationAction(action: string, playerName: string): string {
+  if (playerName === 'You') {
+    return action
+  }
+  const actions: Record<string, string> = {
+    fold: 'folds',
+    check: 'checks',
+    call: 'calls',
+    bet: 'bets',
+    raise: 'raises',
+    allIn: 'goes all-in',
+  }
+  return actions[action] ?? action
 }
 
 function titleCase(value: string): string {

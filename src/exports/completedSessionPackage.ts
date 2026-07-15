@@ -297,6 +297,9 @@ function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedS
     const blueprintSeat = blueprintSeats.find((entry) => entry.seatId === seat.id)
     const npcDefinition = blueprintSeat?.npcDefinitionId ? mustNpcDefinition(blueprintSeat.npcDefinitionId) : undefined
     const npcProfile = npcDefinition ? mustNpcStrategyProfile(npcDefinition.strategyProfileId) : undefined
+    const optionalParaPlayerId = seat.kind === 'human' && blueprintSeat?.playerId && blueprintSeat.playerId !== 'local-human'
+      ? blueprintSeat.playerId
+      : undefined
     return {
       seatId: seat.id,
       displayName: seat.name,
@@ -304,6 +307,7 @@ function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedS
       position: seat.position,
       startingStack: input.match.startingStacks[seat.id] ?? input.config.startingStack,
       finalStack: input.summary.finalStacks[seat.id] ?? seat.stack,
+      ...(optionalParaPlayerId ? { optionalParaPlayerId } : {}),
       ...(npcDefinition ? { npcDefinitionId: npcDefinition.id } : {}),
       ...(npcProfile ? { npcStrategyProfileId: npcProfile.id, npcStrategyProfileVersion: npcProfile.version } : {}),
     }
