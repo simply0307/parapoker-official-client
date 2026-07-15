@@ -44,6 +44,7 @@ describe('PokerTable', () => {
       avatarUrl: null,
     }} />)
 
+    expect(screen.getByLabelText('Current player identity')).toHaveTextContent('Playing as RiverPort')
     fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
 
     expect(await screen.findByLabelText('Hero seat')).toHaveTextContent('RiverPort')
@@ -52,6 +53,15 @@ describe('PokerTable', () => {
       expect(screen.getByLabelText('Table flow')).toHaveTextContent('RiverPort calls 1')
     })
     expect(screen.getByLabelText('Poker table')).not.toHaveTextContent('You')
+  })
+
+  it('does not create a guest-named table while a signed-in profile is still loading', () => {
+    render(<PokerTable identityResolved={false} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Match' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Player identity is still loading.')
+    expect(screen.queryByLabelText('Poker table')).not.toBeInTheDocument()
   })
 
   it('validates setup before creating a match', () => {

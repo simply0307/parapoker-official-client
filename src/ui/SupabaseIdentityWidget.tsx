@@ -16,17 +16,20 @@ interface SupabaseIdentityWidgetProps {
   clientFactory?: () => SupabaseBrowserClient | null
   repositoryFactory?: (client: SupabaseBrowserClient) => SupabaseIdentityRepository
   onIdentityChange?: (identity: ClientPlayerIdentity | null) => void
+  onIdentityLoading?: () => void
 }
 
 type RequestStatus = 'idle' | 'loading'
 
 const defaultRepositoryFactory = (client: SupabaseBrowserClient) => new SupabaseIdentityRepository(client)
 const ignoreIdentityChange = () => {}
+const ignoreIdentityLoading = () => {}
 
 export function SupabaseIdentityWidget({
   clientFactory = createSupabaseBrowserClient,
   repositoryFactory = defaultRepositoryFactory,
   onIdentityChange = ignoreIdentityChange,
+  onIdentityLoading = ignoreIdentityLoading,
 }: SupabaseIdentityWidgetProps) {
   const client = useMemo(() => clientFactory(), [clientFactory])
   const repository = useMemo(() => (client ? repositoryFactory(client) : null), [client, repositoryFactory])
@@ -82,6 +85,7 @@ export function SupabaseIdentityWidget({
         setMessage(error.message)
       }
       if (data.session) {
+        onIdentityLoading()
         void loadProfile(data.session)
       } else {
         onIdentityChange(null)
@@ -93,10 +97,12 @@ export function SupabaseIdentityWidget({
     } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
       setProfile(null)
-      onIdentityChange(null)
       setMessage(nextSession ? 'Signed in to Para identity.' : 'Signed out.')
       if (nextSession) {
+        onIdentityLoading()
         void loadProfile(nextSession)
+      } else {
+        onIdentityChange(null)
       }
     })
 
@@ -104,7 +110,7 @@ export function SupabaseIdentityWidget({
       mounted = false
       subscription.unsubscribe()
     }
-  }, [client, loadProfile, onIdentityChange])
+  }, [client, loadProfile, onIdentityChange, onIdentityLoading])
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

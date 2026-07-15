@@ -268,6 +268,11 @@ export function PokerTable({
           <p className="eyebrow">ParaPoker Play Money</p>
           <h1>Start a Local Solo Match</h1>
           <p className="setup-copy">Choose a heads-up or six-max freezeout before the table is created.</p>
+          <p className="setup-copy" aria-label="Current player identity">
+            {identityResolved ? (
+              <>Playing as <strong>{playerIdentity?.screenName ?? 'local guest'}</strong>.</>
+            ) : 'Loading player identity...'}
+          </p>
           <SetupForm
             setup={setup}
             useRandomSeed={useRandomSeed}

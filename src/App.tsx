@@ -20,6 +20,11 @@ function App() {
     setIdentityResolved(true)
   }, [])
 
+  const handleIdentityLoading = useCallback(() => {
+    setPlayerIdentity(null)
+    setIdentityResolved(false)
+  }, [])
+
   function joinTable(table: LobbyTableInstance) {
     setJoinedTable(table)
     setActiveTables((current) => current.some((activeTable) => activeTable.tableId === table.tableId) ? current : [...current, table].slice(0, 4))
@@ -28,7 +33,10 @@ function App() {
 
   return (
     <>
-      <SupabaseIdentityWidget onIdentityChange={handleIdentityChange} />
+      <SupabaseIdentityWidget
+        onIdentityChange={handleIdentityChange}
+        onIdentityLoading={handleIdentityLoading}
+      />
       <nav className="app-nav" aria-label="Client sections">
         <button
           type="button"

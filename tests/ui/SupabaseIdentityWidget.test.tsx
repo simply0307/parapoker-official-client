@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { Session } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseBrowserClient } from '../../src/integrations/supabase/client'
-import type { PlayerProfileRow } from '../../src/integrations/supabase/identityRepository'
+import type { PlayerProfileRow, SupabaseIdentityRepository } from '../../src/integrations/supabase/identityRepository'
 import { SupabaseIdentityWidget } from '../../src/ui/SupabaseIdentityWidget'
 
 describe('SupabaseIdentityWidget', () => {
@@ -61,15 +61,18 @@ describe('SupabaseIdentityWidget', () => {
       updated_at: '2026-07-15T12:00:00.000Z',
     })
     const onIdentityChange = vi.fn()
+    const onIdentityLoading = vi.fn()
     render(
       <SupabaseIdentityWidget
         clientFactory={() => client}
         repositoryFactory={() => repository}
         onIdentityChange={onIdentityChange}
+        onIdentityLoading={onIdentityLoading}
       />,
     )
 
     expect(await screen.findByText('RiverPort')).toBeInTheDocument()
+    expect(onIdentityLoading).toHaveBeenCalled()
     expect(onIdentityChange).toHaveBeenCalledWith({
       profileId: 'profile-1',
       accountId: 'account-1',
@@ -103,6 +106,44 @@ describe('SupabaseIdentityWidget', () => {
       avatarUrl: 'https://example.com/avatar.png',
     })
     expect(screen.getByText('Profile saved. Seat ownership still requires table authority binding.')).toBeInTheDocument()
+  })
+
+  it('does not resolve a signed-in account as a guest while its profile is loading', async () => {
+    const session = { user: { id: 'account-1', email: 'player@example.com' } } as Session
+    const { client } = createClientMock(session)
+    let resolveProfile: (profile: PlayerProfileRow) => void = () => {}
+    const profilePromise = new Promise<PlayerProfileRow>((resolve) => {
+      resolveProfile = resolve
+    })
+    const repository = {
+      getOwnProfile: vi.fn(() => profilePromise),
+      upsertOwnProfile: vi.fn(),
+    }
+    const onIdentityChange = vi.fn()
+    const onIdentityLoading = vi.fn()
+
+    render(
+      <SupabaseIdentityWidget
+        clientFactory={() => client}
+        repositoryFactory={() => repository as unknown as SupabaseIdentityRepository}
+        onIdentityChange={onIdentityChange}
+        onIdentityLoading={onIdentityLoading}
+      />,
+    )
+
+    await waitFor(() => expect(onIdentityLoading).toHaveBeenCalled())
+    expect(onIdentityChange).not.toHaveBeenCalledWith(null)
+
+    resolveProfile({
+      id: 'profile-1',
+      account_id: 'account-1',
+      screen_name: 'RiverPort',
+      avatar_url: null,
+      visibility: 'private',
+      created_at: '2026-07-15T12:00:00.000Z',
+      updated_at: '2026-07-15T12:00:00.000Z',
+    })
+    await waitFor(() => expect(onIdentityChange).toHaveBeenCalledWith(expect.objectContaining({ screenName: 'RiverPort' })))
   })
 
   it('keeps the default repository factory stable after a signed-in profile render', async () => {
