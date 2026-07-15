@@ -1131,6 +1131,101 @@ h2 {
   overflow: auto;
 }
 
+.lobby-shell {
+  min-height: 100svh;
+  padding: 76px 16px 18px;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.65fr) minmax(420px, 1.35fr);
+  gap: 12px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(47, 103, 80, 0.12), transparent 34%),
+    #eef2ec;
+}
+
+.lobby-panel {
+  min-width: 0;
+  border: 1px solid #d3dbd2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.lobby-hero {
+  align-self: start;
+}
+
+.lobby-hero h1 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0;
+}
+
+.lobby-hero p {
+  margin: 6px 0 0;
+  color: #40524a;
+  font-weight: 700;
+}
+
+.lobby-metrics,
+.lobby-table-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lobby-metrics div,
+.lobby-table-card dl div {
+  border: 1px solid #d3dbd2;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcf8;
+}
+
+.lobby-metrics dt,
+.lobby-table-card dt {
+  color: #607067;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.lobby-metrics dd,
+.lobby-table-card dd {
+  margin: 0;
+  font-weight: 900;
+}
+
+.lobby-table-list {
+  display: grid;
+  gap: 10px;
+}
+
+.lobby-table-card,
+.empty-lobby {
+  min-width: 0;
+  border: 1px solid #d3dbd2;
+  border-radius: 8px;
+  background: #fbfcf8;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.lobby-table-card > div,
+.empty-lobby {
+  min-width: 0;
+}
+
+.lobby-table-card > div span,
+.lobby-table-card p,
+.empty-lobby span {
+  color: #607067;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .admin-panel {
   min-width: 0;
   border: 1px solid #d3dbd2;

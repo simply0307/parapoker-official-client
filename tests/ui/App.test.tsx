@@ -6,6 +6,8 @@ describe('App navigation', () => {
   it('opens the local admin screen from the poker client', () => {
     render(<App />)
 
+    expect(screen.getByLabelText('ParaPoker lobby')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }))
     expect(screen.getByLabelText('Local match setup')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
@@ -61,5 +63,28 @@ describe('App navigation', () => {
 
     expect(screen.getByLabelText('Local match setup')).toBeInTheDocument()
     expect(screen.queryByLabelText('Admin overview')).not.toBeInTheDocument()
+  })
+
+  it('lists open lobby tables and joins one into the playable local client', async () => {
+    render(<App />)
+
+    expect(screen.getByLabelText('ParaPoker lobby')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('open')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lobby' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Open lobby tables')).toHaveTextContent('Local Heads-Up Solo')
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Join table' })[0])
+
+    expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
+    expect(screen.getByText('Seed admin-preview')).toBeInTheDocument()
   })
 })

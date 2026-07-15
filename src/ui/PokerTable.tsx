@@ -18,13 +18,21 @@ import type { LocalSinglePlayerSnapshot } from '../table-controllers/local-singl
 import { IndexedDbHandHistoryArchiveStore } from '../persistence'
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
+import type { LobbyTableInstance } from '../game-config/gameBlueprintStore'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
 
-export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void }) {
+export function PokerTable({
+  joinedTable = null,
+  openAdmin = () => {},
+}: {
+  joinedTable?: LobbyTableInstance | null
+  openAdmin?: () => void
+}) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
+  const startedLobbyTableIdRef = useRef<string | null>(null)
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
   const [useRandomSeed, setUseRandomSeed] = useState(false)
   const [snapshot, setSnapshot] = useState<LocalSoloSessionSnapshot | null>(null)
@@ -50,6 +58,28 @@ export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void })
   const lastResult = snapshot ? getLastResultText(snapshot) : undefined
   const handResult = snapshot ? getHandResultSummary(snapshot) : undefined
   const tableTitle = snapshot?.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
+
+  useEffect(() => {
+    if (!joinedTable || startedLobbyTableIdRef.current === joinedTable.tableId) {
+      return
+    }
+    startedLobbyTableIdRef.current = joinedTable.tableId
+    async function startJoinedTable(table: LobbyTableInstance) {
+      const nextConfig = configForLobbyTable(table)
+      const session = await LocalSoloSession.create(nextConfig, { archiveStore: archiveStoreRef.current })
+      const nextSnapshot = session.getSnapshot()
+      sessionRef.current = session
+      setSetup(nextConfig)
+      setUseRandomSeed(false)
+      setSetupError('')
+      setAmounts({})
+      setCompletedPackage(null)
+      setSnapshot(nextSnapshot)
+      setScene(sceneForSnapshot(nextSnapshot))
+      setPresentationEvents(getPresentationEvents(nextSnapshot, null))
+    }
+    void startJoinedTable(joinedTable)
+  }, [joinedTable])
 
   useEffect(() => {
     let cancelled = false
@@ -179,6 +209,11 @@ export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void })
             setUseRandomSeed={setUseRandomSeed}
             startMatch={() => void startSession(setup)}
           />
+          {joinedTable && (
+            <p className="setup-copy">
+              Joined lobby table {joinedTable.tableId}; preparing pinned blueprint v{joinedTable.blueprintVersion}.
+            </p>
+          )}
         </section>
       </main>
     )
@@ -221,6 +256,21 @@ export function PokerTable({ openAdmin = () => {} }: { openAdmin?: () => void })
       viewHandHistories={openAdmin}
     />
   )
+}
+
+function configForLobbyTable(table: LobbyTableInstance): LocalSoloSessionConfig {
+  return {
+    mode: table.blueprint.mode,
+    startingStack: table.blueprint.startingStack,
+    smallBlind: table.blueprint.smallBlind,
+    bigBlind: table.blueprint.bigBlind,
+    seed: table.blueprint.seed,
+    visibility: table.blueprint.visibility,
+    blueprint: table.blueprint,
+    npcLineup: table.blueprint.seats
+      .filter((seat) => seat.kind === 'npc' && seat.npcDefinitionId)
+      .map((seat) => ({ seatId: seat.seatId, npcDefinitionId: seat.npcDefinitionId ?? '' })),
+  }
 }
 
 function downloadCompletedPackage(completedPackage: CompletedSessionPackage) {
