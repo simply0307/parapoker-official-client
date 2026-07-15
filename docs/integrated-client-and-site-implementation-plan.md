@@ -525,8 +525,29 @@ Required coverage:
 ### Milestone 9: NPC Teaching Profiles and Simulation Evidence
 
 - Strategy profiles for tight/aggressive, loose/passive, position-aware, pot-odds-aware, and draw-aware play.
-- Admin-editable tendencies and safe presets.
-- Simulation evidence for strategy behavior.
+- Admin-editable tendencies, versioned 169-class preflop ranges, safe presets, and pinned per-table strategy snapshots.
+- Deterministic decision traces and simulation evidence for strategy behavior.
+- No LLM-based poker action selection and no requirement to solve the complete poker game tree at decision time.
+
+Strategy source hierarchy:
+
+1. `docs/poker-rules-contract.md` governs action legality, betting semantics, blind assignment, action order, visibility, and replay behavior.
+2. The [2024 Poker TDA Rules](https://www.pokertda.com/view-poker-tda-rules/) and official [PokerStars tournament rules](https://www.pokerstars.com/poker/tournaments/rules/) are external legality baselines where the ParaPoker contract is not explicit.
+3. Public GTO Wizard material on [MDF](https://blog.gtowizard.com/mdf-alpha/), [preflop range morphology](https://blog.gtowizard.com/preflop-range-morphology/), and [continuation-bet sizing](https://blog.gtowizard.com/the-mechanics-of-c-bet-sizing/) informs strategic heuristics without importing proprietary solver charts.
+4. Public PokerStars Learn material on [heads-up preflop play](https://www.pokerstars.com/poker/learn/strategies/spin-go-heads-up-preflop-on-the-button/) and [heads-up position and stack pressure](https://www.pokerstars.com/poker/learn/news/strategy-to-play-heads-up-poker/) provides sanity checks.
+5. [DeepStack](https://arxiv.org/abs/1701.01724), [Pluribus](https://doi.org/10.1126/science.aay2400), and [OpenSpiel](https://openspiel.readthedocs.io/en/latest/games.html) inform imperfect-information boundaries, local abstraction, deterministic mixed strategies, and simulation methodology. ParaPoker will not reproduce their solver architectures in this milestone.
+
+Exact ranges, action frequencies, sizing rules, MDF modifiers, and intentional mistakes are versioned ParaPoker product data. Each component must be labeled as an official rule, ParaPoker convention, sourced heuristic, configurable tendency, or skill-level deviation. Built-in presets must not claim solver-perfect GTO accuracy.
+
+Ordered NPC strategy phases:
+
+1. Preflop range contracts and heads-up blind strategy: 169 hand classes, position/action/stack-depth nodes, weighted actions, legal sizing resolution, independent RNG, and pinned profile versions.
+2. Six-max positional and blind ranges: unopened pots, limps, calls, isolation raises, three-bets, four-bets, squeezes, and multiway entry rules.
+3. Lightweight postflop range tracking: own-range and opponent-range buckets updated only from legal private/public information.
+4. Proactive postflop betting: checking, value betting, bluffing, continuation betting, probes, delayed bets, raises, barrels, give-ups, and configurable sizing.
+5. MDF-informed defense: aggregate defense targets adjusted for position, range disadvantage, board texture, equity realization, stack depth, multiway play, and opponent tendencies.
+6. Admin range editor and scenario simulator: clone/version/validate profiles, edit mixed frequencies and sizing, inspect deterministic decision traces, and compare preset behavior.
+7. Teaching explanations: derive player-facing concepts from verified decision inputs and outputs without changing poker actions or exposing hidden state.
 
 ### Milestone 10: Server-Authoritative Multiplayer Productization
 
@@ -572,6 +593,15 @@ Blueprint and lobby tests:
 - Active table pins blueprint/NPC/strategy versions.
 - Later blueprint edits do not mutate active or completed tables.
 - Lobby table lifecycle and archive lifecycle statuses remain independent.
+
+NPC strategy tests:
+
+- Heads-up button and blind ranges respond to position, effective stack, prior action, and raise size.
+- Every weighted range node normalizes to legal deterministic action frequencies.
+- Weak and strong profiles differ through documented ranges, sizing, and controlled deviations rather than arbitrary illegal actions.
+- One NPC's random decisions cannot change another NPC's future sequence.
+- Active tables retain pinned strategy versions when an admin later edits a profile.
+- Postflop simulation will separately cover proactive betting and MDF-informed defense; MDF is never the sole decision rule.
 
 Multiplayer boundary tests:
 

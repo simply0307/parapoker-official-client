@@ -175,7 +175,13 @@ export class LocalSinglePlayerController {
       }
       const view = getSeatView(this.state, pendingSeatId)
       const command = controller.policy.chooseAction(
-        createNpcDecisionContext(view, controller.rng, controller.config, controller.memory),
+        createNpcDecisionContext(
+          view,
+          controller.rng,
+          controller.config,
+          controller.memory,
+          controller.strategyProfile.preflopStrategy,
+        ),
       )
       const result = applyAction(this.state, command)
       if (!result.ok) {

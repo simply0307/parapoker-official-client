@@ -1,5 +1,6 @@
 import type { SeatId } from '../poker-engine'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from './config'
+import { createHeadsUpPreflopStrategy } from './preflopRanges'
 
 export interface LocalNpcPresentation {
   seatId: SeatId
@@ -28,6 +29,11 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.44,
       pressureRaiseMultiplier: 2.6,
     },
+    preflopStrategy: createHeadsUpPreflopStrategy({
+      id: 'balanced-caller-hu-preflop-v1',
+      looseness: 0.36,
+      aggression: 0.52,
+    }),
   },
   {
     id: 'strategy-pressure-raiser-v1',
@@ -47,6 +53,16 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.58,
       pressureRaiseMultiplier: 3.4,
     },
+    preflopStrategy: createHeadsUpPreflopStrategy({
+      id: 'pressure-raiser-hu-preflop-v1',
+      looseness: 0.31,
+      aggression: 0.78,
+      sizing: {
+        openRaiseBigBlinds: 2.7,
+        isolationRaiseBigBlinds: 3.5,
+        threeBetOutOfPositionMultiplier: 4,
+      },
+    }),
   },
   {
     id: 'strategy-board-watcher-v1',
@@ -66,6 +82,11 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.64,
       pressureRaiseMultiplier: 2.8,
     },
+    preflopStrategy: createHeadsUpPreflopStrategy({
+      id: 'board-watcher-hu-preflop-v1',
+      looseness: 0.42,
+      aggression: 0.46,
+    }),
   },
   {
     id: 'strategy-pot-controller-v1',
@@ -85,6 +106,15 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.34,
       pressureRaiseMultiplier: 2.3,
     },
+    preflopStrategy: createHeadsUpPreflopStrategy({
+      id: 'pot-controller-hu-preflop-v1',
+      looseness: 0.28,
+      aggression: 0.4,
+      sizing: {
+        openRaiseBigBlinds: 2.25,
+        isolationRaiseBigBlinds: 2.75,
+      },
+    }),
   },
   {
     id: 'strategy-value-hunter-v1',
@@ -104,6 +134,11 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
       postflopAggression: 0.52,
       pressureRaiseMultiplier: 2.9,
     },
+    preflopStrategy: createHeadsUpPreflopStrategy({
+      id: 'value-hunter-hu-preflop-v1',
+      looseness: 0.3,
+      aggression: 0.58,
+    }),
   },
 ]
 

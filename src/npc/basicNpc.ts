@@ -1,6 +1,8 @@
 import type { Rng } from '../shared/rng'
 import { evaluateBestHand } from '../poker-engine'
 import type { Card, EngineCommand, LegalAction, PrivateSeatView, Rank, SeatId } from '../poker-engine'
+import type { NpcPreflopStrategy } from './config'
+import { choosePreflopRangeDecision } from './preflopRanges'
 
 export interface NpcPolicyConfig {
   preflopAggression: number
@@ -19,6 +21,7 @@ export interface NpcDecisionContext {
   config: NpcPolicyConfig
   memory: NpcTableMemory
   rng: Rng
+  preflopStrategy?: NpcPreflopStrategy
 }
 
 export interface NpcPolicy {
@@ -62,6 +65,7 @@ export function createNpcDecisionContext(
   rng: Rng,
   config: Partial<NpcPolicyConfig> = {},
   memory: NpcTableMemory = {},
+  preflopStrategy?: NpcPreflopStrategy,
 ): NpcDecisionContext {
   return {
     view,
@@ -69,12 +73,24 @@ export function createNpcDecisionContext(
     config: { ...DEFAULT_NPC_POLICY_CONFIG, ...config },
     memory,
     rng,
+    ...(preflopStrategy ? { preflopStrategy } : {}),
   }
 }
 
 export class BasicNpcPolicy implements NpcPolicy {
   chooseAction(context: NpcDecisionContext): EngineCommand {
     if (context.view.street === 'preflop' && context.view.holeCards.length === 2) {
+      if (context.preflopStrategy) {
+        const rangeDecision = choosePreflopRangeDecision({
+          view: context.view,
+          legalActions: context.legalActions,
+          strategy: context.preflopStrategy,
+          rng: context.rng,
+        })
+        if (rangeDecision) {
+          return rangeDecision.command
+        }
+      }
       return choosePreflopAction(context)
     }
     if (context.view.holeCards.length === 2 && context.view.communityCards.length >= 3) {

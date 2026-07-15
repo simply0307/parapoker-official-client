@@ -1,4 +1,4 @@
-import type { SeatId } from '../poker-engine'
+import type { PositionLabel, SeatId } from '../poker-engine'
 import type { NpcPolicyConfig } from './basicNpc'
 
 export type NpcDefinitionStatus = 'draft' | 'active' | 'retired'
@@ -27,6 +27,50 @@ export interface NpcStrategyModule {
   settings?: Record<string, number | string | boolean>
 }
 
+export type NpcPreflopFormat = 'heads-up' | 'six-max'
+export type NpcPreflopStackDepth = 'short' | 'medium' | 'deep'
+export type NpcPreflopSituation =
+  | 'unopened'
+  | 'facingLimp'
+  | 'facingOpen'
+  | 'facingRaiseAfterLimp'
+  | 'facingThreeBet'
+  | 'facingFourBet'
+export type NpcPreflopRaiseSizeBucket = 'none' | 'small' | 'medium' | 'large' | 'allIn'
+export type NpcPreflopAction = 'fold' | 'check' | 'call' | 'raise' | 'allIn'
+
+export interface NpcPreflopActionFrequency {
+  action: NpcPreflopAction
+  frequency: number
+}
+
+export interface NpcPreflopRangeNode {
+  id: string
+  formats: NpcPreflopFormat[]
+  positions: PositionLabel[]
+  stackDepths: NpcPreflopStackDepth[]
+  situations: NpcPreflopSituation[]
+  raiseSizeBuckets?: NpcPreflopRaiseSizeBucket[]
+  hands: Record<string, NpcPreflopActionFrequency[]>
+}
+
+export interface NpcPreflopSizingConfig {
+  openRaiseBigBlinds: number
+  isolationRaiseBigBlinds: number
+  threeBetInPositionMultiplier: number
+  threeBetOutOfPositionMultiplier: number
+  fourBetMultiplier: number
+}
+
+export interface NpcPreflopStrategy {
+  schemaVersion: 'npc-preflop-v1'
+  id: string
+  version: number
+  description?: string
+  nodes: NpcPreflopRangeNode[]
+  sizing: NpcPreflopSizingConfig
+}
+
 export interface NpcStrategyProfile {
   id: string
   version: number
@@ -36,6 +80,7 @@ export interface NpcStrategyProfile {
   difficulty: 'steady'
   modules: NpcStrategyModule[]
   policyConfig: NpcPolicyConfig
+  preflopStrategy?: NpcPreflopStrategy
 }
 
 export interface NpcSeatAssignment {

@@ -32,6 +32,10 @@ describe('NPC domain configuration', () => {
       const profile = localNpcStrategyProfile(npc.strategyProfileId)
       expect(profile).toEqual(expect.objectContaining({ id: npc.strategyProfileId, version: expect.any(Number) }))
       expect(profile?.modules.length).toBeGreaterThan(0)
+      expect(profile?.preflopStrategy).toEqual(expect.objectContaining({
+        schemaVersion: 'npc-preflop-v1',
+        version: expect.any(Number),
+      }))
     }
   })
 
@@ -76,12 +80,19 @@ describe('NPC domain configuration', () => {
     } as unknown as PrivateSeatView
     const profile = localNpcStrategyProfile('strategy-pressure-raiser-v1')
     const rng = createRng('npc-domain-context')
-    const context = createNpcDecisionContext(view, rng, profile?.policyConfig, { handsObserved: 12 })
+    const context = createNpcDecisionContext(
+      view,
+      rng,
+      profile?.policyConfig,
+      { handsObserved: 12 },
+      profile?.preflopStrategy,
+    )
 
     expect(context.view).toBe(view)
     expect(context.legalActions).toBe(legalActions)
     expect(context.config.preflopAggression).toBe(profile?.policyConfig.preflopAggression)
     expect(context.memory).toEqual({ handsObserved: 12 })
     expect(context.rng).toBe(rng)
+    expect(context.preflopStrategy?.id).toBe(profile?.preflopStrategy?.id)
   })
 })

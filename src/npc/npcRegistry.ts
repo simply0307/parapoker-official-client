@@ -1,4 +1,5 @@
 import type { NpcDefinition, NpcDefinitionStatus, NpcStrategyProfile } from './config'
+import { validatePreflopStrategy } from './preflopRanges'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from './roster'
 
 export const NPC_REGISTRY_DB_NAME = 'parapoker-npc-registry'
@@ -236,6 +237,9 @@ export function normalizeStrategyProfile(profile: NpcStrategyProfile): NpcStrate
   }
   if (!Number.isInteger(profile.version) || profile.version < 1) {
     throw new Error('NPC strategy profile version must be a positive integer.')
+  }
+  if (profile.preflopStrategy) {
+    validatePreflopStrategy(profile.preflopStrategy)
   }
   return clone({
     ...profile,

@@ -44,6 +44,7 @@ describe('local single-player controller', () => {
         const policy: NpcPolicy = {
           chooseAction(context: NpcDecisionContext) {
             expect(context.config).toEqual(runtime.strategyProfile.policyConfig)
+            expect(context.preflopStrategy).toEqual(runtime.strategyProfile.preflopStrategy)
             return { type: 'fold', seatId: context.view.heroSeatId, source: 'npc' }
           },
         }
