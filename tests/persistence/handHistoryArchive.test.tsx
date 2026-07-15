@@ -89,6 +89,43 @@ describe('hand-history archive stores', () => {
     expect(stableArchiveChecksum(publicPackage)).toMatch(/^[0-9a-f]{8}$/)
   })
 
+  it('finalizes a restricted completed table archive while public archive lists stay sanitized', async () => {
+    const archiveStore = new InMemoryHandHistoryArchiveStore()
+    const session = await playToCompletion({
+      ...archiveConfig,
+      startingStack: 1,
+      smallBlind: 1,
+      bigBlind: 1,
+      matchId: 'authority-archive-local',
+    }, archiveStore)
+
+    const detail = await session.getArchivedSession()
+    const listed = await archiveStore.listArchivedSessions()
+    const archive = detail?.session.authorityArchive
+
+    expect(archive).toEqual(expect.objectContaining({
+      schemaVersion: 'para-completed-table-archive-v1',
+      authorityClass: 'local-browser',
+      matchId: 'authority-archive-local',
+      closure: expect.objectContaining({ reason: 'match-complete' }),
+      integrity: expect.objectContaining({
+        checksumAlgorithm: 'stable-json-fnv1a32',
+        eventCount: archive?.events.length,
+        handCount: archive?.hands.length,
+      }),
+    }))
+    expect(archive?.events.map((event) => event.tableSequence)).toEqual(
+      Array.from({ length: archive?.events.length ?? 0 }, (_, index) => index + 1),
+    )
+    expect(archive?.events.some((event) => event.visibility === 'human' && event.event.type === 'holeCardsDealt')).toBe(true)
+    expect(archive?.seatPrivateHands.some((hand) => hand.seatId === 'human' && hand.holeCards.length === 2)).toBe(true)
+    expect(archive?.derivatives.publicPackage.integrity.checksum).toBe(detail?.session.publicPackage?.integrity.checksum)
+    expect(JSON.stringify(archive?.derivatives.publicPackage)).not.toContain('holeCardsDealt')
+    expect(listed.find((record) => record.matchId === 'authority-archive-local')?.authorityArchive).toBeUndefined()
+    expect(JSON.stringify(listed)).not.toContain('archive-seed-private')
+    expect(JSON.stringify(listed)).not.toContain('holeCardsDealt')
+  })
+
   it('retains IndexedDB-backed records across store re-instantiation', async () => {
     const databaseName = `test-archive-${Date.now()}`
     const blueprint = createGameBlueprint({

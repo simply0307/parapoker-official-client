@@ -1,4 +1,4 @@
-import type { Card, EventSchemaVersion, HandHistoryEvent, SeatId } from '../poker-engine'
+import type { Card, EngineCommand, EventSchemaVersion, HandHistoryEvent, SeatId } from '../poker-engine'
 import type { ProtocolErrorReason, RequestedPokerAction } from '../table-controllers/server-authoritative/InMemoryServerTableAuthority'
 
 export type MatchFormat = 'freezeout' | 'sitAndGo' | 'cash' | 'league'
@@ -104,8 +104,12 @@ export interface CommandRecordDraft {
   npcId?: string
   trustedSeatId: SeatId
   expectedStateVersion: number
+  receivedAt?: string
+  stateVersionBefore?: number
+  stateVersionAfter?: number
   requestedAction: RequestedPokerAction
   status: CommandRecordStatus
+  trustedCommand?: EngineCommand
   resultingEventIds?: string[]
   rejectionReason?: ProtocolErrorReason
 }

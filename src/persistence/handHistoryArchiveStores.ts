@@ -47,6 +47,7 @@ export class InMemoryHandHistoryArchiveStore implements HandHistoryArchiveStore 
       packageChecksum: input.publicPackage.integrity.checksum,
       resultSummary: sanitizeSummary(input.summary),
       publicPackage: clone(input.publicPackage),
+      ...(input.authorityArchive ? { authorityArchive: clone(input.authorityArchive) } : {}),
     }
     this.sessions.set(input.matchId, updated)
     return clone(updated)
@@ -184,6 +185,7 @@ export class IndexedDbHandHistoryArchiveStore implements HandHistoryArchiveStore
       packageChecksum: input.publicPackage.integrity.checksum,
       resultSummary: sanitizeSummary(input.summary),
       publicPackage: clone(input.publicPackage),
+      ...(input.authorityArchive ? { authorityArchive: clone(input.authorityArchive) } : {}),
     }
     await this.put('sessions', updated)
     return clone(updated)

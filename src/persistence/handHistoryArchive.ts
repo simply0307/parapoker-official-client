@@ -3,6 +3,7 @@ import type { CompletedSessionPackage } from '../exports/completedSessionPackage
 import type { GameBlueprint } from '../game-config/gameBlueprint'
 import { npcDefinitionsForBlueprint, npcStrategyProfilesForBlueprint } from '../game-config/gameBlueprint'
 import type { LocalSoloSessionConfig, LocalSoloSessionSummary, SoloSessionMode } from '../table-controllers/local-single-player/LocalSoloSession'
+import type { CompletedTableArchive } from './authorityArchive'
 
 export const HAND_HISTORY_ARCHIVE_SCHEMA_VERSION = 'para-hand-history-archive-v1' as const
 export const HAND_HISTORY_ARCHIVE_DB_NAME = 'parapoker-hand-history-archive'
@@ -100,6 +101,7 @@ export interface ArchivedSessionRecord {
     }>
   }
   publicPackage?: CompletedSessionPackage
+  authorityArchive?: CompletedTableArchive
 }
 
 export interface ArchivedSessionDetail {
@@ -123,6 +125,7 @@ export interface FinalizeArchiveSessionInput {
   matchId: string
   summary: LocalSoloSessionSummary
   publicPackage: CompletedSessionPackage
+  authorityArchive?: CompletedTableArchive
   completedAt?: string
 }
 
@@ -279,7 +282,7 @@ export function buildSeatPrivateHandArchive(input: {
 }
 
 export function sanitizeArchivedSessionForPublicList(session: ArchivedSessionRecord): ArchivedSessionRecord {
-  const { privateMetadata: _privateMetadata, ...publicRecord } = session
+  const { privateMetadata: _privateMetadata, authorityArchive: _authorityArchive, ...publicRecord } = session
   return clone(publicRecord)
 }
 

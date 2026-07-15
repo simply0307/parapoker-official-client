@@ -15,6 +15,8 @@ import {
 import type { NpcSeatAssignment } from '../../npc/config'
 import {
   createEventRecordDrafts,
+  buildAuthorityJournalFromRecords,
+  finalizeCompletedTableArchive,
   InMemoryEventRecordStore,
   buildArchivedHandRecord,
   buildArchiveParticipants,
@@ -304,10 +306,45 @@ export class LocalSoloSession {
     }
     this.archiveFinalized = true
     const publicPackage = await this.exportCompletedSessionPackage()
+    const archiveDetail = await this.archiveStore.readArchivedSession(this.matchId)
+    const match = await this.matchStore.getMatch(this.matchId)
+    const publicEvents = await this.eventStore.listPublicEvents(this.matchId)
+    const privateEventRecords = this.heroPrivateEvents.map((event, index): EventRecord => ({
+      matchId: this.matchId,
+      tableId: this.tableId,
+      event,
+      eventId: event.eventId,
+      handId: event.handId,
+      sequenceNumber: event.sequenceNumber,
+      visibility: event.visibility,
+      recordedAt: match?.completedAt ?? new Date(Date.now() + index).toISOString(),
+      ...(event.visibility === 'public' ? {} : { visibilitySeatId: event.visibility }),
+      privacyClass: 'seatPrivate',
+    }))
+    const authorityArchive = match && archiveDetail
+      ? finalizeCompletedTableArchive({
+          journal: buildAuthorityJournalFromRecords({
+            matchId: this.matchId,
+            tableId: this.tableId,
+            authorityClass: 'local-browser',
+            events: [...publicEvents, ...privateEventRecords],
+            completedHands: archiveDetail.hands,
+            createdAt: archiveDetail.session.startedAt,
+          }),
+          match,
+          participants: archiveDetail.session.participants,
+          privateHands: archiveDetail.privateHands,
+          publicPackage,
+          blueprint: this.blueprint,
+          reason: 'match-complete',
+          closedAt: match.completedAt,
+        })
+      : undefined
     this.archiveRecord = await this.archiveStore.finalizeCompletedSession({
       matchId: this.matchId,
       summary: snapshot.summary,
       publicPackage,
+      authorityArchive,
     })
   }
 

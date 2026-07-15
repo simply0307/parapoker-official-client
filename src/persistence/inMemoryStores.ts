@@ -114,6 +114,8 @@ export class InMemoryCommandRecordStore implements CommandRecordStore {
   async appendCommand(command: CommandRecordDraft): Promise<CommandRecord> {
     const record: CommandRecord = {
       ...clone(command),
+      receivedAt: command.receivedAt ?? new Date().toISOString(),
+      stateVersionBefore: command.stateVersionBefore ?? command.expectedStateVersion,
       privacyClass: 'tablePrivate',
     }
     this.commands.push(record)

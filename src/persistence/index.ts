@@ -1,4 +1,5 @@
 export * from './inMemoryStores'
+export * from './authorityArchive'
 export * from './handHistoryArchive'
 export * from './handHistoryArchiveStores'
 export type * from './types'

@@ -215,7 +215,7 @@ export class InMemoryServerTableAuthority {
     this.state = result.state
     this.stateVersion += 1
     this.persistEvents(result.events)
-    this.persistAcceptedCommand(request, trustedSeatId, result.events.map((event) => event.eventId))
+    this.persistAcceptedCommand(request, trustedSeatId, this.stateVersion, result.events.map((event) => event.eventId))
     const accepted: CommandAcceptedMessage = {
       ok: true,
       tableId: this.tableId,
@@ -339,6 +339,7 @@ export class InMemoryServerTableAuthority {
   private persistAcceptedCommand(
     request: PlayerActionRequest,
     trustedSeatId: SeatId,
+    stateVersionAfter: number,
     resultingEventIds: string[],
   ): void {
     if (!this.persistence?.commandStore) {
@@ -354,8 +355,12 @@ export class InMemoryServerTableAuthority {
           playerId: trustedSeatId,
           trustedSeatId,
           expectedStateVersion: request.expectedStateVersion,
+          receivedAt: new Date().toISOString(),
+          stateVersionBefore: request.expectedStateVersion,
+          stateVersionAfter,
           requestedAction: sanitizeRequestedAction(request.requestedAction),
           status: 'accepted',
+          trustedCommand: toTrustedCommand(trustedSeatId, request),
           resultingEventIds,
         }),
       ),
@@ -380,6 +385,8 @@ export class InMemoryServerTableAuthority {
           playerId: trustedSeatId,
           trustedSeatId,
           expectedStateVersion: request.expectedStateVersion,
+          receivedAt: new Date().toISOString(),
+          stateVersionBefore: request.expectedStateVersion,
           requestedAction: sanitizeRequestedAction(request.requestedAction),
           status: 'rejected',
           rejectionReason,
