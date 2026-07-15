@@ -7,6 +7,7 @@ import {
   type GameVisibility,
 } from '../game-config/gameBlueprint'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../npc/config'
+import { IndexedDbNpcRegistryStore } from '../npc/npcRegistry'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../npc/roster'
 import {
   IndexedDbHandHistoryArchiveStore,
@@ -15,14 +16,6 @@ import {
   type HandHistoryArchiveStatus,
 } from '../persistence'
 import { completedSessionPackageToPokerNowCsv } from '../exports/pokerNowCsv'
-
-interface AdminNpcDraft {
-  id: string
-  name: string
-  archetypeLabel: string
-  strategyProfileId: string
-  status: NpcDefinition['status']
-}
 
 interface AdminGameDraft {
   mode: GameBlueprintMode
@@ -38,16 +31,9 @@ type ImportWorkflowStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | '
 
 export function AdminPortal() {
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
-  const [npcDrafts, setNpcDrafts] = useState<AdminNpcDraft[]>(() =>
-    LOCAL_NPC_DEFINITIONS.map((npc) => ({
-      id: npc.id,
-      name: npc.name,
-      archetypeLabel: npc.archetypeLabel,
-      strategyProfileId: npc.strategyProfileId,
-      status: npc.status,
-    })),
-  )
-  const [strategyProfiles] = useState<NpcStrategyProfile[]>(LOCAL_NPC_STRATEGY_PROFILES)
+  const npcRegistryRef = useRef(new IndexedDbNpcRegistryStore())
+  const [npcDefinitions, setNpcDefinitions] = useState<NpcDefinition[]>(LOCAL_NPC_DEFINITIONS)
+  const [strategyProfiles, setStrategyProfiles] = useState<NpcStrategyProfile[]>(LOCAL_NPC_STRATEGY_PROFILES)
   const [gameDraft, setGameDraft] = useState<AdminGameDraft>(() => ({
     mode: 'heads-up',
     visibility: 'private',
@@ -61,15 +47,7 @@ export function AdminPortal() {
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
   const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
 
-  const activeNpcDrafts = npcDrafts.filter((npc) => npc.status === 'active')
-  const npcDefinitions = useMemo<NpcDefinition[]>(
-    () =>
-      npcDrafts.map((npc) => ({
-        ...npc,
-        strategyProfileId: npc.strategyProfileId,
-      })),
-    [npcDrafts],
-  )
+  const activeNpcDefinitions = npcDefinitions.filter((npc) => npc.status === 'active')
   const resolvedBlueprint = useMemo(
     () =>
       createGameBlueprint({
@@ -96,12 +74,35 @@ export function AdminPortal() {
     }
   }, [selectedArchive])
 
+  const refreshNpcRegistry = useCallback(async () => {
+    const snapshot = await npcRegistryRef.current.snapshot()
+    setNpcDefinitions(snapshot.definitions)
+    setStrategyProfiles(snapshot.strategyProfiles)
+  }, [])
+
   useEffect(() => {
     void refreshArchives()
   }, [refreshArchives])
 
-  function updateNpc(id: string, patch: Partial<AdminNpcDraft>) {
-    setNpcDrafts((current) => current.map((npc) => (npc.id === id ? { ...npc, ...patch } : npc)))
+  useEffect(() => {
+    void refreshNpcRegistry()
+  }, [refreshNpcRegistry])
+
+  async function updateNpc(id: string, patch: Partial<NpcDefinition>) {
+    const existing = npcDefinitions.find((npc) => npc.id === id)
+    if (!existing) {
+      return
+    }
+    const draft = { ...existing, ...patch }
+    setNpcDefinitions((current) => current.map((npc) => (npc.id === id ? draft : npc)))
+    try {
+      const updated = await npcRegistryRef.current.upsertDefinition(draft)
+      setNpcDefinitions((current) => current.map((npc) => (npc.id === id ? updated : npc)))
+      setOperatorMessage(`NPC ${updated.name} saved to the local registry.`)
+    } catch (error) {
+      setNpcDefinitions((current) => current.map((npc) => (npc.id === id ? existing : npc)))
+      setOperatorMessage(error instanceof Error ? error.message : String(error))
+    }
   }
 
   function updateGame(patch: Partial<AdminGameDraft>) {
@@ -291,17 +292,17 @@ export function AdminPortal() {
       <section className="admin-panel" aria-label="NPC definitions">
         <div className="section-heading">
           <h2>NPCs</h2>
-          <span>{npcDrafts.length} definitions</span>
+          <span>{npcDefinitions.length} definitions</span>
         </div>
         <div className="admin-list">
-          {npcDrafts.map((npc) => (
+          {npcDefinitions.map((npc) => (
             <article className="admin-row" key={npc.id}>
               <label>
                 <span>Name</span>
                 <input
                   aria-label={`${npc.id} name`}
                   value={npc.name}
-                  onChange={(event) => updateNpc(npc.id, { name: event.target.value })}
+                  onChange={(event) => void updateNpc(npc.id, { name: event.target.value })}
                 />
               </label>
               <label>
@@ -309,7 +310,7 @@ export function AdminPortal() {
                 <input
                   aria-label={`${npc.id} archetype`}
                   value={npc.archetypeLabel}
-                  onChange={(event) => updateNpc(npc.id, { archetypeLabel: event.target.value })}
+                  onChange={(event) => void updateNpc(npc.id, { archetypeLabel: event.target.value })}
                 />
               </label>
               <label>
@@ -317,7 +318,7 @@ export function AdminPortal() {
                 <select
                   aria-label={`${npc.id} strategy`}
                   value={npc.strategyProfileId}
-                  onChange={(event) => updateNpc(npc.id, { strategyProfileId: event.target.value })}
+                  onChange={(event) => void updateNpc(npc.id, { strategyProfileId: event.target.value })}
                 >
                   {strategyProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
@@ -404,7 +405,7 @@ export function AdminPortal() {
                 value={assignment.npcDefinitionId}
                 onChange={(event) => assignSeat(assignment.seatId, event.target.value)}
               >
-                {activeNpcDrafts.map((npc) => (
+                {activeNpcDefinitions.map((npc) => (
                   <option key={npc.id} value={npc.id}>
                     {npc.name}
                   </option>
