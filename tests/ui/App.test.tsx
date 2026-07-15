@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../../src/App'
 
@@ -28,6 +28,29 @@ describe('App navigation', () => {
     expect(screen.getByLabelText('Configuration preview')).toHaveTextContent('Maven Prime')
     expect(screen.getByLabelText('Configuration preview')).toHaveTextContent('"mode": "six-max"')
     expect(screen.getByLabelText('Configuration preview')).toHaveTextContent('"npcDefinitionId": "npc-vega"')
+  })
+
+  it('saves game blueprints and manages lobby table instances from admin', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Saved game blueprints')).toHaveTextContent('Local Heads-Up Solo')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('open')
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0])
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('cancelled')
+    })
   })
 
   it('returns from admin to the playable setup screen', () => {

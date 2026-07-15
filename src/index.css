@@ -1126,10 +1126,15 @@ h2 {
 .admin-list,
 .strategy-grid,
 .admin-controls,
+.admin-actions,
 .lineup-grid,
 .preview-grid {
   display: grid;
   gap: 8px;
+}
+
+.admin-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .admin-list {

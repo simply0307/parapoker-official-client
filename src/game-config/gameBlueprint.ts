@@ -21,6 +21,7 @@ export interface GameSeatBlueprint {
 export interface GameBlueprint {
   id: string
   name: string
+  version: number
   mode: GameBlueprintMode
   visibility: GameVisibility
   startingStack: number
@@ -54,6 +55,7 @@ export function createGameBlueprint(input: CreateGameBlueprintInput): GameBluepr
   return {
     id: `local-${input.mode}-blueprint`,
     name: input.mode === 'six-max' ? 'Local Six-Max Solo' : 'Local Heads-Up Solo',
+    version: 1,
     mode: input.mode,
     visibility: input.visibility ?? 'private',
     startingStack: input.startingStack,

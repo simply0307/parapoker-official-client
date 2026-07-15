@@ -6,6 +6,11 @@ import {
   type GameBlueprintMode,
   type GameVisibility,
 } from '../game-config/gameBlueprint'
+import {
+  IndexedDbGameBlueprintStore,
+  type GameBlueprintRecord,
+  type LobbyTableInstance,
+} from '../game-config/gameBlueprintStore'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../npc/config'
 import { IndexedDbNpcRegistryStore } from '../npc/npcRegistry'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../npc/roster'
@@ -32,8 +37,11 @@ type ImportWorkflowStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | '
 export function AdminPortal() {
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
   const npcRegistryRef = useRef(new IndexedDbNpcRegistryStore())
+  const blueprintStoreRef = useRef(new IndexedDbGameBlueprintStore())
   const [npcDefinitions, setNpcDefinitions] = useState<NpcDefinition[]>(LOCAL_NPC_DEFINITIONS)
   const [strategyProfiles, setStrategyProfiles] = useState<NpcStrategyProfile[]>(LOCAL_NPC_STRATEGY_PROFILES)
+  const [blueprintRecords, setBlueprintRecords] = useState<GameBlueprintRecord[]>([])
+  const [lobbyTables, setLobbyTables] = useState<LobbyTableInstance[]>([])
   const [gameDraft, setGameDraft] = useState<AdminGameDraft>(() => ({
     mode: 'heads-up',
     visibility: 'private',
@@ -80,6 +88,12 @@ export function AdminPortal() {
     setStrategyProfiles(snapshot.strategyProfiles)
   }, [])
 
+  const refreshBlueprintStore = useCallback(async () => {
+    const snapshot = await blueprintStoreRef.current.snapshot()
+    setBlueprintRecords(snapshot.blueprints)
+    setLobbyTables(snapshot.lobbyTables)
+  }, [])
+
   useEffect(() => {
     void refreshArchives()
   }, [refreshArchives])
@@ -87,6 +101,10 @@ export function AdminPortal() {
   useEffect(() => {
     void refreshNpcRegistry()
   }, [refreshNpcRegistry])
+
+  useEffect(() => {
+    void refreshBlueprintStore()
+  }, [refreshBlueprintStore])
 
   async function updateNpc(id: string, patch: Partial<NpcDefinition>) {
     const existing = npcDefinitions.find((npc) => npc.id === id)
@@ -124,6 +142,36 @@ export function AdminPortal() {
         assignment.seatId === seatId ? { ...assignment, npcDefinitionId } : assignment,
       ),
     }))
+  }
+
+  async function saveBlueprintDraft() {
+    try {
+      const record = await blueprintStoreRef.current.upsertBlueprint(resolvedBlueprint, 'draft')
+      await refreshBlueprintStore()
+      setOperatorMessage(`Saved ${record.blueprint.name} v${record.blueprint.version} as a reusable blueprint draft.`)
+    } catch (error) {
+      setOperatorMessage(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function openLobbyTable() {
+    try {
+      const table = await blueprintStoreRef.current.createLobbyTable(resolvedBlueprint, 'open')
+      await refreshBlueprintStore()
+      setOperatorMessage(`Opened lobby table ${table.tableId} from ${table.blueprint.name} v${table.blueprintVersion}.`)
+    } catch (error) {
+      setOperatorMessage(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function cancelLobbyTable(tableId: string) {
+    try {
+      await blueprintStoreRef.current.cancelLobbyTable(tableId)
+      await refreshBlueprintStore()
+      setOperatorMessage(`Cancelled lobby table ${tableId}.`)
+    } catch (error) {
+      setOperatorMessage(error instanceof Error ? error.message : String(error))
+    }
   }
 
   async function openArchive(matchId: string) {
@@ -413,6 +461,70 @@ export function AdminPortal() {
               </select>
             </label>
           ))}
+        </div>
+
+        <div className="admin-actions">
+          <button type="button" onClick={() => void saveBlueprintDraft()}>
+            Save draft
+          </button>
+          <button type="button" onClick={() => void openLobbyTable()}>
+            Open lobby table
+          </button>
+        </div>
+      </section>
+
+      <section className="admin-panel" aria-label="Lobby table drafts">
+        <div className="section-heading">
+          <h2>Lobby Tables</h2>
+          <span>{lobbyTables.length} instances</span>
+        </div>
+        <div className="admin-list">
+          {lobbyTables.length === 0 ? (
+            <p>No lobby tables have been created yet.</p>
+          ) : (
+            lobbyTables.map((table) => (
+              <article className="admin-row" key={table.tableId}>
+                <div>
+                  <strong>{table.blueprint.name}</strong>
+                  <span>
+                    {table.status} · {table.blueprint.mode} · v{table.blueprintVersion}
+                  </span>
+                </div>
+                <span>{table.tableId}</span>
+                {table.status === 'open' || table.status === 'draft' ? (
+                  <button type="button" onClick={() => void cancelLobbyTable(table.tableId)}>
+                    Cancel
+                  </button>
+                ) : null}
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="admin-panel" aria-label="Saved game blueprints">
+        <div className="section-heading">
+          <h2>Saved Blueprints</h2>
+          <span>{blueprintRecords.length} records</span>
+        </div>
+        <div className="admin-list">
+          {blueprintRecords.length === 0 ? (
+            <p>No reusable blueprints have been saved yet.</p>
+          ) : (
+            blueprintRecords.map((record) => (
+              <article className="admin-row" key={record.blueprint.id}>
+                <div>
+                  <strong>{record.blueprint.name}</strong>
+                  <span>
+                    {record.status} · {record.blueprint.mode} · {record.blueprint.visibility}
+                  </span>
+                </div>
+                <span>
+                  v{record.blueprint.version} · {record.blueprint.seats.length} seats
+                </span>
+              </article>
+            ))
+          )}
         </div>
       </section>
 
