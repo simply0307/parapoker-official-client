@@ -50,6 +50,26 @@ describe('game blueprint store', () => {
     expect(tables[0].blueprint.seats).toHaveLength(6)
   })
 
+  it('resolves a random blueprint seed once for each lobby table instance', async () => {
+    const resolvedSeeds = ['random-table-one', 'random-table-two']
+    const store = new InMemoryGameBlueprintStore({}, () => resolvedSeeds.shift() ?? 'unexpected-seed')
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seedPolicy: 'random',
+    })
+
+    const first = await store.createLobbyTable(blueprint)
+    const second = await store.createLobbyTable(blueprint)
+
+    expect(first.blueprint.seedPolicy).toBe('random')
+    expect(first.resolvedSeed).toBe('random-table-one')
+    expect(second.resolvedSeed).toBe('random-table-two')
+    expect(first.resolvedSeed).not.toBe(second.resolvedSeed)
+  })
+
   it('cancels lobby tables without deleting their pinned blueprint snapshot', async () => {
     const store = new InMemoryGameBlueprintStore()
     const table = await store.createLobbyTable(
@@ -119,6 +139,7 @@ describe('game blueprint store', () => {
 
     expect(() => normalizeGameBlueprint({ ...blueprint, bigBlind: 1 })).toThrow('big blind')
     expect(() => normalizeGameBlueprint({ ...blueprint, seats: [] })).toThrow('heads-up blueprint requires 2 seats')
+    expect(() => normalizeGameBlueprint({ ...blueprint, seed: '', seedPolicy: 'fixed' })).toThrow('seed is required')
   })
 
   it('persists records across IndexedDB store instances', async () => {

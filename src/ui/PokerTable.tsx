@@ -380,7 +380,7 @@ function configForLobbyTable(
     startingStack: blueprint.startingStack,
     smallBlind: blueprint.smallBlind,
     bigBlind: blueprint.bigBlind,
-    seed: blueprint.seed,
+    seed: table.resolvedSeed ?? blueprint.seed,
     visibility: blueprint.visibility,
     blueprint,
     humanPlayer,

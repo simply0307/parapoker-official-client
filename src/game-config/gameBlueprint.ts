@@ -9,6 +9,7 @@ import {
 
 export type GameBlueprintMode = 'heads-up' | 'six-max'
 export type GameVisibility = 'private' | 'unlisted' | 'public'
+export type GameSeedPolicy = 'fixed' | 'random'
 
 export interface GameSeatBlueprint {
   seatId: SeatId
@@ -27,6 +28,7 @@ export interface GameBlueprint {
   startingStack: number
   smallBlind: number
   bigBlind: number
+  seedPolicy: GameSeedPolicy
   seed: string | number
   seats: GameSeatBlueprint[]
 }
@@ -41,7 +43,8 @@ export interface CreateGameBlueprintInput {
   startingStack: number
   smallBlind: number
   bigBlind: number
-  seed: string | number
+  seed?: string | number
+  seedPolicy?: GameSeedPolicy
   visibility?: GameVisibility
   npcLineup?: NpcSeatAssignment[]
   humanPlayer?: HumanPlayerIdentity
@@ -68,7 +71,8 @@ export function createGameBlueprint(input: CreateGameBlueprintInput): GameBluepr
     startingStack: input.startingStack,
     smallBlind: input.smallBlind,
     bigBlind: input.bigBlind,
-    seed: input.seed,
+    seedPolicy: input.seedPolicy ?? 'fixed',
+    seed: input.seed ?? '',
     seats,
   }
 }
@@ -107,12 +111,13 @@ export function npcStrategyProfilesForBlueprint(blueprint: GameBlueprint): NpcSt
 export function gameBlueprintToControllerConfig(
   blueprint: GameBlueprint,
   npcDefinitions: readonly NpcDefinition[] = [],
+  resolvedSeed: string | number = blueprint.seed,
 ): Partial<MatchConfig> {
   return {
     startingStack: blueprint.startingStack,
     smallBlind: blueprint.smallBlind,
     bigBlind: blueprint.bigBlind,
-    seed: blueprint.seed,
+    seed: resolvedSeed,
     seats: blueprint.seats.map((seat) => ({
       id: seat.seatId,
       name: seatName(seat, npcDefinitions),

@@ -22,6 +22,7 @@ export interface LobbyTableInstance {
   blueprintId: string
   blueprintVersion: number
   blueprint: GameBlueprint
+  resolvedSeed: string | number
   status: LobbyTableStatus
   createdAt: string
   updatedAt: string
@@ -51,8 +52,13 @@ export interface GameBlueprintStore {
 export class InMemoryGameBlueprintStore implements GameBlueprintStore {
   private readonly blueprints = new Map<string, GameBlueprintRecord>()
   private readonly lobbyTables = new Map<string, LobbyTableInstance>()
+  private readonly createRandomSeed: () => string
 
-  constructor(initial: Partial<GameBlueprintStoreSnapshot> = {}) {
+  constructor(
+    initial: Partial<GameBlueprintStoreSnapshot> = {},
+    createRandomSeed: () => string = createRandomGameSeed,
+  ) {
+    this.createRandomSeed = createRandomSeed
     for (const record of initial.blueprints ?? []) {
       this.blueprints.set(record.blueprint.id, clone(record))
     }
@@ -105,6 +111,7 @@ export class InMemoryGameBlueprintStore implements GameBlueprintStore {
       blueprintId: normalized.id,
       blueprintVersion: normalized.version,
       blueprint: clone(normalized),
+      resolvedSeed: resolveGameBlueprintSeed(normalized, this.createRandomSeed),
       status,
       createdAt: now,
       updatedAt: now,
@@ -185,11 +192,13 @@ const memoryFallbacks = new Map<string, InMemoryGameBlueprintStore>()
 export class IndexedDbGameBlueprintStore implements GameBlueprintStore {
   private readonly databaseName: string
   private readonly fallback?: InMemoryGameBlueprintStore
+  private readonly createRandomSeed: () => string
 
-  constructor(databaseName = GAME_BLUEPRINT_DB_NAME) {
+  constructor(databaseName = GAME_BLUEPRINT_DB_NAME, createRandomSeed: () => string = createRandomGameSeed) {
     this.databaseName = databaseName
+    this.createRandomSeed = createRandomSeed
     if (!globalThis.indexedDB) {
-      const existing = memoryFallbacks.get(databaseName) ?? new InMemoryGameBlueprintStore()
+      const existing = memoryFallbacks.get(databaseName) ?? new InMemoryGameBlueprintStore({}, createRandomSeed)
       memoryFallbacks.set(databaseName, existing)
       this.fallback = existing
     }
@@ -252,6 +261,7 @@ export class IndexedDbGameBlueprintStore implements GameBlueprintStore {
       blueprintId: normalized.id,
       blueprintVersion: normalized.version,
       blueprint: clone(normalized),
+      resolvedSeed: resolveGameBlueprintSeed(normalized, this.createRandomSeed),
       status,
       createdAt: now,
       updatedAt: now,
@@ -393,7 +403,11 @@ export function normalizeGameBlueprint(blueprint: GameBlueprint): GameBlueprint 
   if (!Number.isInteger(blueprint.bigBlind) || blueprint.bigBlind <= blueprint.smallBlind) {
     throw new Error('Game blueprint big blind must be greater than the small blind.')
   }
-  if (String(blueprint.seed).trim() === '') {
+  const seedPolicy = blueprint.seedPolicy ?? 'fixed'
+  if (seedPolicy !== 'fixed' && seedPolicy !== 'random') {
+    throw new Error('Game blueprint seed policy must be fixed or random.')
+  }
+  if (seedPolicy === 'fixed' && String(blueprint.seed).trim() === '') {
     throw new Error('Game blueprint seed is required.')
   }
   const expectedSeatCount = blueprint.mode === 'heads-up' ? 2 : 6
@@ -417,11 +431,33 @@ export function normalizeGameBlueprint(blueprint: GameBlueprint): GameBlueprint 
     ...blueprint,
     id,
     name,
+    seedPolicy,
     seats: blueprint.seats.map((seat) => ({
       ...seat,
       displayName: seat.displayName?.trim(),
     })),
   })
+}
+
+export function resolveGameBlueprintSeed(
+  blueprint: GameBlueprint,
+  createRandomSeed: () => string = createRandomGameSeed,
+): string | number {
+  return (blueprint.seedPolicy ?? 'fixed') === 'random' ? createRandomSeed() : blueprint.seed
+}
+
+let fallbackSeedSequence = 0
+
+export function createRandomGameSeed(): string {
+  if (globalThis.crypto?.randomUUID) {
+    return `table-${globalThis.crypto.randomUUID()}`
+  }
+  if (globalThis.crypto?.getRandomValues) {
+    const values = globalThis.crypto.getRandomValues(new Uint32Array(4))
+    return `table-${[...values].map((value) => value.toString(16).padStart(8, '0')).join('')}`
+  }
+  fallbackSeedSequence += 1
+  return `table-${Date.now()}-${fallbackSeedSequence}`
 }
 
 type StoreName = 'blueprints' | 'lobbyTables'

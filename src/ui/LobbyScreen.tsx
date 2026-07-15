@@ -99,7 +99,8 @@ export function LobbyScreen({
                     <Metric label="Seats" value={table.blueprint.seats.length} />
                   </dl>
                   <p>
-                    {table.blueprint.visibility} · blueprint v{table.blueprintVersion} · seed {String(table.blueprint.seed)}
+                    {table.blueprint.visibility} · blueprint v{table.blueprintVersion} ·{' '}
+                    {table.blueprint.seedPolicy === 'random' ? 'random seed' : `seed ${String(table.blueprint.seed)}`}
                   </p>
                   <button
                     type="button"

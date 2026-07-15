@@ -4,6 +4,7 @@ import {
   defaultNpcLineup,
   gameBlueprintToControllerConfig,
   type GameBlueprintMode,
+  type GameSeedPolicy,
   type GameVisibility,
 } from '../game-config/gameBlueprint'
 import {
@@ -28,11 +29,13 @@ interface AdminGameDraft {
   startingStack: number
   smallBlind: number
   bigBlind: number
+  seedPolicy: GameSeedPolicy
   seed: string
   npcLineup: NpcSeatAssignment[]
 }
 
 type ImportWorkflowStatus = Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>
+type LobbyTableFilter = 'all' | 'active' | 'closed' | 'cancelled'
 
 export function AdminPortal() {
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
@@ -48,11 +51,13 @@ export function AdminPortal() {
     startingStack: 200,
     smallBlind: 1,
     bigBlind: 2,
+    seedPolicy: 'fixed',
     seed: 'admin-preview',
     npcLineup: defaultNpcLineup('heads-up'),
   }))
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionRecord[]>([])
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
+  const [lobbyTableFilter, setLobbyTableFilter] = useState<LobbyTableFilter>('all')
   const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
 
   const activeNpcDefinitions = npcDefinitions.filter((npc) => npc.status === 'active')
@@ -64,14 +69,23 @@ export function AdminPortal() {
         startingStack: gameDraft.startingStack,
         smallBlind: gameDraft.smallBlind,
         bigBlind: gameDraft.bigBlind,
+        seedPolicy: gameDraft.seedPolicy,
         seed: gameDraft.seed,
         npcLineup: gameDraft.npcLineup,
       }),
     [gameDraft],
   )
   const controllerPreview = useMemo(
-    () => gameBlueprintToControllerConfig(resolvedBlueprint, npcDefinitions),
+    () => gameBlueprintToControllerConfig(
+      resolvedBlueprint,
+      npcDefinitions,
+      resolvedBlueprint.seedPolicy === 'random' ? '[resolved when table opens]' : resolvedBlueprint.seed,
+    ),
     [npcDefinitions, resolvedBlueprint],
+  )
+  const filteredLobbyTables = useMemo(
+    () => lobbyTables.filter((table) => matchesLobbyTableFilter(table, lobbyTableFilter)),
+    [lobbyTableFilter, lobbyTables],
   )
 
   const refreshArchives = useCallback(async () => {
@@ -434,11 +448,22 @@ export function AdminPortal() {
           <NumberControl label="Admin starting stack" title="Stack" value={gameDraft.startingStack} onChange={(startingStack) => updateGame({ startingStack })} />
           <NumberControl label="Admin small blind" title="SB" value={gameDraft.smallBlind} onChange={(smallBlind) => updateGame({ smallBlind })} />
           <NumberControl label="Admin big blind" title="BB" value={gameDraft.bigBlind} onChange={(bigBlind) => updateGame({ bigBlind })} />
+          <label className="toggle-field">
+            <input
+              aria-label="Random seed per table"
+              type="checkbox"
+              checked={gameDraft.seedPolicy === 'random'}
+              onChange={(event) => updateGame({ seedPolicy: event.target.checked ? 'random' : 'fixed' })}
+            />
+            <span>Random seed per table</span>
+          </label>
           <label>
             <span>Seed</span>
             <input
               aria-label="Admin seed"
               value={gameDraft.seed}
+              disabled={gameDraft.seedPolicy === 'random'}
+              placeholder={gameDraft.seedPolicy === 'random' ? 'Resolved when table opens' : undefined}
               onChange={(event) => updateGame({ seed: event.target.value })}
             />
           </label>
@@ -476,13 +501,26 @@ export function AdminPortal() {
       <section className="admin-panel" aria-label="Lobby table drafts">
         <div className="section-heading">
           <h2>Lobby Tables</h2>
-          <span>{lobbyTables.length} instances</span>
+          <label>
+            <span>Status</span>
+            <select
+              aria-label="Lobby table status filter"
+              value={lobbyTableFilter}
+              onChange={(event) => setLobbyTableFilter(event.target.value as LobbyTableFilter)}
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <span>{filteredLobbyTables.length} of {lobbyTables.length} instances</span>
         </div>
         <div className="admin-list">
-          {lobbyTables.length === 0 ? (
-            <p>No lobby tables have been created yet.</p>
+          {filteredLobbyTables.length === 0 ? (
+            <p>{lobbyTables.length === 0 ? 'No lobby tables have been created yet.' : `No ${lobbyTableFilter} lobby tables.`}</p>
           ) : (
-            lobbyTables.map((table) => (
+            filteredLobbyTables.map((table) => (
               <article className="admin-row" key={table.tableId}>
                 <div>
                   <strong>{table.blueprint.name}</strong>
@@ -490,7 +528,9 @@ export function AdminPortal() {
                     {table.status} · {table.blueprint.mode} · v{table.blueprintVersion}
                   </span>
                 </div>
-                <span>{table.tableId}</span>
+                <span>
+                  {table.tableId} · {table.blueprint.seedPolicy === 'random' ? 'random seed' : 'fixed seed'}
+                </span>
                 {table.status === 'open' || table.status === 'draft' ? (
                   <button type="button" onClick={() => void cancelLobbyTable(table.tableId)}>
                     Cancel
@@ -540,6 +580,16 @@ export function AdminPortal() {
       </section>
     </main>
   )
+}
+
+function matchesLobbyTableFilter(table: LobbyTableInstance, filter: LobbyTableFilter): boolean {
+  if (filter === 'all') {
+    return true
+  }
+  if (filter === 'active') {
+    return table.status === 'open' || table.status === 'running'
+  }
+  return table.status === filter
 }
 
 function downloadText(filename: string, text: string, type: string) {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../../src/App'
 
@@ -53,6 +53,38 @@ describe('App navigation', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('cancelled')
     })
+
+    fireEvent.change(screen.getByLabelText('Lobby table status filter'), { target: { value: 'active' } })
+    expect(screen.getByLabelText('Lobby table drafts')).not.toHaveTextContent('cancelled')
+
+    fireEvent.change(screen.getByLabelText('Lobby table status filter'), { target: { value: 'cancelled' } })
+    expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('cancelled')
+
+    fireEvent.change(screen.getByLabelText('Lobby table status filter'), { target: { value: 'closed' } })
+    expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('No closed lobby tables')
+  })
+
+  it('opens random-seed blueprints with a resolved per-table seed', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    fireEvent.click(screen.getByLabelText('Random seed per table'))
+
+    expect(screen.getByLabelText('Admin seed')).toBeDisabled()
+    expect(screen.getByLabelText('Configuration preview')).toHaveTextContent('"seedPolicy": "random"')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('random seed')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lobby' }))
+    const randomTableCard = (await screen.findByText(/random seed/)).closest('article')
+    expect(randomTableCard).not.toBeNull()
+    fireEvent.click(within(randomTableCard as HTMLElement).getByRole('button', { name: 'Join table' }))
+
+    expect(await screen.findByText(/^Seed table-/)).toBeInTheDocument()
   })
 
   it('returns from admin to the playable setup screen', () => {

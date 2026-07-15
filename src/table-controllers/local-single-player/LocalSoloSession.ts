@@ -103,13 +103,14 @@ export class LocalSoloSession {
 
   private constructor(config: LocalSoloSessionConfig, options: LocalSoloSessionOptions = {}) {
     const resolvedBlueprint = config.blueprint ? clone(config.blueprint) : createBlueprintFromSessionConfig(config)
+    const resolvedSeed = resolvedBlueprint.seedPolicy === 'random' ? config.seed : resolvedBlueprint.seed
     this.config = {
       ...clone(config),
       mode: resolvedBlueprint.mode,
       startingStack: resolvedBlueprint.startingStack,
       smallBlind: resolvedBlueprint.smallBlind,
       bigBlind: resolvedBlueprint.bigBlind,
-      seed: resolvedBlueprint.seed,
+      seed: resolvedSeed,
       visibility: resolvedBlueprint.visibility,
       npcLineup: npcLineupForBlueprint(resolvedBlueprint),
       blueprint: clone(resolvedBlueprint),
@@ -121,7 +122,7 @@ export class LocalSoloSession {
     this.eventStore = new InMemoryEventRecordStore()
     this.statsStore = new InMemoryStatsStore(this.eventStore)
     this.archiveStore = options.archiveStore
-    this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint), {
+    this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint, [], resolvedSeed), {
       npcLineup: npcLineupForBlueprint(this.blueprint),
       npcDefinitions: npcDefinitionsForBlueprint(this.blueprint),
       npcStrategyProfiles: npcStrategyProfilesForBlueprint(this.blueprint),

@@ -79,4 +79,17 @@ describe('game blueprint configuration', () => {
     })
     expect(gameBlueprintToControllerConfig(blueprint).seats?.[0].name).toBe('RiverPort')
   })
+
+  it('allows a reusable blueprint to request a random seed when a table opens', () => {
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seedPolicy: 'random',
+    })
+
+    expect(blueprint.seedPolicy).toBe('random')
+    expect(blueprint.seed).toBe('')
+  })
 })
