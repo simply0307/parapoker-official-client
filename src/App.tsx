@@ -10,11 +10,11 @@ type AppScreen = 'lobby' | 'play' | 'admin'
 function App() {
   const [screen, setScreen] = useState<AppScreen>('lobby')
   const [joinedTable, setJoinedTable] = useState<LobbyTableInstance | null>(null)
-  const [activeTableIds, setActiveTableIds] = useState<string[]>([])
+  const [activeTables, setActiveTables] = useState<LobbyTableInstance[]>([])
 
   function joinTable(table: LobbyTableInstance) {
     setJoinedTable(table)
-    setActiveTableIds((current) => current.includes(table.tableId) ? current : [...current, table.tableId].slice(0, 4))
+    setActiveTables((current) => current.some((activeTable) => activeTable.tableId === table.tableId) ? current : [...current, table].slice(0, 4))
     setScreen('play')
   }
 
@@ -50,13 +50,14 @@ function App() {
       {screen === 'admin' && <AdminPortal />}
       {screen === 'lobby' && (
         <LobbyScreen
-          activeTableIds={activeTableIds}
+          activeTableIds={activeTables.map((table) => table.tableId)}
           onJoinTable={joinTable}
         />
       )}
       {screen === 'play' && (
         <PokerTable
           joinedTable={joinedTable}
+          joinedTables={activeTables}
           openAdmin={() => setScreen('admin')}
         />
       )}

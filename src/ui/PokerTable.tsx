@@ -5,6 +5,7 @@ import {
   type HandResultSummary,
   type HumanCommand,
   type PresentationEvent,
+  type SecondaryTableWindow,
   type TableWindowLayout,
 } from './PokerClientShell'
 import {
@@ -25,12 +26,15 @@ type SeedMode = 'form' | 'same' | 'random'
 
 export function PokerTable({
   joinedTable = null,
+  joinedTables = [],
   openAdmin = () => {},
 }: {
   joinedTable?: LobbyTableInstance | null
+  joinedTables?: LobbyTableInstance[]
   openAdmin?: () => void
 }) {
   const sessionRef = useRef<LocalSoloSession | null>(null)
+  const lobbySessionRefs = useRef(new Map<string, LocalSoloSession>())
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
   const startedLobbyTableIdRef = useRef<string | null>(null)
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
@@ -43,6 +47,7 @@ export function PokerTable({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tableLayout, setTableLayout] = useState<TableWindowLayout>('1')
   const [completedPackage, setCompletedPackage] = useState<CompletedSessionPackage | null>(null)
+  const [lobbySnapshots, setLobbySnapshots] = useState<Record<string, LocalSoloSessionSnapshot>>({})
 
   const heroSeat = snapshot?.heroView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   const opponentSeats = snapshot?.heroView.seats.filter((seat) => seat.id !== snapshot.heroView.heroSeatId) ?? []
@@ -58,28 +63,74 @@ export function PokerTable({
   const lastResult = snapshot ? getLastResultText(snapshot) : undefined
   const handResult = snapshot ? getHandResultSummary(snapshot) : undefined
   const tableTitle = snapshot?.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em"
+  const secondaryTables = useMemo<SecondaryTableWindow[]>(() => {
+    return joinedTables
+      .filter((table) => table.tableId !== joinedTable?.tableId)
+      .map((table) => {
+        const tableSnapshot = lobbySnapshots[table.tableId]
+        if (!tableSnapshot) {
+          return undefined
+        }
+        return {
+          tableId: table.tableId,
+          title: tableSnapshot.mode === 'six-max' ? "Six-Max No-Limit Hold'em" : "Heads-Up No-Limit Hold'em",
+          status: statusForSnapshot(tableSnapshot),
+          snapshot: tableSnapshot,
+          scene: sceneForSnapshot(tableSnapshot),
+        }
+      })
+      .filter((table): table is SecondaryTableWindow => Boolean(table))
+  }, [joinedTable?.tableId, joinedTables, lobbySnapshots])
 
   useEffect(() => {
-    if (!joinedTable || startedLobbyTableIdRef.current === joinedTable.tableId) {
+    if (joinedTables.length === 0) {
       return
     }
-    startedLobbyTableIdRef.current = joinedTable.tableId
-    async function startJoinedTable(table: LobbyTableInstance) {
-      const nextConfig = configForLobbyTable(table)
-      const session = await LocalSoloSession.create(nextConfig, { archiveStore: archiveStoreRef.current })
-      const nextSnapshot = session.getSnapshot()
-      sessionRef.current = session
-      setSetup(nextConfig)
-      setUseRandomSeed(false)
-      setSetupError('')
-      setAmounts({})
-      setCompletedPackage(null)
-      setSnapshot(nextSnapshot)
-      setScene(sceneForSnapshot(nextSnapshot))
-      setPresentationEvents(getPresentationEvents(nextSnapshot, null))
+    let cancelled = false
+    async function ensureJoinedSessions() {
+      for (const table of joinedTables) {
+        if (!lobbySessionRefs.current.has(table.tableId)) {
+          const tableSession = await LocalSoloSession.create(configForLobbyTable(table), {
+            archiveStore: archiveStoreRef.current,
+          })
+          if (cancelled) {
+            return
+          }
+          lobbySessionRefs.current.set(table.tableId, tableSession)
+          setLobbySnapshots((current) => ({ ...current, [table.tableId]: tableSession.getSnapshot() }))
+        }
+      }
+      const currentTable = joinedTable ?? joinedTables[0]
+      const currentSession = lobbySessionRefs.current.get(currentTable.tableId)
+      if (currentSession && startedLobbyTableIdRef.current !== currentTable.tableId) {
+        startedLobbyTableIdRef.current = currentTable.tableId
+        const nextConfig = configForLobbyTable(currentTable)
+        const nextSnapshot = currentSession.getSnapshot()
+        sessionRef.current = currentSession
+        setSetup(nextConfig)
+        setUseRandomSeed(false)
+        setSetupError('')
+        setAmounts({})
+        setCompletedPackage(null)
+        setSnapshot(nextSnapshot)
+        setScene(sceneForSnapshot(nextSnapshot))
+        setPresentationEvents(getPresentationEvents(nextSnapshot, null))
+      }
     }
-    void startJoinedTable(joinedTable)
-  }, [joinedTable])
+    void ensureJoinedSessions()
+    return () => {
+      cancelled = true
+    }
+  }, [joinedTable, joinedTables])
+
+  useEffect(() => {
+    const activeCount = joinedTables.length
+    if (activeCount > 2) {
+      setTableLayout('4')
+    } else if (activeCount > 1) {
+      setTableLayout('2')
+    }
+  }, [joinedTables.length])
 
   useEffect(() => {
     let cancelled = false
@@ -180,6 +231,9 @@ export function PokerTable({
 
   function applySnapshot(nextSnapshot: LocalSoloSessionSnapshot, previousSnapshot: LocalSoloSessionSnapshot | null) {
     setSnapshot(nextSnapshot)
+    if (joinedTable) {
+      setLobbySnapshots((current) => ({ ...current, [joinedTable.tableId]: nextSnapshot }))
+    }
     setScene(sceneForSnapshot(nextSnapshot))
     setPresentationEvents(getPresentationEvents(nextSnapshot, previousSnapshot))
   }
@@ -254,6 +308,7 @@ export function PokerTable({
         }
       }}
       viewHandHistories={openAdmin}
+      secondaryTables={secondaryTables}
     />
   )
 }
@@ -378,6 +433,17 @@ function sceneForSnapshot(snapshot: LocalSoloSessionSnapshot): SoloScene {
     return 'betweenHand'
   }
   return 'playing'
+}
+
+function statusForSnapshot(snapshot: LocalSoloSessionSnapshot): string {
+  if (snapshot.summary || snapshot.publicView.status === 'complete') {
+    return 'Match complete'
+  }
+  if (snapshot.canonicalStatus === 'waitingForHand') {
+    return 'Hand complete'
+  }
+  const pending = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
+  return pending ? `${pending.name} to act` : 'Resolving hand'
 }
 
 function validateSetup(config: LocalSoloSessionConfig, randomSeed: boolean): string {

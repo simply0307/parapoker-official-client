@@ -87,4 +87,36 @@ describe('App navigation', () => {
     expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
     expect(screen.getByText('Seed admin-preview')).toBeInTheDocument()
   })
+
+  it('keeps multiple joined lobby tables active in the table layout', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('open')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lobby' }))
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Join table' }).length).toBeGreaterThanOrEqual(2)
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Join table' })[0])
+    expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lobby' }))
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Join table' }).length).toBeGreaterThanOrEqual(1)
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Join table' })[0])
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Table windows')).toHaveClass('layout-2')
+    })
+    expect(screen.getAllByLabelText('Poker table')).toHaveLength(2)
+    expect(screen.getByLabelText('Table 2 footer')).not.toHaveTextContent('No active session')
+  })
 })

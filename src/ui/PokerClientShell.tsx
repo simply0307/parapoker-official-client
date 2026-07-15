@@ -25,6 +25,14 @@ export interface PresentationEvent {
   text: string
 }
 
+export interface SecondaryTableWindow {
+  tableId: string
+  title: string
+  status: string
+  snapshot: LocalSoloSessionSnapshot
+  scene: SoloScene
+}
+
 export type HumanCommand =
   | { type: 'fold' }
   | { type: 'check' }
@@ -65,6 +73,7 @@ export interface PokerClientShellProps {
   canDownloadHandHistory: boolean
   downloadHandHistory: () => void
   viewHandHistories: () => void
+  secondaryTables?: SecondaryTableWindow[]
 }
 
 export function PokerClientShell({
@@ -97,9 +106,11 @@ export function PokerClientShell({
   canDownloadHandHistory,
   downloadHandHistory,
   viewHandHistories,
+  secondaryTables = [],
 }: PokerClientShellProps) {
   const tableCount = Number(tableLayout)
   const density = tableLayout === '1' ? 'large' : 'compact'
+  const secondarySlots = secondaryTables.slice(0, Math.max(0, tableCount - 1))
 
   return (
     <main className="poker-client-shell">
@@ -160,18 +171,45 @@ export function PokerClientShell({
             </div>
           )}
         </TableWindow>
-        {Array.from({ length: tableCount - 1 }).map((_, index) => (
-          <TableWindow
-            key={index}
-            tableNumber={index + 2}
-            title={`Table ${index + 2}`}
-            status="No active session"
-            density={density}
-            footer={<InactiveTableFooter />}
-          >
-            <InactiveTableStage slotNumber={index + 2} />
-          </TableWindow>
-        ))}
+        {Array.from({ length: tableCount - 1 }).map((_, index) => {
+          const secondaryTable = secondarySlots[index]
+          if (secondaryTable) {
+            const secondaryHero = secondaryTable.snapshot.heroView.seats.find((seat) => seat.id === secondaryTable.snapshot.heroView.heroSeatId)
+            const secondaryOpponents = secondaryTable.snapshot.heroView.seats.filter((seat) => seat.id !== secondaryTable.snapshot.heroView.heroSeatId)
+            const secondaryPending = secondaryTable.snapshot.publicView.seats.find((seat) => seat.id === secondaryTable.snapshot.publicView.pendingSeatId)
+            return (
+              <TableWindow
+                key={secondaryTable.tableId}
+                tableNumber={index + 2}
+                title={secondaryTable.title}
+                status={secondaryTable.status}
+                active
+                density={density}
+                footer={<ReadOnlyTableFooter snapshot={secondaryTable.snapshot} />}
+              >
+                <PokerTableSurface
+                  snapshot={secondaryTable.snapshot}
+                  heroSeat={secondaryHero}
+                  opponentSeats={secondaryOpponents}
+                  pendingSeat={secondaryPending}
+                  scene={secondaryTable.scene}
+                />
+              </TableWindow>
+            )
+          }
+          return (
+            <TableWindow
+              key={index}
+              tableNumber={index + 2}
+              title={`Table ${index + 2}`}
+              status="No active session"
+              density={density}
+              footer={<InactiveTableFooter />}
+            >
+              <InactiveTableStage slotNumber={index + 2} />
+            </TableWindow>
+          )
+        })}
       </section>
       <HandHistoryDrawer
         events={snapshot.heroView.events}
@@ -348,6 +386,16 @@ function InactiveTableFooter() {
     <div className="inactive-table-footer">
       <strong>No active session</strong>
       <span>Available when multi-table sessions are enabled</span>
+    </div>
+  )
+}
+
+function ReadOnlyTableFooter({ snapshot }: { snapshot: LocalSoloSessionSnapshot }) {
+  const pendingSeat = snapshot.publicView.seats.find((seat) => seat.id === snapshot.publicView.pendingSeatId)
+  return (
+    <div className="inactive-table-footer">
+      <strong>{pendingSeat ? `${pendingSeat.name} to act` : titleCase(snapshot.publicView.status)}</strong>
+      <span>Open the table from the lobby list to act here.</span>
     </div>
   )
 }
