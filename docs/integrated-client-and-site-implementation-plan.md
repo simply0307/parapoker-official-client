@@ -1,787 +1,633 @@
-# Integrated Client and Para Site Implementation Plan
+# ParaPoker Client, Authority Service, and Operator Console Roadmap
 
-Status: Governing implementation plan for the gameplay client and Para Poker site integration.
+Status: Governing roadmap for coordinated gameplay, authority, and operator work.
 
-This document is based on inspection of the current `parapoker-official-client` repository and the separate `para-poker-site` repository. It replaces stale client-only roadmap assumptions. It does not modify production code, tests, dependencies, configuration, migrations, importer code, exporter code, networking, UI, NPC behavior, or existing architecture documents.
+This document replaces stale client-only expansion assumptions. It is based on inspection of the current `parapoker-official-client` repository and the separate `para-poker-site` repository. It does not implement code.
 
-## 1. Executive Product State
+Most important correction:
 
-ParaPoker currently exists as two separate products with complementary responsibilities.
+> The browser player client is not the backend authority. It consumes projections and submits requests to authority boundaries; it does not own trusted seat binding, complete authority archives, or administrator authorization.
 
-`parapoker-official-client` is the gameplay product. It can run a browser-playable local no-limit Texas Hold'em freezeout match using Vite, React, and TypeScript. The current browser UI can start a local heads-up or six-max session, submit human actions, run NPC actions, show a table, show action controls, and display a local result summary. The UI still creates a default match automatically on page load, so the next user-facing work is an explicit setup/playing/result scene flow.
+## 1. System Boundaries
 
-Important client modules:
+ParaPoker should be designed as three coordinated surfaces, not one expanding browser client.
 
-- `src/poker-engine/`: serializable rules engine, cards, evaluator, pot construction, projections, replay helpers, and Event Schema v1.
-- `src/npc/basicNpc.ts`: deterministic code-driven NPC policy with preflop and postflop heuristics.
-- `src/table-controllers/local-single-player/`: local controller and `LocalSoloSession` integration boundary.
-- `src/table-controllers/server-authoritative/`: in-memory server-authority and multiplayer table-service prototypes.
-- `src/persistence/`: in-memory match, event, command, profile, and statistics store interfaces and implementations.
-- `src/ui/PokerTable.tsx`: current browser gameplay UI.
+### Player Client
 
-`para-poker-site` is the persistent player-facing and admin presentation product. It is a separate Next.js and Supabase application with sessions, hands, actions, session results, player session stats, notable hands, players, standings, moments, recaps, newsroom pages, and an admin raw hand-history import path. Its current working tree is dirty and ahead of origin, so this plan treats that repository as read-only audit evidence and must not modify it.
+Owns:
 
-User-facing capability today:
+- Gameplay presentation.
+- Player authentication UI.
+- Lobby UI.
+- Table navigation.
+- One, two, and four-table layouts.
+- Player-visible local and cloud histories.
+- `PlayerActionRequest` submission.
 
-- Client: local solo gameplay with heads-up and six-max NPC tables, current-match stats, local result summary, and in-memory records.
-- Site: Supabase-backed public/admin session, player, standings, moments, and newsroom surfaces, plus raw hand-history preview/commit.
+Does not own:
 
-Internal-only or prototype capability:
+- Trusted seat binding.
+- Complete authority archives.
+- Administrator authorization.
+- Official import approval.
+- Raw randomness evidence.
+- Other players' restricted private evidence.
 
-- Client: replay helpers, visibility-scoped stores, command records, profile stores, server authority, multiplayer table service, spectator projections, reconnection behavior, and persistence flushing are tested internally but not exposed as a real networked product.
-- Site: raw text/CSV import exists, but there is no versioned canonical ParaPoker client package adapter yet.
+### Game Authority Service
 
-What users might reasonably assume exists but does not:
+Owns:
 
-- No explicit client setup scene before game creation.
-- No durable client-side session archive.
-- No canonical client JSON export package.
-- No Para site adapter for client-generated event packages.
-- No automatic client-to-site submission.
-- No real multiplayer transport, auth, lobby, timers, or production server process.
+- Trusted table lifecycle.
+- Authenticated connection-to-seat binding.
+- Command validation.
+- Canonical poker state.
+- Event journal.
+- Timers and disconnect policy.
+- Restricted private evidence.
+- Completed-hand checkpoints.
+- Archive finalization.
+- Authority classification.
 
-## 2. Current Cross-Repository Architecture Map
+The current in-memory server-authoritative prototype is a boundary proof, not a production service.
 
-Authority flows from poker rules to controller/session to UI in the client, then later from completed session package to the site.
+### Operator Console
 
-Client architecture:
+Owns:
 
-- Poker engine owns canonical gameplay state, legal actions, betting progression, pot construction, showdown, Event Schema v1, and public/private projections.
-- NPC policy receives only `PrivateSeatView`, legal actions, policy config, read-only memory, and an independent RNG stream.
-- `LocalSinglePlayerController` owns the local canonical engine state and runs NPC turns.
-- `LocalSoloSession` owns a local match ID, controller, in-memory stores, public event capture, current-match stats, and result summary.
-- React owns only view shell state: form inputs, selected controls, UI panels, and pending/presentation state. It must not own stacks, deck, hole cards, legal actions, pot, winners, or betting progression.
-- In-memory server authority and multiplayer table service simulate future server ownership, state versioning, idempotency, trusted seat binding, spectator projection, reconnect behavior, and persistence flushing.
+- NPC and strategy administration.
+- Blueprint and lobby-table operations.
+- Restricted archive inspection.
+- Public-package and CSV generation.
+- Para submission and import status.
+- Operational review.
 
-Site architecture:
+The operator console may share a repository and design system with the player client, but it must be a separately protected server-authorized surface. A hidden React Admin tab is not a security boundary.
 
-- Next.js server routes and server components access Supabase through server-side service-role configuration in `src/lib/supabase.js`.
-- Admin import endpoints preview and commit raw hand history in `src/app/api/admin/imports/raw-hands/*`.
-- Import repository maps parsed raw hands into Supabase `sessions`, `hands`, `actions`, `notable_hands`, `players`, and `player_session_stats`.
-- Public/admin pages read normalized session, player, standings, moment, and recap data from Supabase-backed repositories and view models.
+## 2. Current Repository Assessment
 
-Required preserved boundaries:
+### `parapoker-official-client`
 
-- React is not canonical poker state.
-- NPCs receive only seat-private projections.
-- Human and NPC actions use the trusted internal engine gateway.
-- Future multiplayer clients never submit trusted seat identity or action source.
-- Hidden cards, deck order, seeds, entropy, and RNG state remain private.
-- Narrative, recap, newsroom, and Para presentation systems do not affect poker decisions or rules.
-- The client produces canonical completed-session evidence; the site owns durable import, mapping, publication, and presentation.
+Current useful foundations:
 
-## 3. Infrastructure Integration Matrix
+- Vite React TypeScript client with explicit setup, table, result, and local admin screens.
+- Serializable poker engine with Event Schema v1, public/private projections, hand evaluator, pot construction, replay, betting tests, three-handed tests, and simulations.
+- `LocalSoloSession` creates a local archive when a table starts, appends public events, stores completed-hand checkpoints, retains hero-private hand evidence, and finalizes a completed-session public package.
+- IndexedDB hand-history archive exists for browser-local evidence retention.
+- Completed-session package exists as structured JSON and a Poker Now-style CSV can be derived from it.
+- NPC identity and strategy contracts exist, with deterministic policy RNG streams.
+- In-memory server authority prototype has `PlayerActionRequest`, state versions, idempotency, trusted seat binding, public/private projections, command persistence hooks, and multiplayer-session tests.
+- Supabase publishable-key auth shell exists in the player client.
 
-| Subsystem | Current implementation | Consumers | Gap | Plan |
-| --- | --- | --- | --- | --- |
-| Poker engine | Serializable TypeScript rules engine with legal actions, Event Schema v1, projection APIs, pot construction, evaluator, replay helpers | Local controller, server authority tests, NPC projections, UI indirectly | Position labels are not projected; export package does not exist | Keep as gameplay source of truth; add tested position projection/helper before layout/export work |
-| Event schema | Stable envelope with schema version, event ID, sequence number, hand ID, command ID, visibility, payload | Engine, stores, replay tests, session tests | Not yet wrapped into cross-repo completed-session package | Preserve and use as package event backbone |
-| Replay | Replays from config/seed or fixed deck plus commands | Engine tests | Not exposed as product replay or import validation | Use to validate export fixtures before site import |
-| NPC policy | Basic preflop/postflop heuristics, independent RNG streams | Local controller | No roster, difficulty, archetypes, position-aware ranges, or multiway equity | Productize after solo scene/table presentation |
-| Local controller | Runs engine locally and auto-runs NPC turns | Local session and tests | Immediate canonical resolution has no presentation queue | Keep authority boundary; add presentation queue above it later |
-| Local solo session | Owns controller, local match ID, in-memory stores, event capture, stats, summary | UI and tests | In-memory only; public events only; no export package; time/random IDs | Keep for local product shell and export staging |
-| Match/Event/Command stores | In-memory interfaces and implementations | Session, server authority tests | Not durable; not intended as client league archive | Keep in-memory for gameplay/session tests, local summaries, multiplayer authority staging, and export generation |
-| Stats store | Current-match stats from verified public events | Session and tests | Gross chips awarded only; no lifetime stats; no VPIP/PFR | Keep narrow in client; site owns durable player/session/lifetime stats after import |
-| Profile store | In-memory player/NPC profile interface | Tests only | Duplicates site responsibility if expanded | Do not expand into persistent client profiles; reuse only for NPC config prototypes/tests if needed |
-| Server authority | In-memory table authority with trusted command construction, idempotency, state versions, projections, persistence hooks | Tests | No transport/auth/process/timers/secure entropy | Keep prototype; real multiplayer waits until local/export/site path is stable |
-| Multiplayer table service | In-memory player/spectator connect, reconnect, action routing | Tests | Not a deployed multiplayer service | Keep as protocol boundary proof |
-| React UI | Table, setup controls, actions, history, result summary | Browser users | Auto-starts a match; no explicit scenes; table layout still dashboard-like | Next task creates explicit setup/playing/between-hand/result scenes |
-| Para site import | Raw text/CSV preview and commit to Supabase | Admin import page | No canonical ParaPoker client package adapter | Add after client export package is stable |
-| Para site presentation | Sessions, hands/actions, players, standings, moments, newsroom, recaps | Public/admin site | Depends on imported rows, not client package yet | Site remains durable read model and presentation owner |
+Important gaps:
 
-## 4. Immediate Product Integration Goal
+- Current local archive is browser-owned and cannot be considered official authority.
+- Current completed-session package is sanitized public/exhibition evidence, not a full restricted authority archive.
+- Command evidence is incomplete for rejected requests and accepted request provenance.
+- Event sequencing is hand-local and public-filtered; there is no durable global table sequence.
+- Admin Portal is a local React tool, not a protected operator console.
+- Lobby and true multi-table active sessions are not implemented.
+- No restricted Supabase archive metadata/object storage model exists in the client roadmap yet.
 
-The first coherent checkpoint is the solo game product shell in the client:
+### `para-poker-site`
 
-Setup Scene -> Active Match Scene -> Hand Completion -> Next Hand -> Match Result Scene -> Rematch or Change Setup -> Completed-session export later.
+Current useful foundations:
 
-The browser should not create or display a game until the player explicitly starts one.
+- Next.js and Supabase public/editorial site.
+- Public sessions, players, standings, moments, recaps, newsroom, and admin editorial surfaces.
+- Server-side service-role access in site routes.
+- Raw hand-history import.
+- Versioned ParaPoker completed-session JSON package importer at `src/lib/imports/parapokerPackageImporter.js`.
+- `game_session_imports` SQL/RPC workflow for import audit and transactional normalized row commit.
 
-Ownership:
+Important boundaries:
 
-- Setup form and scene state: React.
-- Resolved seed, mode, blinds, stack, active match ID: `LocalSoloSession`.
-- Poker state, actions, events, and result: engine/controller/session.
-- Current-match stats and result summary: `LocalSoloSession` derived from verified events and match state.
-- Durable session archive, profiles, standings, recaps, moments: Para site after export/import.
+- The Para site owns public presentation, standings, recap/newsroom workflows, and administrative approval/import mapping.
+- It should not become the live game authority process unless explicitly split into an authority service boundary.
+- Existing site importer reinforces that structured JSON is preferred over CSV when available.
 
-## 5. Client UI Scene Architecture
+## 3. Trust and Authority Model
 
-Add explicit scenes in `PokerTable` or a small UI-level scene shell:
+Add the authority classification concept:
 
-- `setup`: no session exists; show configuration and Start Match.
-- `playing`: active hand in progress; show table/actions.
-- `betweenHand`: hand settled and match not complete; show hand result, Next Hand, Change Setup.
-- `matchResult`: match complete; show result summary, Rematch Same Seed, New Random Match, Change Setup.
+```ts
+type AuthorityClass =
+  | 'local-browser'
+  | 'local-development'
+  | 'server-exhibition'
+  | 'server-official'
+```
 
-React may own:
+Implications:
 
-- Current scene.
-- Form inputs.
-- Open/collapsed history and summary panels.
-- Confirmation dialog state.
-- Presentation timing/animation queues.
+- `local-browser`: owner-private or exhibition evidence only. Authentication does not make a browser archive authoritative.
+- `local-development`: test-only records.
+- `server-exhibition`: may be published as exhibition evidence after review.
+- `server-official`: eligible for official competition only after Para validation and approval.
 
-React must not own:
+Official standings must not trust `local-browser` archives.
 
-- Stacks, pot, deck, hole cards, legal actions, betting progression, winners, match stats, or event truth.
+Supabase authentication identifies a user and ownership context, but it does not establish trusted multiplayer seat authority until the Game Authority Service binds an authenticated connection to a seat.
 
-Transition rules:
+## 4. Active Journal Contract
 
-- Initial load -> `setup`, with no `LocalSoloSession.create`.
-- Start Match -> validate setup, resolve seed once, create `LocalSoloSession`, enter `playing` or `matchResult` if instant-complete.
-- Player action -> session transition; if status waits for next hand, enter `betweenHand`; if complete, enter `matchResult`; otherwise remain `playing`.
-- Next Hand -> session starts hand and returns to `playing`.
-- Change Setup during active match -> confirmation before discarding in-memory active match.
-- Rematch Same Seed -> create a new session with same resolved seed.
-- New Random Match -> generate a new seed exactly once at start boundary.
-- Refresh currently loses in-memory data; durable archive/export is postponed.
+Do not wait until table closure for the first durable write. Evidence must be persisted incrementally.
 
-## 6. Match Setup and Seed Lifecycle
+Lifecycle:
 
-Setup fields:
+1. Create an active authority journal when a table starts.
+2. Append accepted and rejected command records during play.
+3. Append emitted events durably.
+4. Persist a completed-hand checkpoint after every hand.
+5. Finalize exactly one immutable `CompletedTableArchive` when the table closes.
+6. Preserve failed or aborted table evidence with an explicit close reason.
 
-- Mode: heads-up or six-max.
-- Starting stack.
-- Small blind.
-- Big blind.
-- Deterministic seed input.
-- Random local seed toggle or button.
-- Future: NPC roster and difficulty, not in the next task.
+Conceptual contract:
 
-Validation:
+```ts
+interface ActiveTableJournal {
+  tableId: string
+  authorityClass: AuthorityClass
+  lifecycleStatus: TableLifecycleStatus
+  commands: AuthorityCommandRecord[]
+  events: AuthorityEventRecord[]
+  completedHands: AuthorityHandRecord[]
+  lastPersistedTableSequence: number
+}
+```
 
-- Starting stack, small blind, and big blind must be positive integers.
-- Big blind must be at least small blind.
-- Starting stack must be at least big blind unless product owner approves micro all-in starts for testing.
-- Deterministic seed must be non-empty when random seed is disabled.
+The existing `LocalSoloSession` incremental hand retention should be preserved as the local prototype of this safety property.
 
-Seed lifecycle:
+## 5. Command Evidence
 
-- Deterministic seed: use exactly the entered value.
-- Random seed: generate once when Start Match or New Random Match is clicked.
-- Store the resolved seed in the session config.
-- Display the exact resolved seed in the active match and result.
-- Rematch Same Seed reuses that exact value.
-- Never silently regenerate during render.
+Command evidence must include more than successful trusted `EngineCommand` objects.
 
-Local seeds are deterministic/reproducibility inputs. Future live multiplayer entropy is server-side cryptographic randomness and must never be exposed to ordinary clients, logs, exports, recaps, or the site import package.
+Each authority command record must preserve:
 
-## 7. Seat, Position, and Table Presentation
+- Original `PlayerActionRequest`.
+- Request ID.
+- Authenticated user and connection where applicable.
+- Server-bound seat.
+- Received timestamp.
+- State version before processing.
+- Acceptance or rejection.
+- Rejection reason when rejected.
+- Trusted `EngineCommand` only when accepted.
+- State version after processing.
+- Emitted event IDs.
 
-Add a shared tested position helper or projection field in the client, not ad hoc React logic.
+The browser never chooses trusted seat or source fields.
 
-Conventional labels by funded active seat count:
+## 6. Event Sequencing and Visibility
 
-- Heads-up: BTN/SB, BB.
-- Three-handed: BTN, SB, BB.
-- Four-handed: BTN, SB, BB, UTG.
-- Five-handed: BTN, SB, BB, UTG, CO.
-- Six-handed: BTN, SB, BB, UTG, HJ, CO.
+Document three ordering concepts:
 
-Position rules:
-
-- Recalculate every hand from funded participating seats.
-- Respond to eliminations.
-- Do not permanently attach position labels to seat IDs.
-- Align with current engine dealer/blind/action ordering and `docs/poker-rules-contract.md`.
-- Expose through engine projection or a shared helper consumed by projection/UI/export tests.
-
-Seat presentation should distinguish:
-
-- Player/NPC display name.
-- Stack.
-- Position.
-- Button/blind responsibility.
-- Active/folded/all-in/out status.
-- Acting indicator.
-- Street contribution.
-- Total contribution where useful for all-ins and side pots.
-
-## 8. Table Layout and Visual Hierarchy
-
-The poker table should be the primary visual object, not a dashboard grid.
-
-Plan:
-
-- Arrange six-max seats around one table with hero anchored at bottom.
-- Keep board and pot central.
-- Put action controls close to hero.
-- Make hand history compact, collapsible, and secondary.
-- Dim folded seats; clearly mark all-in/out states.
-- Emphasize acting seat and moving dealer/button.
-- Preserve accessible labels and keyboard operation.
-- Use React/CSS first; do not require canvas/WebGL unless CSS proves insufficient.
-- Support desktop without page scroll where practical and mobile with a stacked responsive layout.
-
-## 9. Hand and Match Presentation
-
-Current canonical resolution is immediate. That is correct for authority, but presentation needs a separate queue.
-
-Add a UI presentation queue later that consumes verified transition events and turns them into display steps:
-
-- Action acknowledgement.
-- NPC thinking delay.
-- Street dealing.
-- Pot movement.
-- Fold result.
-- Showdown reveal.
-- Winning hand description.
-- Main/side pot display.
-- Split pot and odd-chip display.
-- Elimination and match completion.
+```ts
+interface AuthorityEventRecord {
+  tableSequence: number
+  handNumber: number
+  handSequence: number
+  visibility: 'public' | string
+}
+```
 
 Rules:
 
-- Canonical state resolves immediately in controller/session.
-- UI locks input while presenting queued events if the current canonical state says no human action is pending.
-- NPC pacing never owns or delays canonical state.
-- Presentation events are UI-only and derived from canonical engine history; they are not replay truth.
+- `tableSequence` is globally contiguous across the full authority journal.
+- `handSequence` is contiguous inside the full restricted hand journal.
+- `handSequence` may restart for each hand.
+- Private events occupy `handSequence` positions.
+- Public filtered output may contain `handSequence` gaps.
+- Public validation requires strictly increasing hand-local sequences, not necessarily contiguous sequences.
 
-## 10. NPC Productization Plan
+Do not force the current poker engine hand-local sequence to become a global public sequence. Add global sequencing at the authority journal layer.
 
-Current NPC policy uses:
+## 7. Completed Archive Contract
 
-- Legal actions from private seat projection.
-- Preflop hand tiers.
-- Made-hand strength, draw detection, board wetness, pot odds-ish call pricing, effective stack, and deterministic RNG.
-- Independent RNG per NPC seat using seed plus seat ID.
+Conceptual contract:
 
-Limitations:
+```ts
+interface CompletedTableArchive {
+  schemaVersion: string
+  archiveId: string
+  tableId: string
+  authorityClass: AuthorityClass
+  table: CompletedTableMetadata
+  participants: CompletedParticipant[]
+  hands: CompletedAuthorityHand[]
+  commands: AuthorityCommandRecord[]
+  events: AuthorityEventRecord[]
+  result: CompletedTableResult
+  closure: TableClosure
+  integrity: ArchiveIntegrity
+}
+```
 
-- All NPCs share the same default config unless controller config is extended.
-- Position awareness is limited.
-- Multiway equity is coarse.
-- Table memory exists structurally but is barely used.
-- Bet sizing is simple and can look repetitive.
-- No named roster, archetypes, or difficulty settings.
+The completed archive is immutable after successful finalization. Corrections or annotations must be separate audit records, never silent mutation.
 
-Stages:
+Required contents:
 
-1. Named NPC config and roster for solo setup.
-2. Difficulty presets that map to policy config.
-3. Position-aware preflop ranges and action frequencies.
-4. Multiway-aware postflop heuristics and effective-stack pressure.
-5. Lightweight deterministic equity approximation or documented hand-strength/potential heuristics.
-6. Opponent tendency memory outside canonical engine state.
-7. Controlled mistakes, bluff, semi-bluff, and bet-size variation.
-8. Behavioral simulations and legality tests.
+- Pinned table metadata and lifecycle.
+- Blueprint version and table instance ID.
+- Seat reservations and final assignments.
+- Participant identities, display names, and account/NPC references.
+- NPC definition and strategy-profile versions.
+- Blind, stack, position, and dealer data per hand.
+- Accepted and rejected command evidence.
+- Full restricted event journal.
+- Public and private dealt cards.
+- Board cards.
+- Target contribution and raise-to evidence.
+- Refund and side-pot evidence.
+- Stack checkpoints and final stacks.
+- Elimination and finish order.
+- Closure reason.
+- Integrity checksums.
 
-Do not use an LLM for poker action selection. Character identity, dialogue, flavor, and recaps are presentation layers only.
+## 8. Public Package and CSV Derivations
 
-## 11. Local Session and Completed Hand-History Export Boundary
+Structured JSON remains canonical.
 
-`LocalSoloSession` should remain the client integration boundary for solo play.
+Derivation hierarchy:
 
-Current strengths:
+```text
+CompletedTableArchive
+|-- restricted structured authority archive
+|-- sanitized structured completed-session public package
+`-- Poker Now-compatible CSV
+```
 
-- Unique local match IDs.
-- Owns local controller.
-- Captures public events.
-- Derives current-match stats.
-- Produces local result summary.
-- Supports heads-up and six-max.
+Rules:
 
-Current limitations:
+- `CompletedTableArchive` events remain chronological.
+- Sanitized public packages remove restricted-only fields.
+- Poker Now CSV is a compatibility adapter only.
+- Newest-first CSV output may be generated for compatibility.
+- CSV is not the canonical backend record and should not be preferred when structured JSON is available.
+- Para site import should prefer structured JSON package/archives and use CSV for legacy or compatibility workflows.
 
-- Match IDs use time/randomness and are not durable.
-- Data is in-memory and lost on refresh.
-- Public events only are recorded for session records.
-- Local solo commands are not recorded as command records.
-- No completed-session export package.
-- No durable client archive.
-- No Para player identity mapping.
+## 9. Separate Status Systems
 
-Staged path:
+Do not use one mixed status field. Track these separately:
 
-1. Reliable in-memory session and scene flow.
-2. Canonical completed-session export package generated from verified records.
-3. JSON download.
-4. Site admin import/validation.
-5. Optional browser-local recent export cache, not a league archive.
-6. Authenticated automatic submission later.
+```ts
+type TableLifecycleStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'open'
+  | 'seating'
+  | 'active'
+  | 'closing'
+  | 'closed'
+  | 'cancelled'
+  | 'aborted'
 
-## 12. Client Store and Interface Review
+type ArchiveLifecycleStatus =
+  | 'not-started'
+  | 'journaling'
+  | 'finalizing'
+  | 'ready'
+  | 'failed'
+  | 'quarantined'
 
-`MatchRecordStore`, `EventRecordStore`, and `CommandRecordStore`:
+type SubmissionLifecycleStatus =
+  | 'not-submitted'
+  | 'csv-generated'
+  | 'submitted'
+  | 'validation-failed'
+  | 'needs-mapping'
+  | 'imported'
+  | 'rejected'
+```
 
-- Keep in-memory.
-- Useful for gameplay/session tests, local summaries, future multiplayer authority, and export generation staging.
-- Do not present as production persistence.
-- Later production durability belongs either to the future multiplayer server or the Para site import path, depending on mode.
+How they combine:
 
-`StatsStore`:
+- A scheduled table may have archive status `not-started` and submission status `not-submitted`.
+- An active table should have archive status `journaling`.
+- A closing table should have archive status `finalizing`.
+- A closed table may have archive status `ready`, `failed`, or `quarantined`.
+- Submission status remains independent because a ready archive may never be submitted, may need mapping, or may be rejected.
 
-- Keep narrowly for current-match/result screen stats and export support.
-- Do not expand to lifetime stats, standings, or player profiles.
-- Site owns durable player-session and lifetime statistics after import.
-- Current `chipsAwarded` is gross pot awards, not profit.
+## 10. Blueprint, Lobby, and Table Lifecycle
 
-`ProfileStore`:
+Separate reusable templates from table instances:
 
-- Keep as test/prototype support for NPC/player config if useful.
-- Do not build persistent profile UX in the client.
-- Site owns player profiles, NPC presentation, dossiers, and public/private player-facing pages.
+```text
+GameBlueprint
+-> LobbyTable
+-> TableSeat reservations/assignments
+-> ActiveTable
+-> CompletedTableArchive
+```
 
-## 13. Para Site Import and Consumption Roadmap
+Rules:
 
-The client must produce one repository-independent completed-session package. The site must own the adapter that validates and maps the package into Supabase and presentation schemas.
+- `GameBlueprint` is reusable and versioned.
+- Creating a lobby game creates a `LobbyTable` instance from a blueprint.
+- Seat reservations and assignments belong to the table instance, not the blueprint.
+- When a table activates, pin:
+  - Blueprint version.
+  - NPC definition versions.
+  - Strategy-profile versions.
+  - Blind and stack configuration.
+  - Seat assignments.
+  - Visibility.
+  - Authority class.
+  - Randomness policy.
+- Later configuration edits must not alter an active or completed table.
 
-Package should include:
+Target table types:
 
-- `schemaVersion`.
-- Source application and client version.
-- Stable source match ID.
-- Rules contract version.
-- Event schema version.
-- Session format and mode.
-- Starting stack and blinds.
-- Participants and seat assignments.
-- Optional Para player IDs.
-- Hands.
-- Ordered public events.
-- Actions.
-- Community cards.
-- Revealed cards only.
-- Pot awards.
-- Final stacks.
-- Finish order.
-- Result summary.
-- Integrity/checksum metadata where useful.
+- Heads-up bot.
+- Heads-up human.
+- Six-max bots.
+- Six-max mixed humans and bots.
+- Six-max humans.
 
-Package must exclude:
+## 11. Identity and Authorization Model
 
-- Raw deck order.
-- Live RNG state.
-- Entropy.
-- Unrevealed opponent hole cards.
-- Canonical engine state.
-- Internal-only private events from the public package.
-- Service credentials.
+Move identity and authorization earlier than lobby and multiplayer implementation.
 
-Import progression:
+Required early foundation:
 
-1. Downloadable JSON hand-history export from client.
-2. Admin upload and validation in site.
-3. Idempotent import storage keyed by source match ID.
-4. Admin player identity mapping for unknown participants.
-5. Transactional session, hand, action, result, and stat row insertion.
-6. Session detail and hand-history display compatibility.
-7. Derived session statistics and notable-hand processing.
-8. Authenticated automatic submission later.
-9. Multiplayer server submission later.
+- Supabase user identity for player login.
+- Account ownership records.
+- Screen name and profile image ownership.
+- Operator roles.
+- RLS for player-owned and operator-only data.
+- Restricted archive metadata rows.
+- Restricted archive object storage policies.
 
-The site importer should validate schema version, event ordering, chip conservation where possible, duplicate source IDs, malformed records, privacy exclusions, and incomplete imports before publishing.
+Players authenticate in the game client. Operator capabilities require server-enforced administrator roles.
 
-## 14. Multiplayer Infrastructure Completion Plan
+The player browser must not automatically receive:
 
-Current client-side multiplayer infrastructure is an in-process prototype:
+- All players' hole cards.
+- All private events.
+- Full authority archives.
+- Raw randomness evidence.
+- Administrator write capabilities.
 
-- `PlayerActionRequest`.
-- Trusted server-side command construction.
-- State versions.
-- Idempotency.
-- Seat binding by connection.
-- Public/private/spectator projections.
-- Basic disconnect/reconnect behavior.
-- Persistence flushing to in-memory stores.
+## 12. Restricted Archive Storage
 
-Missing for usable multiplayer:
+Treat "one package per table" as a logical contract.
 
-- Real transport.
-- Authentication.
-- Server process ownership.
-- Secure shuffle/entropy.
-- Timers and time banks.
-- Disconnect policy.
-- Table lifecycle.
-- Lobby/matchmaking boundary.
-- Durable authoritative records.
-- Horizontal ownership/recovery.
-- Threat-model review before external testing.
+Recommended physical storage:
 
-Real multiplayer must stay behind local solo UX, export, and site import stabilization. Future multiplayer submission to the site should come from the authoritative server, not from an untrusted browser.
+Supabase metadata row:
 
-## 15. Para Presentation Infrastructure
+- Archive ID.
+- Table ID.
+- Authority class.
+- Table lifecycle status.
+- Archive lifecycle status.
+- Submission lifecycle status.
+- Checksum.
+- Storage object path.
+- Timestamps.
+- Submission/import state.
 
-The Para site already owns:
+Restricted immutable object:
+
+- Compressed `CompletedTableArchive` JSON.
+
+Public packages and CSVs are separate derived objects.
+
+Use RLS and restricted Storage policies. Player-visible history should read sanitized projections or packages, not restricted archive objects.
+
+## 13. Randomness Evidence Policy
+
+Do not require raw deck order, seed, entropy, or RNG state retention by default.
+
+Policy:
+
+- Deterministic local development may retain private seeds.
+- Official tables should use secure shuffle and verification/commitment evidence.
+- Raw entropy and live RNG state are retained only when explicitly required.
+- Sensitive randomness evidence must have access, encryption, retention, and deletion rules.
+- None of it appears in player-visible output or ordinary application logs.
+
+## 14. Operator Console Model
+
+The operator console lives in the game project and may reuse the client design system, but it is protected by server-enforced administrator roles and is not an ordinary player-client capability.
+
+Operator console responsibilities:
+
+- Create, edit, retire, and version NPC definitions.
+- Create and version safe strategy profiles.
+- Create and version game blueprints.
+- Create, edit, cancel, and close lobby tables before activation.
+- Inspect active journal health.
+- Inspect restricted completed archives.
+- Generate sanitized public packages.
+- Generate Poker Now-compatible CSV.
+- Submit to Para site import workflows.
+- Track validation, mapping, approval, import, and rejection states.
+
+The current React Admin Portal is a local prototype and must not be treated as a production authorization boundary.
+
+## 15. Para Product Boundaries
+
+Game system owns:
+
+- Gameplay.
+- Trusted table evidence.
+- Account-aware game history.
+- Lobby/table operations.
+- NPC configuration.
+- Public-package generation.
+
+Para site owns:
 
 - Public sessions.
-- Player pages.
+- Player profiles.
 - Standings.
+- Recaps.
 - Moments.
-- Admin newsroom.
-- Recap drafts.
-- Article/newsroom generation.
-- Debug/import health pages.
-
-Client evidence can later feed the site layers:
-
-1. Verified facts from public events and result summary.
-2. Derived statistics from validated import.
-3. Interpretive commentary in site/newsroom.
-4. Fictional character flavor, kept separate from facts.
-
-Generated or editorial recaps require:
-
-- Stable package schema.
-- Complete session recording.
-- Verified statistics.
-- Privacy classification.
-- Thin-data fallbacks.
-- Approval/publication rules.
-- No invented actions, cards, stacks, results, or private information.
-
-## 16. Testing and Quality Plan
-
-Current client coverage includes:
-
-- Engine unit tests.
-- Betting regressions.
-- Hand evaluator matrix.
-- Hardening regressions.
-- Replay contract.
-- Event schema and visibility.
-- Invariant simulations.
-- Three-handed and multi-seat simulations.
-- NPC legality/behavior tests.
-- Local controller/session tests.
-- Persistence tests.
-- Server authority and multiplayer service tests.
-- UI smoke tests.
+- Newsroom.
+- Long-term public presentation.
+- Administrative approval and import mapping.
 
-Needed next:
+Do not duplicate public league presentation in the game client.
 
-- Scene-transition tests for setup -> playing -> between-hand -> result.
-- No-auto-session test.
-- Setup validation tests.
-- Seed lifecycle tests for display, same-seed rematch, and random rematch.
-- Position helper/projection tests.
-- Table layout behavior tests for six-max arrangement.
-- Presentation queue tests.
-- Completed-session export schema/fixture tests.
-- Site adapter validation tests.
-- CI for tests, typecheck, lint, and build on pushes/PRs.
+## 16. Revised Milestones
 
-Do not implement CI in this planning task.
+### Milestone 0: Repair Existing Completed-Session Package and Importer Contract
 
-## 17. Technical Debt and Correctness Audit
+Purpose: align current client package and site importer before building authority archives.
 
-| Concern | Severity | Impact | Fix timing | Blocks next milestone |
-| --- | --- | --- | --- | --- |
-| Client auto-creates default session on page load | High | Violates desired setup-first product flow | Milestone 1, first task | Yes |
-| Site owns persistent Para layer but older client docs imply client persistence/player layer | High | Can cause duplicate architecture | This plan | No after plan |
-| Client ProfileStore can be mistaken for product profile system | Medium | Duplicates site responsibility if expanded | Keep narrow before profile work | No |
-| In-memory stores look database-ready but are prototypes | Medium | Could be overclaimed as production persistence | Plan/docs and export work | No |
-| No canonical completed-session package | High | Blocks site import from client evidence | Milestone 3 | Not for solo scene |
-| Position labels not shared/projection-backed | Medium | UI/export can drift from engine rules | Milestone 1 | No, but early |
-| UI mixes setup panel with active match | Medium | Confusing start/change flow | Milestone 1 | Yes |
-| Match IDs use time/random values | Low/Medium | Good enough locally, weak for idempotent import | Export milestone | No |
-| Public session records omit private events | Medium | Fine for public import, insufficient for private player export | Export milestone | No |
-| No command records for local solo | Low/Medium | Public action events may be enough initially; command replay package may need refinement | Export milestone | No |
-| NPCs share default config | Medium | Six-max opponents feel similar | Milestone 2/3 | No |
-| Immediate NPC resolution has no presentation pacing | Medium | Gameplay feels abrupt | Milestone 2 | No |
-| Para site import parser is raw text/CSV oriented | High | Needs canonical package adapter | Milestone 4 | No |
-| Site repo is dirty/ahead | Medium | Planning must avoid touching it | Now | No |
-| No GitHub CI confirmed | Medium | Regression risk | Production readiness or earlier | No |
+Required coverage:
 
-## 18. Milestone Roadmap
+- Multi-hand event validation.
+- Real timestamps.
+- Target contribution and raise-to preservation.
+- Per-hand blind and position data.
+- Stack checkpoints.
+- Refund and side-pot evidence.
+- Reliable elimination order.
+- Stronger multi-hand fixtures.
 
-### Milestone 1: Coherent Solo Game UX
+### Milestone 1: Active Authority Journal and CompletedTableArchive v1
 
-Purpose: Make the client feel like one product instead of auto-started internals.
+- Define `AuthorityClass`.
+- Define `ActiveTableJournal`.
+- Define restricted command and event records.
+- Define immutable `CompletedTableArchive`.
+- Preserve incremental completed-hand checkpoints.
+- Derive sanitized public package and Poker Now CSV from archive data.
 
-Scope:
+### Milestone 2: Supabase Identity, Roles, RLS, and Restricted Archive Storage
 
-- Setup, playing, between-hand, and result scenes.
-- No automatic game before Start Match.
-- Validation and seed lifecycle.
-- Position labels.
-- Rematch and abandonment flow.
-- Better table hierarchy without export/import work.
+- Add account ownership records.
+- Add operator roles.
+- Add restricted archive metadata table.
+- Add restricted Storage bucket/object policy.
+- Keep service-role access out of the browser client.
 
-Acceptance:
+### Milestone 3: Operator Hand-History Console
 
-- User starts heads-up or six-max explicitly.
-- User can play to completion and rematch.
-- Session authority remains in `LocalSoloSession`.
-- Tests cover scene transitions and seed behavior.
+- Replace local hidden-admin assumptions with role-protected operator flows.
+- Inspect restricted archives through server authorization.
+- Generate public package/CSV derivatives.
+- Track submission lifecycle.
 
-Review gate: product owner approves user-facing solo flow.
+### Milestone 4: Persistent NPC and Strategy Registry
 
-### Milestone 2: Hand and NPC Presentation
+- Persist NPC definitions and strategy profiles.
+- Version NPC and strategy records.
+- Keep poker decisions deterministic and non-LLM.
 
-Purpose: Make hand resolution readable and NPCs feel intentional.
+### Milestone 5: Persistent Game Blueprints and LobbyTable Instances
 
-Scope:
+- Persist reusable blueprints.
+- Create table instances from pinned blueprint versions.
+- Support scheduled/open/cancelled table states.
 
-- Fold/all-in/showdown presentation.
-- NPC pacing and event presentation queue.
-- Side-pot and split-pot display.
-- Named NPC roster, archetypes, difficulty config.
-- Multiway and position-aware NPC tuning.
+### Milestone 6: Player Account Shell
 
-Acceptance:
+- Secure login.
+- Screen name.
+- Profile image.
+- Player-visible own histories.
+- No trusted seat authority until server binding exists.
 
-- Canonical state remains immediate; presentation queue is UI-only.
-- NPCs remain legal and deterministic under tests.
+### Milestone 7: Lobby v1
 
-### Milestone 3: Canonical Hand-History Export
+- Show admin-created tables.
+- Initially support bot/local prototype tables.
+- Track seats, visibility, status, and authority class.
 
-Purpose: Produce a stable client-owned evidence package.
+### Milestone 8: Multi-Table Client Manager
 
-Scope:
+- Allow up to four active table views.
+- Preserve one, two, and four-table layouts.
+- Keep per-table state isolated.
 
-- Export schema.
-- Export builder from `LocalSoloSession` records.
-- Public package privacy filter.
-- Validation and checksum metadata.
-- JSON download.
-- Deterministic fixtures.
+### Milestone 9: NPC Teaching Profiles and Simulation Evidence
 
-Acceptance:
+- Strategy profiles for tight/aggressive, loose/passive, position-aware, pot-odds-aware, and draw-aware play.
+- Admin-editable tendencies and safe presets.
+- Simulation evidence for strategy behavior.
 
-- Export excludes secrets and private opponent cards.
-- Same seed/action fixture exports reproducibly.
-- Site adapter can be implemented against schema without client Supabase knowledge.
+### Milestone 10: Server-Authoritative Multiplayer Productization
 
-### Milestone 4: Para Site Import
+- Real transport.
+- Connection-to-seat binding.
+- Timers and disconnect policy.
+- Human/bot mixed tables.
+- Server-side archive finalization.
 
-Purpose: Teach the site to consume the client package.
+### Milestone 11: Packaging and Native Readiness
 
-Scope:
+- Keep browser-first.
+- Avoid browser-only assumptions in table/session APIs so future desktop packaging remains viable.
 
-- Admin upload.
-- Schema validation.
-- Source match ID idempotency.
-- Player mapping.
-- Transactional insert/update into sessions, hands, actions, results, stats, notable-hand candidates.
-- Import preview and publish gate.
+## 17. Test Plan
 
-Acceptance:
+Archive and journal tests:
 
-- Site imports a completed client package without direct client database writes.
+- Active journal is created before first hand.
+- Accepted and rejected commands are persisted with provenance.
+- Events receive global table sequences.
+- Completed-hand checkpoints persist after every hand.
+- Exactly one immutable archive is finalized on table closure.
+- Aborted and failed tables preserve evidence and close reason.
 
-### Milestone 5: Para Site Consumption
+Public derivation tests:
 
-Purpose: Make imported client sessions useful across existing site pages.
+- Restricted archive includes private evidence.
+- Sanitized public package excludes restricted-only evidence.
+- Poker Now CSV remains `entry,at,order`, newest-first only as adapter output, with correct quoting.
+- Structured JSON remains chronological and canonical.
 
-Scope:
+Identity and authorization tests:
 
-- Session detail compatibility.
-- Hand-history display.
-- Derived stats compatibility.
-- Notable-hand detection.
-- Recap/newsroom context compatibility.
+- Player client cannot read restricted archives.
+- Player client cannot perform operator writes.
+- Operator-only routes require server-enforced roles.
+- Local-browser archives are never official standings input.
 
-Acceptance:
+Blueprint and lobby tests:
 
-- Imported sessions appear in existing public/admin surfaces without duplicate client pages.
+- Blueprint edits create new versions.
+- Active table pins blueprint/NPC/strategy versions.
+- Later blueprint edits do not mutate active or completed tables.
+- Lobby table lifecycle and archive lifecycle statuses remain independent.
 
-### Milestone 6: Automated Submission
+Multiplayer boundary tests:
 
-Purpose: Reduce manual import once schema and identity are stable.
+- Client requests never choose trusted seat/source.
+- Authority service binds authenticated connection to seat.
+- Rejected commands are journaled.
+- Server-official archives are eligible only after validation and approval.
 
-Scope:
+## 18. Explicit Non-Goals
 
-- Authenticated server endpoint.
-- Client submission for approved modes.
-- Retry and duplicate handling.
-- Future multiplayer server submission.
+- Do not make the browser player client the backend authority.
+- Do not treat React Admin as a security boundary.
+- Do not make Poker Now CSV canonical when structured JSON is available.
+- Do not expose full authority archives, all hole cards, private events, or raw randomness evidence to ordinary player clients.
+- Do not trust local-browser archives for official standings.
+- Do not duplicate Para public standings, recaps, moments, newsroom, or long-term presentation in the game client.
+- Do not add LLM-based poker action selection.
 
-Acceptance:
+## 19. Migration Path From Current Local Implementation
 
-- Browser never receives service-role key.
-- Site validates every submission before publish.
+Current local code should evolve as follows:
 
-### Milestone 7: Real Multiplayer Productization
+- `LocalSoloSession` incremental retention becomes the local prototype of `ActiveTableJournal`.
+- Current `ArchivedSessionRecord` status is split into table lifecycle, archive lifecycle, and submission lifecycle.
+- Current completed-session public package remains a sanitized derivative, not the authority archive.
+- Current Poker Now CSV formatter remains a compatibility adapter.
+- Current IndexedDB archive remains local-browser/private evidence, not official authority.
+- Current in-memory server authority becomes the implementation reference for trusted command construction and request provenance.
+- Current Admin Portal becomes a prototype for operator workflows, then moves behind server-enforced role checks.
+- Existing Para site package importer remains the public-package import path while the authority archive contract is developed.
 
-Purpose: Move from in-memory multiplayer prototype to usable real-player gameplay.
+## 20. Exact First Implementation Milestone
 
-Scope:
+First milestone: **Repair Existing Completed-Session Package and Importer Contract**.
 
-- Transport, auth, secure entropy, timers, reconnect, persistence, table lifecycle, threat-model review, and site submission from authority.
+Existing code it replaces or extends:
 
-Acceptance:
+- Extends `src/exports/completedSessionPackage.ts`.
+- Extends `schemas/para-completed-session-v1.schema.json`.
+- Extends `tests/fixtures/para-completed-session-v1.json`.
+- Extends client export tests and Para site package importer validation tests.
+- Does not replace the poker engine or local controller.
 
-- Multiple authenticated humans can share a server-authoritative table with seat-private projections and durable verified records.
+What must remain unchanged:
 
-## 19. Ordered Codex Task List
+- React is not canonical poker state.
+- Human/NPC actions use shared engine gateways.
+- Browser clients do not choose trusted seat/source for multiplayer.
+- Current local solo gameplay remains playable.
+- Current Para site public presentation remains owned by `para-poker-site`.
+- Service-role keys stay out of `parapoker-official-client`.
 
-1. Explicit Solo Match Scene Flow
-   - Outcome: setup-first browser flow with setup, playing, between-hand, result, rematch, and abandonment.
-   - Why next: current UI auto-creates a match and blocks coherent product feel.
-   - Scope: React scene state and tests only; no export/import/site work.
-   - Files likely: `src/ui/PokerTable.tsx`, `src/index.css`, `tests/ui/PokerTable.test.tsx`.
-   - New files: optional small UI scene/helper test files.
-   - Acceptance: no session before Start Match; heads-up/six-max still complete; validation and rematch flows tested.
-   - Reasoning: High.
-   - Alone: yes.
-   - Parallel safe: no, it touches the core UI flow.
-   - PO review: yes.
+Acceptance gate before proceeding:
 
-2. Setup Validation and Seed Lifecycle Hardening
-   - Outcome: deterministic/random seed behavior is explicit and tested.
-   - Why next: export/replay depends on stable resolved seeds.
-   - Scope: validation helpers, error UI, resolved seed display.
-   - Acceptance: invalid stacks/blinds/seeds blocked; random seed generated once at start.
-   - Reasoning: Medium.
-   - PO review: no unless defaults change.
-
-3. Shared Position Helper and Projection
-   - Outcome: BTN/SB/BB/UTG/HJ/CO labels are computed outside React.
-   - Why next: table layout/export need stable positions.
-   - Scope: helper/projection and tests for heads-up through six-handed with eliminations.
-   - Acceptance: positions match rules contract and engine seat order.
-   - Reasoning: High.
-   - PO review: yes if naming/order changes.
-
-4. Table Layout Refinement
-   - Outcome: six-max seats arranged around one table.
-   - Why next: makes existing six-max mode understandable.
-   - Scope: CSS/React presentation only.
-   - Acceptance: hero/opponents/board/actions hierarchy is clear on desktop/mobile.
-   - Reasoning: Medium.
-
-5. Hand Result and Showdown Presentation
-   - Outcome: between-hand state explains folds, showdown, winners, pots, and elimination.
-   - Why next: current hand completion is mostly event log text.
-   - Scope: derived presentation from verified events.
-   - Acceptance: folded, showdown, split/side-pot, and match-complete cases covered.
-   - Reasoning: High.
-
-6. NPC Pacing and Presentation Queue
-   - Outcome: UI consumes canonical transitions as presentation steps.
-   - Why next: improves readability without changing authority.
-   - Scope: UI-only queue; no engine delay.
-   - Acceptance: input locks correctly and events show in order.
-   - Reasoning: High.
-
-7. NPC Roster and Difficulty Config
-   - Outcome: selectable named NPCs and difficulty presets for solo mode.
-   - Why next: productizes existing policy without changing rules.
-   - Scope: config, setup selection, tests.
-   - Acceptance: independent RNG remains stable; policies submit legal commands.
-   - Reasoning: Medium.
-
-8. Canonical Completed-Session Export Schema
-   - Outcome: documented and typed client package contract.
-   - Why next: needed before site adapter.
-   - Scope: types/docs/tests; no Supabase.
-   - Acceptance: schema includes required fields and excludes secrets.
-   - Reasoning: High.
-   - PO review: yes.
-
-9. Client Export Builder and JSON Download
-   - Outcome: completed local sessions can be downloaded.
-   - Why next: first integration bridge to site.
-   - Scope: export from `LocalSoloSession` records.
-   - Acceptance: deterministic fixture export, privacy tests.
-   - Reasoning: High.
-
-10. Para Site Package Import Preview
-    - Outcome: site admin can preview a client package.
-    - Why next: safe validation before writes.
-    - Scope: site-only parser/validator; no client changes.
-    - Acceptance: valid package preview, malformed/duplicate/privacy failures.
-    - Reasoning: High.
-
-11. Para Site Package Commit
-    - Outcome: site maps validated package into Supabase rows transactionally.
-    - Why next: turns client evidence into durable site records.
-    - Scope: site adapter, idempotency, player mapping, import report.
-    - Acceptance: session pages consume imported data.
-    - Reasoning: High.
-
-12. Site Consumption Compatibility Pass
-    - Outcome: imported sessions feed session, player, standings, notable hand, and recap context correctly.
-    - Why next: closes the client-to-site loop.
-    - Scope: site read models and admin/public views.
-    - Acceptance: imported fixture appears in existing surfaces.
-    - Reasoning: High.
-
-13. Automated Submission Design
-    - Outcome: reviewed authenticated submission protocol.
-    - Why next: automation after manual import is proven.
-    - Scope: documentation and threat model update.
-    - Acceptance: no browser service-role access; idempotent submission contract.
-    - Reasoning: High.
-
-14. Real Multiplayer Transport Prototype
-    - Outcome: network transport around server authority.
-    - Why next: after solo/export/site evidence path is stable.
-    - Scope: server process, auth stub or chosen provider, WebSocket/HTTP boundary.
-    - Acceptance: two remote humans, reconnect, spectator, no hidden leakage.
-    - Reasoning: High.
-    - PO/security review: yes.
-
-## 20. Immediate Next Task
-
-Task: Explicit Solo Match Scene Flow in `parapoker-official-client`.
-
-Why it is highest value:
-
-- The client already has engine, NPC, session, stats, and UI infrastructure, but it still auto-starts a game on load. A setup-first scene flow is the necessary product shell before export, import, or multiplayer work.
-
-Complete one-task scope:
-
-- Replace automatic session creation on initial load with an explicit setup scene.
-- Add scene states for setup, playing, between-hand, and match result.
-- Preserve `LocalSoloSession` as the session authority.
-- Add setup validation, resolved seed display, same-seed rematch, new-random match, change setup, and abandon-active-match confirmation.
-- Update UI tests for no-auto-create, setup-to-playing, between-hand/result, rematch, validation, and abandonment.
-
-Must not include:
-
-- Hand-history export.
-- Para site importer.
-- Supabase access.
-- Networking.
-- Accounts.
-- New NPC strategy.
-- Site pages.
-- Persistent client profile/archive/standings systems.
-
-Acceptance criteria:
-
-- Browser initially shows setup only and creates no match until `Start Match`.
-- Heads-up and six-max matches still play to completion.
-- Completed result scene shows verified local summary.
-- Active match abandonment requires confirmation.
-- Same-seed and new-random rematch flows are explicit.
-- React still does not own canonical poker state.
-- `npm run test -- --run`, `npm run typecheck`, `npm run lint`, and `npm run build` pass.
-
-Recommended reasoning level: High.
-
-Review gate: Product-owner review required after this task because it defines the user-facing match flow.
-
-## Product-Owner Decisions Required
-
-- Whether NPC-only solo sessions should be importable to the Para site, ignored, or marked exhibition/test.
-- Whether unknown human participants in imported packages require admin mapping before publish.
-- Whether optional Para player IDs can be attached in client setup before auth exists.
-- Whether client public exports should include showdown-revealed cards only or any additional private owner export later.
-- Whether starting-stack/blind defaults should remain 200/1/2 for product play.
-- Whether micro all-in configs should be allowed in UI or test-only.
-- When to introduce browser-local export cache, if ever.
-- When manual import is sufficient versus authenticated automatic submission.
-- Which modes are eligible for public site publication.
-
-## Commands Run During Audit
-
-Client repository:
-
-- `git status --short --branch`
-- `rg --files src tests docs package.json`
-- `Get-Content` on key engine, NPC, controller, session, persistence, UI, docs, and tests files.
-- `rg -n "describe\\(|it\\(" tests`
-
-Site repository:
-
-- `git status --short --branch`
-- `git log --oneline -5`
-- `rg --files .`
-- `Get-Content` on key Supabase, raw import, hand-history, session view-model, public session page, admin import, SQL, and debug files.
-- `rg` searches for session, hand, action, result, stats, player, standings, import, and Supabase usage.
-
+- Multi-hand fixture validates in both client and Para site importer.
+- Package includes real timestamps, target contributions, positions/blinds, stack checkpoints, side-pot/refund evidence, and elimination order.
+- Sanitized package still excludes restricted-only evidence.
+- Poker Now CSV is regenerated from structured data and remains compatible.
+- Tests pass in both repositories for package generation and import validation.
