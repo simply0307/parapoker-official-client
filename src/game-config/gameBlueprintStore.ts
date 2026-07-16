@@ -1,4 +1,5 @@
 import type { GameBlueprint } from './gameBlueprint'
+import { mustNpcDefinition, mustNpcStrategyProfile } from '../npc/roster'
 
 export const GAME_BLUEPRINT_DB_NAME = 'parapoker-game-blueprints'
 export const GAME_BLUEPRINT_DB_VERSION = 1
@@ -410,18 +411,33 @@ export function normalizeGameBlueprint(blueprint: GameBlueprint): GameBlueprint 
   if (seedPolicy === 'fixed' && String(blueprint.seed).trim() === '') {
     throw new Error('Game blueprint seed is required.')
   }
+  const seats = blueprint.seats.map((seat) => {
+    if (seat.kind !== 'npc' || !seat.npcDefinitionId || (seat.npcStrategyProfileId && seat.npcStrategyProfileVersion)) {
+      return seat
+    }
+    const definition = mustNpcDefinition(seat.npcDefinitionId)
+    const profile = mustNpcStrategyProfile(definition.strategyProfileId)
+    return {
+      ...seat,
+      npcStrategyProfileId: profile.id,
+      npcStrategyProfileVersion: profile.version,
+    }
+  })
   const expectedSeatCount = blueprint.mode === 'heads-up' ? 2 : 6
-  if (blueprint.seats.length !== expectedSeatCount) {
+  if (seats.length !== expectedSeatCount) {
     throw new Error(`${blueprint.mode} blueprint requires ${expectedSeatCount} seats.`)
   }
   const seatIds = new Set<string>()
-  for (const seat of blueprint.seats) {
+  for (const seat of seats) {
     if (seatIds.has(seat.seatId)) {
       throw new Error(`Duplicate blueprint seat: ${seat.seatId}`)
     }
     seatIds.add(seat.seatId)
     if (seat.kind === 'npc' && !seat.npcDefinitionId) {
       throw new Error(`NPC seat requires npcDefinitionId: ${seat.seatId}`)
+    }
+    if (seat.kind === 'npc' && (!seat.npcStrategyProfileId || !Number.isInteger(seat.npcStrategyProfileVersion) || (seat.npcStrategyProfileVersion ?? 0) < 1)) {
+      throw new Error(`NPC seat requires a pinned strategy profile id and version: ${seat.seatId}`)
     }
     if (seat.kind === 'human' && !seat.displayName?.trim()) {
       throw new Error(`Human seat requires displayName: ${seat.seatId}`)
@@ -432,7 +448,7 @@ export function normalizeGameBlueprint(blueprint: GameBlueprint): GameBlueprint 
     id,
     name,
     seedPolicy,
-    seats: blueprint.seats.map((seat) => ({
+    seats: seats.map((seat) => ({
       ...seat,
       displayName: seat.displayName?.trim(),
     })),

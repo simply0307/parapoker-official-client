@@ -5,6 +5,8 @@ import {
   type LocalSoloSessionConfig,
 } from '../../src/table-controllers/local-single-player/LocalSoloSession'
 import { completedSessionPackageToParaPokerSiteCsv } from '../../src/exports/paraPokerSiteCsv'
+import { createGameBlueprint } from '../../src/game-config/gameBlueprint'
+import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
 
 const baseConfig: LocalSoloSessionConfig = {
   mode: 'heads-up',
@@ -51,7 +53,13 @@ describe('local solo session integration', () => {
     expect(snapshot.blueprint.visibility).toBe('unlisted')
     expect(snapshot.blueprint.seats).toEqual([
       { seatId: 'human', kind: 'human', displayName: 'You', playerId: 'local-human' },
-      { seatId: 'npc-1', kind: 'npc', npcDefinitionId: 'npc-vega' },
+      {
+        seatId: 'npc-1',
+        kind: 'npc',
+        npcDefinitionId: 'npc-vega',
+        npcStrategyProfileId: 'strategy-value-hunter-v4',
+        npcStrategyProfileVersion: 4,
+      },
     ])
     expect(match?.seatAssignments).toEqual([
       { seatId: 'human', playerId: 'local-human' },
@@ -165,5 +173,75 @@ describe('local solo session integration', () => {
     for (const card of npcCards) {
       expect(publicJson).not.toContain(JSON.stringify(card))
     }
+  })
+
+  it('runs and exports the strategy version pinned by Admin instead of the compiled roster default', async () => {
+    const profile = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])
+    profile.id = 'strategy-admin-fold-v11'
+    profile.version = 11
+    if (!profile.preflopStrategy) {
+      throw new Error('Expected a preflop strategy fixture.')
+    }
+    profile.preflopStrategy = {
+      ...profile.preflopStrategy,
+      id: 'admin-fold-preflop-v11',
+      version: 11,
+      nodes: profile.preflopStrategy.nodes.map((node) => ({
+        ...node,
+        hands: Object.fromEntries(Object.keys(node.hands).map((handClass) => [
+          handClass,
+          [{ action: 'fold' as const, frequency: 1 }],
+        ])),
+      })),
+    }
+    const definition = {
+      ...structuredClone(LOCAL_NPC_DEFINITIONS[0]),
+      strategyProfileId: profile.id,
+    }
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'admin-strategy-authority',
+      npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+    const session = await LocalSoloSession.create({ ...baseConfig, blueprint }, {
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+
+    const afterRaise = await session.submitHumanAction({ type: 'raise', amount: 4 })
+
+    expect(afterRaise.publicView.events).toContainEqual(expect.objectContaining({
+      type: 'actionApplied',
+      payload: expect.objectContaining({ seatId: 'npc-1', action: 'fold' }),
+    }))
+    const archiveBlueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 1,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'admin-strategy-archive',
+      npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+    const completedSession = await LocalSoloSession.create({
+      ...baseConfig,
+      startingStack: 1,
+      blueprint: archiveBlueprint,
+    }, {
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+    const completed = await completedSession.exportCompletedSessionPackage()
+
+    expect(completed.participants[1]).toEqual(expect.objectContaining({
+      npcStrategyProfileId: profile.id,
+      npcStrategyProfileVersion: 11,
+    }))
   })
 })

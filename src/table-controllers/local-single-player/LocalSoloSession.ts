@@ -13,7 +13,7 @@ import {
   type GameVisibility,
   type HumanPlayerIdentity,
 } from '../../game-config/gameBlueprint'
-import type { NpcSeatAssignment } from '../../npc/config'
+import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
 import {
   createEventRecordDrafts,
   buildAuthorityJournalFromRecords,
@@ -54,6 +54,8 @@ export interface LocalSoloSessionConfig {
 
 export interface LocalSoloSessionOptions {
   archiveStore?: HandHistoryArchiveStore
+  npcDefinitions?: NpcDefinition[]
+  npcStrategyProfiles?: NpcStrategyProfile[]
 }
 
 export interface LocalSoloSessionSummary {
@@ -90,6 +92,8 @@ export class LocalSoloSession {
   private readonly config: LocalSoloSessionConfig
   private readonly blueprint: GameBlueprint
   private readonly controller: LocalSinglePlayerController
+  private readonly npcDefinitions: NpcDefinition[]
+  private readonly npcStrategyProfiles: NpcStrategyProfile[]
   private readonly matchStore: InMemoryMatchRecordStore
   private readonly eventStore: InMemoryEventRecordStore
   private readonly statsStore: InMemoryStatsStore
@@ -122,10 +126,16 @@ export class LocalSoloSession {
     this.eventStore = new InMemoryEventRecordStore()
     this.statsStore = new InMemoryStatsStore(this.eventStore)
     this.archiveStore = options.archiveStore
-    this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint, [], resolvedSeed), {
+    this.npcDefinitions = npcDefinitionsForBlueprint(this.blueprint, options.npcDefinitions)
+    this.npcStrategyProfiles = npcStrategyProfilesForBlueprint(
+      this.blueprint,
+      this.npcDefinitions,
+      options.npcStrategyProfiles,
+    )
+    this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint, this.npcDefinitions, resolvedSeed), {
       npcLineup: npcLineupForBlueprint(this.blueprint),
-      npcDefinitions: npcDefinitionsForBlueprint(this.blueprint),
-      npcStrategyProfiles: npcStrategyProfilesForBlueprint(this.blueprint),
+      npcDefinitions: this.npcDefinitions,
+      npcStrategyProfiles: this.npcStrategyProfiles,
     })
   }
 
@@ -154,7 +164,11 @@ export class LocalSoloSession {
         tableId: session.tableId,
         blueprint: session.blueprint,
         config: session.config,
-        participants: buildArchiveParticipants(session.blueprint),
+        participants: buildArchiveParticipants(
+          session.blueprint,
+          session.npcDefinitions,
+          session.npcStrategyProfiles,
+        ),
         rulesContractVersion: 'para-poker-rules-v0',
         eventSchemaVersion: 'poker-event-v1',
       })

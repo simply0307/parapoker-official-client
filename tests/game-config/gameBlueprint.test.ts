@@ -3,7 +3,9 @@ import {
   createGameBlueprint,
   gameBlueprintToControllerConfig,
   npcLineupForBlueprint,
+  npcStrategyProfilesForBlueprint,
 } from '../../src/game-config/gameBlueprint'
+import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
 
 describe('game blueprint configuration', () => {
   it('creates a reusable heads-up blueprint with explicit visibility and NPC lineup', () => {
@@ -28,7 +30,13 @@ describe('game blueprint configuration', () => {
     )
     expect(blueprint.seats).toEqual([
       { seatId: 'human', kind: 'human', displayName: 'You', playerId: 'local-human' },
-      { seatId: 'npc-1', kind: 'npc', npcDefinitionId: 'npc-vega' },
+      {
+        seatId: 'npc-1',
+        kind: 'npc',
+        npcDefinitionId: 'npc-vega',
+        npcStrategyProfileId: 'strategy-value-hunter-v4',
+        npcStrategyProfileVersion: 4,
+      },
     ])
     expect(npcLineupForBlueprint(blueprint)).toEqual([{ seatId: 'npc-1', npcDefinitionId: 'npc-vega' }])
   })
@@ -91,5 +99,32 @@ describe('game blueprint configuration', () => {
 
     expect(blueprint.seedPolicy).toBe('random')
     expect(blueprint.seed).toBe('')
+  })
+
+  it('pins the selected NPC strategy profile id and version into each NPC seat', () => {
+    const profile = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])
+    profile.id = 'strategy-admin-custom-v5'
+    profile.version = 5
+    const definition = {
+      ...structuredClone(LOCAL_NPC_DEFINITIONS[0]),
+      strategyProfileId: profile.id,
+    }
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'pinned-admin-profile',
+      npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+
+    expect(blueprint.seats[1]).toEqual(expect.objectContaining({
+      npcDefinitionId: definition.id,
+      npcStrategyProfileId: profile.id,
+      npcStrategyProfileVersion: 5,
+    }))
+    expect(npcStrategyProfilesForBlueprint(blueprint, [definition], [profile])).toEqual([profile])
   })
 })

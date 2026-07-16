@@ -25,6 +25,7 @@ import {
 } from '../game-config/gameBlueprintStore'
 import { assignHumanPlayerIdentity, type HumanPlayerIdentity } from '../game-config/gameBlueprint'
 import type { ClientPlayerIdentity } from '../integrations/supabase/identityRepository'
+import { IndexedDbNpcRegistryStore } from '../npc/npcRegistry'
 
 type SoloScene = 'setup' | 'playing' | 'betweenHand' | 'matchResult'
 type SeedMode = 'form' | 'same' | 'random'
@@ -50,6 +51,7 @@ export function PokerTable({
   const lobbySessionRefs = useRef(new Map<string, LocalSoloSession>())
   const archiveStoreRef = useRef(new IndexedDbHandHistoryArchiveStore())
   const blueprintStoreRef = useRef(new IndexedDbGameBlueprintStore())
+  const npcRegistryRef = useRef(new IndexedDbNpcRegistryStore())
   const closedLobbyTableIdsRef = useRef(new Set<string>())
   const startedLobbyTableIdRef = useRef<string | null>(null)
   const [setup, setSetup] = useState<LocalSoloSessionConfig>(defaultLocalSoloSessionConfig())
@@ -114,10 +116,13 @@ export function PokerTable({
       if (!identityResolved) {
         return
       }
+      const registry = await npcRegistryRef.current.snapshot()
       for (const table of joinedTables) {
         if (!lobbySessionRefs.current.has(table.tableId)) {
           const tableSession = await LocalSoloSession.create(configForLobbyTable(table, playerIdentity), {
             archiveStore: archiveStoreRef.current,
+            npcDefinitions: registry.definitions,
+            npcStrategyProfiles: registry.strategyProfiles,
           })
           await blueprintStoreRef.current.startLobbyTable(table.tableId)
           if (cancelled) {

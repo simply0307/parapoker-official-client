@@ -22,6 +22,7 @@ import {
   type HandHistoryArchiveStatus,
 } from '../persistence'
 import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
+import { AdminStrategyWorkspace } from './AdminStrategyWorkspace'
 
 interface AdminGameDraft {
   mode: GameBlueprintMode
@@ -58,6 +59,7 @@ export function AdminPortal() {
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionRecord[]>([])
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
   const [lobbyTableFilter, setLobbyTableFilter] = useState<LobbyTableFilter>('all')
+  const [showStrategyWorkspace, setShowStrategyWorkspace] = useState(false)
   const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
 
   const activeNpcDefinitions = npcDefinitions.filter((npc) => npc.status === 'active')
@@ -72,8 +74,10 @@ export function AdminPortal() {
         seedPolicy: gameDraft.seedPolicy,
         seed: gameDraft.seed,
         npcLineup: gameDraft.npcLineup,
+        npcDefinitions,
+        npcStrategyProfiles: strategyProfiles,
       }),
-    [gameDraft],
+    [gameDraft, npcDefinitions, strategyProfiles],
   )
   const controllerPreview = useMemo(
     () => gameBlueprintToControllerConfig(
@@ -135,6 +139,12 @@ export function AdminPortal() {
       setNpcDefinitions((current) => current.map((npc) => (npc.id === id ? existing : npc)))
       setOperatorMessage(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  async function createStrategyProfileVersion(sourceProfileId: string, profile: NpcStrategyProfile) {
+    const created = await npcRegistryRef.current.createStrategyProfileVersion(sourceProfileId, profile)
+    await refreshNpcRegistry()
+    setOperatorMessage(`Created ${created.name} v${created.version}. It is now available for NPC assignment.`)
   }
 
   function updateGame(patch: Partial<AdminGameDraft>) {
@@ -382,11 +392,13 @@ export function AdminPortal() {
                   value={npc.strategyProfileId}
                   onChange={(event) => void updateNpc(npc.id, { strategyProfileId: event.target.value })}
                 >
-                  {strategyProfiles.map((profile) => (
+                  {strategyProfiles
+                    .filter((profile) => profile.status === 'active' || profile.id === npc.strategyProfileId)
+                    .map((profile) => (
                     <option key={profile.id} value={profile.id}>
                       {profile.name} v{profile.version}
                     </option>
-                  ))}
+                    ))}
                 </select>
               </label>
             </article>
@@ -394,10 +406,22 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="admin-panel" aria-label="Strategy profiles">
+      <section
+        className={`admin-panel strategy-panel ${showStrategyWorkspace ? 'editor-open' : ''}`}
+        aria-label="Strategy profiles"
+      >
         <div className="section-heading">
           <h2>Strategies</h2>
-          <span>{strategyProfiles.length} profiles</span>
+          <div className="section-heading-actions">
+            <span>{strategyProfiles.length} profiles</span>
+            <button
+              type="button"
+              aria-expanded={showStrategyWorkspace}
+              onClick={() => setShowStrategyWorkspace((isOpen) => !isOpen)}
+            >
+              {showStrategyWorkspace ? 'Close strategy editor' : 'Open strategy editor'}
+            </button>
+          </div>
         </div>
         <div className="strategy-grid">
           {strategyProfiles.map((profile) => (
@@ -418,6 +442,12 @@ export function AdminPortal() {
             </article>
           ))}
         </div>
+        {showStrategyWorkspace && (
+          <AdminStrategyWorkspace
+            profiles={strategyProfiles}
+            onCreateVersion={createStrategyProfileVersion}
+          />
+        )}
       </section>
 
       <section className="admin-panel" aria-label="Game blueprint builder">

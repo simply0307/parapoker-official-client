@@ -26,6 +26,7 @@ export interface NpcRegistryStore {
   listStrategyProfiles(): Promise<NpcStrategyProfile[]>
   upsertDefinition(definition: NpcDefinitionDraft): Promise<NpcDefinition>
   upsertStrategyProfile(profile: NpcStrategyProfile): Promise<NpcStrategyProfile>
+  createStrategyProfileVersion(sourceProfileId: string, profile: NpcStrategyProfile): Promise<NpcStrategyProfile>
   retireDefinition(npcDefinitionId: string): Promise<NpcDefinition>
   snapshot(): Promise<NpcRegistrySnapshot>
 }
@@ -59,6 +60,25 @@ export class InMemoryNpcRegistryStore implements NpcRegistryStore {
 
   async upsertStrategyProfile(profile: NpcStrategyProfile): Promise<NpcStrategyProfile> {
     const normalized = normalizeStrategyProfile(profile)
+    this.strategyProfiles.set(normalized.id, clone(normalized))
+    return clone(normalized)
+  }
+
+  async createStrategyProfileVersion(
+    sourceProfileId: string,
+    profile: NpcStrategyProfile,
+  ): Promise<NpcStrategyProfile> {
+    const source = this.strategyProfiles.get(sourceProfileId)
+    if (!source) {
+      throw new Error(`Unknown source strategy profile: ${sourceProfileId}`)
+    }
+    if (this.strategyProfiles.has(profile.id)) {
+      throw new Error(`NPC strategy profile already exists: ${profile.id}`)
+    }
+    const normalized = normalizeStrategyProfile(profile)
+    if (normalized.version <= source.version) {
+      throw new Error('A new NPC strategy profile version must exceed its source version.')
+    }
     this.strategyProfiles.set(normalized.id, clone(normalized))
     return clone(normalized)
   }
@@ -133,6 +153,30 @@ export class IndexedDbNpcRegistryStore implements NpcRegistryStore {
     return clone(normalized)
   }
 
+  async createStrategyProfileVersion(
+    sourceProfileId: string,
+    profile: NpcStrategyProfile,
+  ): Promise<NpcStrategyProfile> {
+    if (this.fallback) {
+      return this.fallback.createStrategyProfileVersion(sourceProfileId, profile)
+    }
+    await this.seedIfEmpty()
+    const profiles = await this.listStrategyProfiles()
+    const source = profiles.find((candidate) => candidate.id === sourceProfileId)
+    if (!source) {
+      throw new Error(`Unknown source strategy profile: ${sourceProfileId}`)
+    }
+    if (profiles.some((candidate) => candidate.id === profile.id)) {
+      throw new Error(`NPC strategy profile already exists: ${profile.id}`)
+    }
+    const normalized = normalizeStrategyProfile(profile)
+    if (normalized.version <= source.version) {
+      throw new Error('A new NPC strategy profile version must exceed its source version.')
+    }
+    await this.put('strategyProfiles', normalized)
+    return clone(normalized)
+  }
+
   async retireDefinition(npcDefinitionId: string): Promise<NpcDefinition> {
     const existing = (await this.listDefinitions()).find((definition) => definition.id === npcDefinitionId)
     if (!existing) {
@@ -151,9 +195,12 @@ export class IndexedDbNpcRegistryStore implements NpcRegistryStore {
 
   private async seedIfEmpty(): Promise<void> {
     const existingProfiles = await this.getAll<NpcStrategyProfile>('strategyProfiles')
-    if (existingProfiles.length === 0) {
-      await Promise.all(LOCAL_NPC_STRATEGY_PROFILES.map((profile) => this.put('strategyProfiles', profile)))
-    }
+    const existingProfileIds = new Set(existingProfiles.map((profile) => profile.id))
+    await Promise.all(
+      LOCAL_NPC_STRATEGY_PROFILES
+        .filter((profile) => !existingProfileIds.has(profile.id))
+        .map((profile) => this.put('strategyProfiles', profile)),
+    )
     const existingDefinitions = await this.getAll<NpcDefinition>('definitions')
     if (existingDefinitions.length === 0) {
       await Promise.all(LOCAL_NPC_DEFINITIONS.map((definition) => this.put('definitions', definition)))

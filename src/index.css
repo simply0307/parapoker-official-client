@@ -1342,6 +1342,10 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.strategy-panel.editor-open {
+  grid-column: 1 / -1;
+}
+
 .strategy-card {
   border: 1px solid #e1e7e2;
   border-radius: 6px;
@@ -1389,6 +1393,184 @@ h2 {
   font-weight: 800;
 }
 
+.strategy-workspace {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #d3dbd2;
+  padding-top: 12px;
+}
+
+.strategy-toolbar,
+.strategy-field-grid,
+.strategy-filter-grid,
+.strategy-control-grid,
+.module-control-grid {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.strategy-toolbar {
+  grid-template-columns: minmax(190px, 1fr) repeat(3, auto);
+  align-items: end;
+}
+
+.strategy-editor-band {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #e1e7e2;
+  padding-top: 10px;
+}
+
+.strategy-editor-band h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.strategy-field-grid,
+.strategy-filter-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.strategy-control-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.module-control-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.module-control {
+  min-width: 0;
+  border-left: 3px solid #3d7160;
+  padding-left: 8px;
+  display: grid;
+  gap: 5px;
+}
+
+.strategy-number-control {
+  min-width: 0;
+}
+
+.strategy-number-control > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 64px;
+  gap: 6px;
+  align-items: center;
+}
+
+.strategy-number-control input[type='range'] {
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  accent-color: #1e6b52;
+}
+
+.strategy-number-control input[type='number'] {
+  min-height: 30px;
+  padding: 0 5px;
+}
+
+.numeric-object-editor {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.range-editor-layout,
+.simulator-layout {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(390px, 1fr) minmax(180px, 0.42fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.preflop-matrix {
+  width: 100%;
+  min-width: 390px;
+  display: grid;
+  grid-template-columns: repeat(13, minmax(26px, 1fr));
+  gap: 2px;
+}
+
+.preflop-matrix button {
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(23, 32, 28, 0.28);
+  border-radius: 3px;
+  color: #17201c;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.preflop-matrix button.selected {
+  outline: 3px solid #111814;
+  outline-offset: 0;
+  z-index: 1;
+}
+
+.mix-fold { background: #e2e5e2; }
+.mix-check { background: #c7dfeb; }
+.mix-call { background: #cce3b3; }
+.mix-raise { background: #efc178; }
+.mix-allIn { background: #e78d82; }
+
+.hand-mix-editor {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.hand-mix-editor > strong {
+  font-size: 22px;
+}
+
+.simulation-trace {
+  min-width: 0;
+  border-left: 4px solid #b27724;
+  padding-left: 12px;
+  display: grid;
+  gap: 7px;
+}
+
+.simulation-trace > strong {
+  font-size: 24px;
+  text-transform: capitalize;
+}
+
+.simulation-trace > span {
+  color: #607067;
+  font-weight: 800;
+}
+
+.simulation-trace dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.simulation-trace dl div {
+  border-bottom: 1px solid #d3dbd2;
+  padding: 5px 0;
+}
+
+.simulation-trace dt {
+  color: #607067;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.simulation-trace dd {
+  margin: 0;
+  font-weight: 900;
+}
+
 .admin-controls {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -1422,6 +1604,19 @@ h2 {
 .toggle-field {
   grid-template-columns: auto 1fr;
   align-items: center;
+}
+
+@media (max-width: 1180px) {
+  .strategy-toolbar,
+  .strategy-field-grid,
+  .strategy-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .range-editor-layout,
+  .simulator-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .section-heading span,
@@ -1587,6 +1782,18 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.section-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.section-heading-actions button {
+  min-height: 30px;
+  padding: 0 10px;
 }
 
 .controls-header {

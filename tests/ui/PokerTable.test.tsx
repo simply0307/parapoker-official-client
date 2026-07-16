@@ -290,12 +290,25 @@ async function playUntilSessionResult(maxHands = 20): Promise<HTMLElement> {
 
     const nextHand = screen.queryByRole('button', { name: 'Next hand' })
     if (nextHand) {
+      const previousHandNumber = getDisplayedHandNumber()
       fireEvent.click(nextHand)
       await waitFor(() => {
-        expect(screen.queryByLabelText('Session result') ?? screen.queryByRole('button', { name: 'Next hand' })).toBeTruthy()
+        const sessionResult = screen.queryByLabelText('Session result')
+        if (sessionResult) {
+          return
+        }
+        expect(getDisplayedHandNumber()).not.toBe(previousHandNumber)
       })
     }
   }
 
   return screen.findByLabelText('Session result')
+}
+
+function getDisplayedHandNumber(): string | undefined {
+  const utilityBar = screen.queryByLabelText('Table utility bar')
+  const handLabel = utilityBar?.querySelector('dt')
+  return handLabel?.textContent === 'Hand'
+    ? handLabel.parentElement?.querySelector('dd')?.textContent ?? undefined
+    : undefined
 }

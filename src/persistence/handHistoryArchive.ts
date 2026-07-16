@@ -2,6 +2,7 @@ import { cardToString, type HandHistoryEvent, type SeatId } from '../poker-engin
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 import type { GameBlueprint } from '../game-config/gameBlueprint'
 import { npcDefinitionsForBlueprint, npcStrategyProfilesForBlueprint } from '../game-config/gameBlueprint'
+import type { NpcDefinition, NpcStrategyProfile } from '../npc/config'
 import type { LocalSoloSessionConfig, LocalSoloSessionSummary, SoloSessionMode } from '../table-controllers/local-single-player/LocalSoloSession'
 import type { CompletedTableArchive } from './authorityArchive'
 
@@ -143,9 +144,13 @@ export interface HandHistoryArchiveStore {
   updateImportStatus(matchId: string, status: Extract<HandHistoryArchiveStatus, 'export-ready' | 'csv-generated' | 'submitted' | 'imported' | 'import-failed'>): Promise<ArchivedSessionRecord>
 }
 
-export function buildArchiveParticipants(blueprint: GameBlueprint): ArchivedParticipant[] {
-  const definitions = npcDefinitionsForBlueprint(blueprint)
-  const profiles = npcStrategyProfilesForBlueprint(blueprint)
+export function buildArchiveParticipants(
+  blueprint: GameBlueprint,
+  availableDefinitions?: NpcDefinition[],
+  availableProfiles?: NpcStrategyProfile[],
+): ArchivedParticipant[] {
+  const definitions = npcDefinitionsForBlueprint(blueprint, availableDefinitions)
+  const profiles = npcStrategyProfilesForBlueprint(blueprint, definitions, availableProfiles)
   return blueprint.seats.map((seat) => {
     if (seat.kind === 'human') {
       return {
@@ -156,14 +161,15 @@ export function buildArchiveParticipants(blueprint: GameBlueprint): ArchivedPart
       }
     }
     const definition = definitions.find((candidate) => candidate.id === seat.npcDefinitionId)
-    const profile = profiles.find((candidate) => candidate.id === definition?.strategyProfileId)
+    const profile = profiles.find((candidate) => candidate.id === seat.npcStrategyProfileId) ??
+      profiles.find((candidate) => candidate.id === definition?.strategyProfileId)
     return {
       seatId: seat.seatId,
       displayName: definition?.name ?? seat.npcDefinitionId ?? seat.seatId,
       kind: 'npc' as const,
       npcDefinitionId: definition?.id ?? seat.npcDefinitionId,
-      npcStrategyProfileId: profile?.id ?? definition?.strategyProfileId,
-      npcStrategyProfileVersion: profile?.version,
+      npcStrategyProfileId: profile?.id ?? seat.npcStrategyProfileId ?? definition?.strategyProfileId,
+      npcStrategyProfileVersion: profile?.version ?? seat.npcStrategyProfileVersion,
     }
   })
 }

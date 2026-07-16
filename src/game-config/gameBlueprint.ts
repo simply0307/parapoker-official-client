@@ -3,6 +3,8 @@ import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../np
 import {
   DEFAULT_HEADS_UP_NPC_LINEUP,
   DEFAULT_SIX_MAX_NPC_LINEUP,
+  LOCAL_NPC_DEFINITIONS,
+  LOCAL_NPC_STRATEGY_PROFILES,
   mustNpcDefinition,
   mustNpcStrategyProfile,
 } from '../npc/roster'
@@ -17,6 +19,8 @@ export interface GameSeatBlueprint {
   displayName?: string
   playerId?: string
   npcDefinitionId?: string
+  npcStrategyProfileId?: string
+  npcStrategyProfileVersion?: number
 }
 
 export interface GameBlueprint {
@@ -47,6 +51,8 @@ export interface CreateGameBlueprintInput {
   seedPolicy?: GameSeedPolicy
   visibility?: GameVisibility
   npcLineup?: NpcSeatAssignment[]
+  npcDefinitions?: NpcDefinition[]
+  npcStrategyProfiles?: NpcStrategyProfile[]
   humanPlayer?: HumanPlayerIdentity
 }
 
@@ -55,11 +61,17 @@ export function createGameBlueprint(input: CreateGameBlueprintInput): GameBluepr
   const humanPlayer = normalizeHumanPlayer(input.humanPlayer)
   const seats: GameSeatBlueprint[] = [
     { seatId: 'human', kind: 'human', ...humanPlayer },
-    ...npcLineup.map((assignment) => ({
-      seatId: assignment.seatId,
-      kind: 'npc' as const,
-      npcDefinitionId: assignment.npcDefinitionId,
-    })),
+    ...npcLineup.map((assignment) => {
+      const definition = findNpcDefinition(assignment.npcDefinitionId, input.npcDefinitions)
+      const profile = findNpcStrategyProfile(definition.strategyProfileId, input.npcStrategyProfiles)
+      return {
+        seatId: assignment.seatId,
+        kind: 'npc' as const,
+        npcDefinitionId: assignment.npcDefinitionId,
+        npcStrategyProfileId: profile.id,
+        npcStrategyProfileVersion: profile.version,
+      }
+    }),
   ]
 
   return {
@@ -100,12 +112,36 @@ export function npcLineupForBlueprint(blueprint: GameBlueprint): NpcSeatAssignme
     .map((seat) => ({ seatId: seat.seatId, npcDefinitionId: seat.npcDefinitionId }))
 }
 
-export function npcDefinitionsForBlueprint(blueprint: GameBlueprint): NpcDefinition[] {
-  return npcLineupForBlueprint(blueprint).map((assignment) => mustNpcDefinition(assignment.npcDefinitionId))
+export function npcDefinitionsForBlueprint(
+  blueprint: GameBlueprint,
+  availableDefinitions: readonly NpcDefinition[] = LOCAL_NPC_DEFINITIONS,
+): NpcDefinition[] {
+  return npcLineupForBlueprint(blueprint).map((assignment) =>
+    findNpcDefinition(assignment.npcDefinitionId, availableDefinitions))
 }
 
-export function npcStrategyProfilesForBlueprint(blueprint: GameBlueprint): NpcStrategyProfile[] {
-  return npcDefinitionsForBlueprint(blueprint).map((definition) => mustNpcStrategyProfile(definition.strategyProfileId))
+export function npcStrategyProfilesForBlueprint(
+  blueprint: GameBlueprint,
+  availableDefinitions: readonly NpcDefinition[] = LOCAL_NPC_DEFINITIONS,
+  availableProfiles: readonly NpcStrategyProfile[] = LOCAL_NPC_STRATEGY_PROFILES,
+): NpcStrategyProfile[] {
+  const definitions = npcDefinitionsForBlueprint(blueprint, availableDefinitions)
+  return blueprint.seats
+    .filter((seat) => seat.kind === 'npc')
+    .map((seat) => {
+      const definition = definitions.find((candidate) => candidate.id === seat.npcDefinitionId)
+      const profileId = seat.npcStrategyProfileId ?? definition?.strategyProfileId
+      if (!profileId) {
+        throw new Error(`NPC seat has no strategy profile reference: ${seat.seatId}`)
+      }
+      const profile = findNpcStrategyProfile(profileId, availableProfiles)
+      if (seat.npcStrategyProfileVersion && profile.version !== seat.npcStrategyProfileVersion) {
+        throw new Error(
+          `NPC strategy profile version mismatch for ${seat.seatId}: expected ${seat.npcStrategyProfileVersion}, received ${profile.version}`,
+        )
+      }
+      return profile
+    })
 }
 
 export function gameBlueprintToControllerConfig(
@@ -135,6 +171,20 @@ function seatName(seat: GameSeatBlueprint, npcDefinitions: readonly NpcDefinitio
   }
   return npcDefinitions.find((definition) => definition.id === seat.npcDefinitionId)?.name ??
     mustNpcDefinition(seat.npcDefinitionId).name
+}
+
+function findNpcDefinition(
+  npcDefinitionId: string,
+  definitions: readonly NpcDefinition[] | undefined,
+): NpcDefinition {
+  return clone(definitions?.find((definition) => definition.id === npcDefinitionId) ?? mustNpcDefinition(npcDefinitionId))
+}
+
+function findNpcStrategyProfile(
+  strategyProfileId: string,
+  profiles: readonly NpcStrategyProfile[] | undefined,
+): NpcStrategyProfile {
+  return clone(profiles?.find((profile) => profile.id === strategyProfileId) ?? mustNpcStrategyProfile(strategyProfileId))
 }
 
 function normalizeHumanPlayer(humanPlayer?: HumanPlayerIdentity): HumanPlayerIdentity {

@@ -5,6 +5,7 @@ import {
   normalizeNpcDefinition,
   normalizeStrategyProfile,
 } from '../../src/npc/npcRegistry'
+import { createStrategyProfileVersionDraft } from '../../src/npc/strategyEditing'
 
 describe('NPC registry store', () => {
   it('seeds definitions and strategy profiles from the built-in roster', async () => {
@@ -83,5 +84,21 @@ describe('NPC registry store', () => {
     const second = new IndexedDbNpcRegistryStore(databaseName)
     const definition = (await second.listDefinitions()).find((candidate) => candidate.id === 'npc-maven')
     expect(definition?.name).toBe('Maven Persisted')
+  })
+
+  it('creates immutable strategy versions without overwriting their source', async () => {
+    const store = new InMemoryNpcRegistryStore()
+    const source = (await store.listStrategyProfiles()).find((profile) => profile.id === 'strategy-balanced-caller-v4')
+    if (!source) {
+      throw new Error('Expected source strategy profile.')
+    }
+    const draft = createStrategyProfileVersionDraft(source, { id: 'strategy-registry-custom-v5' })
+
+    const created = await store.createStrategyProfileVersion(source.id, draft)
+
+    expect(created.id).toBe('strategy-registry-custom-v5')
+    expect(created.version).toBe(5)
+    expect((await store.listStrategyProfiles()).find((profile) => profile.id === source.id)).toEqual(source)
+    await expect(store.createStrategyProfileVersion(source.id, draft)).rejects.toThrow(/already exists/i)
   })
 })

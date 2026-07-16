@@ -1,7 +1,6 @@
 import { cardToString, type HandHistoryEvent, type PublicSeatView, type SeatId } from '../poker-engine'
 import type { DerivedStatsSnapshot, EventRecord, MatchRecord } from '../persistence'
 import type { LocalSoloSessionConfig, LocalSoloSessionSummary } from '../table-controllers/local-single-player/LocalSoloSession'
-import { mustNpcDefinition, mustNpcStrategyProfile } from '../npc/roster'
 
 export const COMPLETED_SESSION_PACKAGE_SCHEMA_VERSION = 'para-completed-session-v1' as const
 export const PARA_SITE_IMPORT_TARGET_VERSION = 'para-poker-site-import-v1' as const
@@ -295,8 +294,6 @@ function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedS
   const blueprintSeats = input.config.blueprint?.seats ?? []
   return input.snapshotSeats.map((seat) => {
     const blueprintSeat = blueprintSeats.find((entry) => entry.seatId === seat.id)
-    const npcDefinition = blueprintSeat?.npcDefinitionId ? mustNpcDefinition(blueprintSeat.npcDefinitionId) : undefined
-    const npcProfile = npcDefinition ? mustNpcStrategyProfile(npcDefinition.strategyProfileId) : undefined
     const optionalParaPlayerId = seat.kind === 'human' && blueprintSeat?.playerId && blueprintSeat.playerId !== 'local-human'
       ? blueprintSeat.playerId
       : undefined
@@ -308,8 +305,13 @@ function buildParticipants(input: BuildCompletedSessionPackageInput): CompletedS
       startingStack: input.match.startingStacks[seat.id] ?? input.config.startingStack,
       finalStack: input.summary.finalStacks[seat.id] ?? seat.stack,
       ...(optionalParaPlayerId ? { optionalParaPlayerId } : {}),
-      ...(npcDefinition ? { npcDefinitionId: npcDefinition.id } : {}),
-      ...(npcProfile ? { npcStrategyProfileId: npcProfile.id, npcStrategyProfileVersion: npcProfile.version } : {}),
+      ...(blueprintSeat?.npcDefinitionId ? { npcDefinitionId: blueprintSeat.npcDefinitionId } : {}),
+      ...(blueprintSeat?.npcStrategyProfileId
+        ? {
+            npcStrategyProfileId: blueprintSeat.npcStrategyProfileId,
+            npcStrategyProfileVersion: blueprintSeat.npcStrategyProfileVersion,
+          }
+        : {}),
     }
   })
 }

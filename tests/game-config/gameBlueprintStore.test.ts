@@ -5,6 +5,7 @@ import {
   InMemoryGameBlueprintStore,
   normalizeGameBlueprint,
 } from '../../src/game-config/gameBlueprintStore'
+import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
 
 describe('game blueprint store', () => {
   it('persists reusable blueprints and returns cloned records', async () => {
@@ -142,6 +143,25 @@ describe('game blueprint store', () => {
     expect(() => normalizeGameBlueprint({ ...blueprint, seed: '', seedPolicy: 'fixed' })).toThrow('seed is required')
   })
 
+  it('upgrades legacy built-in blueprint seats with pinned strategy references', () => {
+    const legacy = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'legacy-blueprint',
+    })
+    delete legacy.seats[1].npcStrategyProfileId
+    delete legacy.seats[1].npcStrategyProfileVersion
+
+    const upgraded = normalizeGameBlueprint(legacy)
+
+    expect(upgraded.seats[1]).toEqual(expect.objectContaining({
+      npcStrategyProfileId: 'strategy-balanced-caller-v4',
+      npcStrategyProfileVersion: 4,
+    }))
+  })
+
   it('persists records across IndexedDB store instances', async () => {
     const testDbName = `test-game-blueprint-store-${Date.now()}`
     const first = new IndexedDbGameBlueprintStore(testDbName)
@@ -162,5 +182,34 @@ describe('game blueprint store', () => {
     expect(snapshot.blueprints).toHaveLength(1)
     expect(snapshot.lobbyTables).toHaveLength(1)
     expect(snapshot.lobbyTables[0].blueprint.seed).toBe('indexed-blueprint')
+  })
+
+  it('keeps the strategy version pinned when the source NPC definition changes later', async () => {
+    const store = new InMemoryGameBlueprintStore()
+    const profile = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])
+    profile.id = 'strategy-table-snapshot-v9'
+    profile.version = 9
+    const definition = {
+      ...structuredClone(LOCAL_NPC_DEFINITIONS[0]),
+      strategyProfileId: profile.id,
+    }
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+      seed: 'table-profile-snapshot',
+      npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
+      npcDefinitions: [definition],
+      npcStrategyProfiles: [profile],
+    })
+
+    const table = await store.createLobbyTable(blueprint)
+    definition.strategyProfileId = 'strategy-changed-after-open'
+
+    expect(table.blueprint.seats[1]).toEqual(expect.objectContaining({
+      npcStrategyProfileId: 'strategy-table-snapshot-v9',
+      npcStrategyProfileVersion: 9,
+    }))
   })
 })
