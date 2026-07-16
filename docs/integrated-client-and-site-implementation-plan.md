@@ -547,7 +547,33 @@ Ordered NPC strategy phases:
 4. Proactive postflop betting: checking, value betting, bluffing, continuation betting, probes, delayed bets, raises, barrels, give-ups, and configurable sizing.
 5. MDF-informed defense: aggregate defense targets adjusted for position, range disadvantage, board texture, equity realization, stack depth, multiway play, and opponent tendencies.
 6. Admin range editor and scenario simulator: clone/version/validate profiles, edit mixed frequencies and sizing, inspect deterministic decision traces, and compare preset behavior.
-7. Teaching explanations: derive player-facing concepts from verified decision inputs and outputs without changing poker actions or exposing hidden state.
+7. Archive-backed behavior calibration: derive version-pinned VPIP, open-raise, three-bet, fold-to-three-bet, continuation, c-bet, barrel, and sizing evidence from verified completed-hand events; compare observed samples with configured target bands without inferring hidden hand labels from public data.
+8. Simple strategy authoring mode: provide a separate guided mode that makes broad, safe template changes through plain-language poker intentions while retaining the current granular editor as Advanced mode.
+9. Teaching explanations: derive player-facing concepts from verified decision inputs and outputs without changing poker actions or exposing hidden state.
+
+### Milestone 9A: Simple Strategy Authoring Mode
+
+The strategy editor must support two explicit modes:
+
+- **Simple mode** is the default operator path. It presents a short structured flow and a readable strategy sentence such as: “Play moderately tight preflop, apply high first-in pressure, defend large bets selectively, barrel strong draws often, and prefer medium sizing.” Operators choose poker concepts and intensity levels rather than editing dozens of numeric fields.
+- **Advanced mode** retains the current Intent, Profile, Preflop, Postflop, Decision Lab, and Calibration stages with complete range-node, mixed-frequency, sizing, threshold, modifier, and target-band access.
+
+Simple mode requirements:
+
+- Compile controlled plain-language choices into deterministic, versioned patches to an existing safe preset. Do not mutate the source profile.
+- Support sweeping controls for preflop tightness, first-in aggression, three-bet pressure, blind defense, postflop initiative, value orientation, draw aggression, bluff tolerance, MDF adherence, barrel persistence, sizing family, position awareness, and multiway caution.
+- Use a finite product-owned vocabulary and validated transformations. Free text may map onto that vocabulary later, but it must not directly generate executable poker actions or bypass profile validation.
+- Show the resulting strategy sentence, changed modules, target-band movement, projected calibration deltas, and warnings before saving a new profile version.
+- Allow operators to switch the same draft between Simple and Advanced modes without losing edits. Advanced changes that cannot be represented exactly in Simple mode must be summarized as custom adjustments, not silently discarded.
+- Keep poker action selection deterministic and non-LLM. A future language assistant may explain or classify an operator request, but the accepted result must compile into the same bounded strategy contract and pass the same validation gate.
+
+Simple mode acceptance:
+
+- A non-specialist can create a recognizable tight-aggressive, loose-passive, value-heavy, draw-aggressive, or pot-control variant in a short guided flow.
+- Applying the same source profile and simple choices produces an identical profile patch and calibration report.
+- Every simple edit creates a reviewable new profile version and can be inspected or refined in Advanced mode.
+- Tests prove that broad controls move the intended observed metrics without introducing illegal frequencies, invalid sizing, contradictory thresholds, or shared RNG state.
+- No simple-mode control exposes deck order, private opponent cards, canonical engine state, or raw randomness.
 
 ### Milestone 10: Server-Authoritative Multiplayer Productization
 

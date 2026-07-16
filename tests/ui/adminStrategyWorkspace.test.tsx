@@ -92,7 +92,7 @@ describe('Admin strategy workspace', () => {
     expect(screen.getByLabelText('Comparison profile')).toBeInTheDocument()
     expect(screen.getByText('Projected VPIP')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Deterministic behavior validation' })).toBeInTheDocument()
-    expect(screen.getByText('Observed sample')).toBeInTheDocument()
+    expect(screen.getByText('Observed')).toBeInTheDocument()
     expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
   })
 
@@ -134,5 +134,27 @@ describe('Admin strategy workspace', () => {
       presetId: 'custom',
       bands: expect.objectContaining({ 'preflop.vpip': { min: 0.31, max: 0.48 } }),
     }))
+  })
+
+  it('surfaces verified archived-hand evidence for the exact profile version', () => {
+    render(
+      <AdminStrategyWorkspace
+        profiles={[structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])]}
+        evidence={[{
+          schemaVersion: 'npc-observed-strategy-v1',
+          profileId: 'strategy-balanced-caller-v4',
+          profileVersion: 4,
+          matchIds: ['match-a', 'match-b'],
+          handCount: 42,
+          metrics: {
+            'preflop.vpip': { value: 0.38, opportunities: 42, successes: 16 },
+          },
+        }]}
+        onCreateVersion={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('42 verified hands across 2 matches')).toBeInTheDocument()
+    expect(screen.getByText('verified n=42')).toBeInTheDocument()
   })
 })

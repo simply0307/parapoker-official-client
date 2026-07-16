@@ -8,16 +8,18 @@ import {
 } from '../npc/npcStrategyCalibration'
 import { StrategyCalibrationSummary } from './AdminStrategyIntent'
 import { validateNpcStrategyBehavior } from '../npc/npcStrategyValidation'
+import type { NpcObservedStrategyEvidence } from '../npc/npcObservedStrategyStats'
 
-export function AdminStrategyCalibration({ profile, profiles }: {
+export function AdminStrategyCalibration({ profile, profiles, evidence }: {
   profile: NpcStrategyProfile
   profiles: NpcStrategyProfile[]
+  evidence?: NpcObservedStrategyEvidence
 }) {
   const [filters, setFilters] = useState<NpcCalibrationFilters>({ ...DEFAULT_NPC_CALIBRATION_FILTERS })
   const [comparisonProfileId, setComparisonProfileId] = useState(
     profiles.find((candidate) => candidate.id !== profile.id)?.id ?? '',
   )
-  const validation = useMemo(() => validateNpcStrategyBehavior(profile, filters), [filters, profile])
+  const validation = useMemo(() => validateNpcStrategyBehavior(profile, filters, evidence), [evidence, filters, profile])
   const report = validation.calibration
   const comparisonProfile = profiles.find((candidate) => candidate.id === comparisonProfileId && candidate.id !== profile.id)
   const comparison = useMemo(
@@ -155,7 +157,7 @@ function ValidationSampleTable({ validation }: {
       <h4>Target And Deterministic Sample</h4>
       <table className="calibration-table validation-sample-table">
         <thead>
-          <tr><th>Metric</th><th>Projected</th><th>Observed sample</th><th>Target</th></tr>
+          <tr><th>Metric</th><th>Projected</th><th>Observed</th><th>Evidence</th><th>Target</th></tr>
         </thead>
         <tbody>
           {validation.metrics.map((metric) => (
@@ -163,6 +165,7 @@ function ValidationSampleTable({ validation }: {
               <th scope="row">{metric.label}</th>
               <td>{formatRate(metric.value)}</td>
               <td>{formatRate(metric.observed)}</td>
+              <td>{metric.observedSource === 'verified-match' ? `Verified n=${metric.observedSampleCount}` : `Scenario n=${metric.observedSampleCount}`}</td>
               <td className={metric.status}>{metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'Unbounded'}</td>
             </tr>
           ))}

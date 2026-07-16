@@ -10,19 +10,22 @@ import {
   validateNpcStrategyBehavior,
   type NpcStrategyValidationReport,
 } from '../npc/npcStrategyValidation'
+import type { NpcObservedStrategyEvidence } from '../npc/npcObservedStrategyStats'
 
 export function AdminStrategyIntent({
   profile,
+  evidence,
   editable,
   onSelectPreset,
   onUpdateBand,
 }: {
   profile: NpcStrategyProfile
+  evidence?: NpcObservedStrategyEvidence
   editable: boolean
   onSelectPreset: (presetId: NpcStrategyTargetPresetId) => void
   onUpdateBand: (metricId: NpcStrategyCalibrationMetricId, band: NpcStrategyCalibrationBand) => void
 }) {
-  const validation = useMemo(() => validateNpcStrategyBehavior(profile), [profile])
+  const validation = useMemo(() => validateNpcStrategyBehavior(profile, undefined, evidence), [evidence, profile])
   const preset = NPC_STRATEGY_TARGET_PRESETS.find((candidate) => candidate.id === validation.target.presetId)
 
   return (
@@ -49,7 +52,7 @@ export function AdminStrategyIntent({
         </select>
       </label>
       <p className="strategy-target-summary">{preset?.summary}</p>
-      <StrategyCalibrationSummary profile={profile} validation={validation} />
+      <StrategyCalibrationSummary profile={profile} evidence={evidence} validation={validation} />
 
       <details className="strategy-band-editor">
         <summary>Fine-tune target bands</summary>
@@ -80,14 +83,16 @@ export function AdminStrategyIntent({
 
 export function StrategyCalibrationSummary({
   profile,
+  evidence,
   validation: suppliedValidation,
   onOpenCalibration,
 }: {
   profile: NpcStrategyProfile
+  evidence?: NpcObservedStrategyEvidence
   validation?: NpcStrategyValidationReport
   onOpenCalibration?: () => void
 }) {
-  const computedValidation = useMemo(() => validateNpcStrategyBehavior(profile), [profile])
+  const computedValidation = useMemo(() => validateNpcStrategyBehavior(profile, undefined, evidence), [evidence, profile])
   const validation = suppliedValidation ?? computedValidation
   const visibleMetrics = validation.metrics.slice(0, 6)
   const visibleIssues = validation.issues.slice(0, 4)
@@ -98,14 +103,18 @@ export function StrategyCalibrationSummary({
           <span className={`strategy-status ${validation.status}`}>{humanize(validation.status)}</span>
           <strong>{validation.targetName} target</strong>
         </div>
-        <span>{Math.round(validation.score * 100)}% of bounded metrics inside target</span>
+        <span>{evidence
+          ? `${evidence.handCount} verified hands across ${evidence.matchIds.length} matches`
+          : `${Math.round(validation.score * 100)}% of bounded metrics inside target`}</span>
       </div>
       <div className="strategy-metric-strip">
         {visibleMetrics.map((metric) => (
           <div key={metric.id} className={`strategy-metric ${metric.status}`}>
             <span>{metric.label}</span>
-            <strong>{formatRate(metric.value)}</strong>
-            <small>{metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'No band'}</small>
+            <strong>{formatRate(metric.observedSource === 'verified-match' ? metric.observed : metric.value)}</strong>
+            <small>{metric.observedSource === 'verified-match'
+              ? `verified n=${metric.observedSampleCount}`
+              : metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'No band'}</small>
           </div>
         ))}
       </div>

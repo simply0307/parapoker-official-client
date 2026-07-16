@@ -16,6 +16,10 @@ import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../np
 import { IndexedDbNpcRegistryStore } from '../npc/npcRegistry'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../npc/roster'
 import {
+  deriveNpcStrategyEvidence,
+  type NpcObservedStrategyEvidence,
+} from '../npc/npcObservedStrategyStats'
+import {
   IndexedDbHandHistoryArchiveStore,
   type ArchivedSessionDetail,
   type ArchivedSessionRecord,
@@ -60,6 +64,7 @@ export function AdminPortal() {
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
   const [lobbyTableFilter, setLobbyTableFilter] = useState<LobbyTableFilter>('all')
   const [showStrategyWorkspace, setShowStrategyWorkspace] = useState(false)
+  const [strategyEvidence, setStrategyEvidence] = useState<NpcObservedStrategyEvidence[]>([])
   const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
 
   const activeNpcDefinitions = npcDefinitions.filter((npc) => npc.status === 'active')
@@ -95,6 +100,8 @@ export function AdminPortal() {
   const refreshArchives = useCallback(async () => {
     const sessions = await archiveStoreRef.current.listArchivedSessions()
     setArchivedSessions(sessions)
+    const details = await Promise.all(sessions.map((session) => archiveStoreRef.current.readArchivedSession(session.matchId)))
+    setStrategyEvidence(deriveNpcStrategyEvidence(details.filter((detail): detail is ArchivedSessionDetail => Boolean(detail))))
     if (selectedArchive && !sessions.some((session) => session.matchId === selectedArchive.session.matchId)) {
       setSelectedArchive(null)
     }
@@ -445,6 +452,7 @@ export function AdminPortal() {
         {showStrategyWorkspace && (
           <AdminStrategyWorkspace
             profiles={strategyProfiles}
+            evidence={strategyEvidence}
             onCreateVersion={createStrategyProfileVersion}
           />
         )}

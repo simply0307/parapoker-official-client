@@ -20,6 +20,7 @@ import {
 import { AdminStrategyCalibration } from './AdminStrategyCalibration'
 import { AdminStrategyIntent, StrategyCalibrationSummary } from './AdminStrategyIntent'
 import { createNpcStrategyCalibrationTarget } from '../npc/npcStrategyValidation'
+import type { NpcObservedStrategyEvidence } from '../npc/npcObservedStrategyStats'
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'] as const
 const PREFLOP_ACTIONS: NpcPreflopAction[] = ['fold', 'check', 'call', 'raise', 'allIn']
@@ -28,9 +29,11 @@ type WorkspaceStage = typeof WORKSPACE_STAGES[number]
 
 export function AdminStrategyWorkspace({
   profiles,
+  evidence = [],
   onCreateVersion,
 }: {
   profiles: NpcStrategyProfile[]
+  evidence?: NpcObservedStrategyEvidence[]
   onCreateVersion: (sourceProfileId: string, profile: NpcStrategyProfile) => Promise<void>
 }) {
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? '')
@@ -40,6 +43,8 @@ export function AdminStrategyWorkspace({
   const [editorMessage, setEditorMessage] = useState('Select a profile and create a new version to edit safely.')
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0]
   const workingProfile = draft ?? selectedProfile
+  const workingEvidence = evidence.find((sample) =>
+    sample.profileId === workingProfile?.id && sample.profileVersion === workingProfile.version)
 
   useEffect(() => {
     if (!profiles.some((profile) => profile.id === selectedProfileId)) {
@@ -121,6 +126,7 @@ export function AdminStrategyWorkspace({
           {activeStage === 'Intent' && (
             <AdminStrategyIntent
               profile={workingProfile}
+              evidence={workingEvidence}
               editable={Boolean(draft)}
               onSelectPreset={(presetId: NpcStrategyTargetPresetId) => updateDraft(setDraft, (next) => {
                 next.calibrationTarget = createNpcStrategyCalibrationTarget(presetId)
@@ -137,7 +143,7 @@ export function AdminStrategyWorkspace({
           )}
           {activeStage === 'Profile' && (
             <>
-              <StrategyCalibrationSummary profile={workingProfile} onOpenCalibration={() => setActiveStage('Calibration')} />
+              <StrategyCalibrationSummary profile={workingProfile} evidence={workingEvidence} onOpenCalibration={() => setActiveStage('Calibration')} />
               <ProfileIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
               <ModuleEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
             </>
@@ -150,7 +156,7 @@ export function AdminStrategyWorkspace({
           )}
           {activeStage === 'Decision Lab' && <ScenarioSimulator profile={workingProfile} />}
           {activeStage === 'Calibration' && (
-            <AdminStrategyCalibration profile={workingProfile} profiles={profiles} />
+            <AdminStrategyCalibration profile={workingProfile} profiles={profiles} evidence={workingEvidence} />
           )}
         </div>
       )}

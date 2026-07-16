@@ -12,6 +12,7 @@ import {
   type NpcStrategyCalibrationReport,
 } from './npcStrategyCalibration'
 import { createRng } from '../shared/rng'
+import type { NpcObservedStrategyEvidence } from './npcObservedStrategyStats'
 
 export interface NpcStrategyTargetPreset {
   id: NpcStrategyTargetPresetId
@@ -35,6 +36,8 @@ export interface NpcStrategyMetricResult {
   label: string
   value: number
   observed: number
+  observedSource: 'deterministic-scenario' | 'verified-match'
+  observedSampleCount: number
   band?: NpcStrategyCalibrationBand
   status: 'inside' | 'below' | 'above' | 'unbounded'
 }
@@ -166,6 +169,7 @@ export function normalizeNpcStrategyCalibrationTarget(
 export function validateNpcStrategyBehavior(
   profile: NpcStrategyProfile,
   filters: NpcCalibrationFilters = DEFAULT_NPC_CALIBRATION_FILTERS,
+  evidence?: NpcObservedStrategyEvidence,
 ): NpcStrategyValidationReport {
   const target = normalizeNpcStrategyCalibrationTarget(profile.calibrationTarget)
   const targetPreset = mustTargetPreset(target.presetId)
@@ -174,15 +178,22 @@ export function validateNpcStrategyBehavior(
   const metrics = (Object.keys(target.bands) as NpcStrategyCalibrationMetricId[]).map((id) => {
     const value = values[id]
     const targetBand = target.bands[id]
+    const verifiedMetric = evidence?.profileId === profile.id && evidence.profileVersion === profile.version
+      ? evidence.metrics[id]
+      : undefined
+    const observed = verifiedMetric?.value ?? (id === 'proactive.averagePotFraction'
+      ? value
+      : deterministicObservedRate(value, `${profile.id}:${profile.version}:${id}`))
+    const comparisonValue = verifiedMetric && verifiedMetric.opportunities >= 20 ? observed : value
     return {
       id,
       label: METRIC_LABELS[id],
       value,
-      observed: id === 'proactive.averagePotFraction'
-        ? value
-        : deterministicObservedRate(value, `${profile.id}:${profile.version}:${id}`),
+      observed,
+      observedSource: verifiedMetric ? 'verified-match' as const : 'deterministic-scenario' as const,
+      observedSampleCount: verifiedMetric?.opportunities ?? 2_000,
       ...(targetBand ? { band: targetBand } : {}),
-      status: metricStatus(value, targetBand),
+      status: metricStatus(comparisonValue, targetBand),
     }
   })
   const issues = [

@@ -5,6 +5,7 @@ import {
   createNpcStrategyCalibrationTarget,
   validateNpcStrategyBehavior,
 } from '../../src/npc/npcStrategyValidation'
+import type { NpcObservedStrategyEvidence } from '../../src/npc/npcObservedStrategyStats'
 
 describe('NPC strategy validation', () => {
   it('produces deterministic target and observed-behavior reports without secrets', () => {
@@ -57,5 +58,30 @@ describe('NPC strategy validation', () => {
     profile.calibrationTarget.bands['preflop.vpip'] = { min: 0.8, max: 0.2 }
 
     expect(() => normalizeStrategyProfile(profile)).toThrow(/calibration band/i)
+  })
+
+  it('uses sufficiently sampled verified match evidence while retaining scenario fallback metrics', () => {
+    const profile = LOCAL_NPC_STRATEGY_PROFILES[0]
+    const evidence: NpcObservedStrategyEvidence = {
+      schemaVersion: 'npc-observed-strategy-v1',
+      profileId: profile.id,
+      profileVersion: profile.version,
+      matchIds: ['verified-match'],
+      handCount: 40,
+      metrics: {
+        'preflop.vpip': { value: 0.4, opportunities: 40, successes: 16 },
+      },
+    }
+
+    const report = validateNpcStrategyBehavior(profile, undefined, evidence)
+    const vpip = report.metrics.find((metric) => metric.id === 'preflop.vpip')
+    const threeBet = report.metrics.find((metric) => metric.id === 'preflop.threeBet')
+
+    expect(vpip).toEqual(expect.objectContaining({
+      observed: 0.4,
+      observedSource: 'verified-match',
+      observedSampleCount: 40,
+    }))
+    expect(threeBet).toEqual(expect.objectContaining({ observedSource: 'deterministic-scenario' }))
   })
 })
