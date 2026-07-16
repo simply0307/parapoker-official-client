@@ -1,5 +1,4 @@
-import { useCallback, useState } from 'react'
-import { AdminPortal } from './ui/AdminPortal'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { LobbyScreen } from './ui/LobbyScreen'
 import { PokerTable } from './ui/PokerTable'
 import { SupabaseIdentityWidget } from './ui/SupabaseIdentityWidget'
@@ -7,6 +6,8 @@ import type { LobbyTableInstance } from './game-config/gameBlueprintStore'
 import type { ClientPlayerIdentity } from './integrations/supabase/identityRepository'
 
 type AppScreen = 'lobby' | 'play' | 'admin'
+
+const AdminPortal = lazy(() => import('./ui/AdminPortal').then((module) => ({ default: module.AdminPortal })))
 
 function App() {
   const [screen, setScreen] = useState<AppScreen>('lobby')
@@ -72,7 +73,11 @@ function App() {
           Admin
         </button>
       </nav>
-      {screen === 'admin' && <AdminPortal />}
+      {screen === 'admin' && (
+        <Suspense fallback={<main className="admin-loading" aria-label="Loading admin">Loading Admin...</main>}>
+          <AdminPortal />
+        </Suspense>
+      )}
       {screen === 'lobby' && (
         <LobbyScreen
           activeTableIds={activeTables.map((table) => table.tableId)}

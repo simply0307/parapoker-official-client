@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest'
 import App from '../../src/App'
 
 describe('App navigation', () => {
-  it('opens the local admin screen from the poker client', () => {
+  it('opens the local admin screen from the poker client', async () => {
     render(<App />)
 
     expect(screen.getByLabelText('ParaPoker lobby')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Play' }))
     expect(screen.getByLabelText('Local match setup')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
 
     expect(screen.getByLabelText('Admin overview')).toBeInTheDocument()
     expect(screen.getByText('NPC and Game Configuration')).toBeInTheDocument()
@@ -18,10 +18,10 @@ describe('App navigation', () => {
     expect(screen.getByLabelText('Game blueprint builder')).toBeInTheDocument()
   })
 
-  it('edits local admin drafts and updates the generated controller preview', () => {
+  it('edits local admin drafts and updates the generated controller preview', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
     fireEvent.change(screen.getByLabelText('npc-maven name'), { target: { value: 'Maven Prime' } })
     fireEvent.click(screen.getByLabelText('Admin game mode'))
     fireEvent.change(screen.getByLabelText('Admin game mode'), { target: { value: 'six-max' } })
@@ -35,7 +35,7 @@ describe('App navigation', () => {
   it('saves game blueprints and manages lobby table instances from admin', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
 
     await waitFor(() => {
@@ -49,6 +49,7 @@ describe('App navigation', () => {
     })
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0])
+    fireEvent.change(screen.getByLabelText('Lobby table status filter'), { target: { value: 'cancelled' } })
 
     await waitFor(() => {
       expect(screen.getByLabelText('Lobby table drafts')).toHaveTextContent('cancelled')
@@ -67,9 +68,8 @@ describe('App navigation', () => {
   it('opens random-seed blueprints with a resolved per-table seed', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
-    fireEvent.click(screen.getByLabelText('Random seed per table'))
-
+    await openAdmin()
+    expect(screen.getByLabelText('Random seed per table')).toBeChecked()
     expect(screen.getByLabelText('Admin seed')).toBeDisabled()
     expect(screen.getByLabelText('Configuration preview')).toHaveTextContent('"seedPolicy": "random"')
 
@@ -87,10 +87,10 @@ describe('App navigation', () => {
     expect(await screen.findByText(/^Seed table-/)).toBeInTheDocument()
   })
 
-  it('returns from admin to the playable setup screen', () => {
+  it('returns from admin to the playable setup screen', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
     fireEvent.click(screen.getByRole('button', { name: 'Play' }))
 
     expect(screen.getByLabelText('Local match setup')).toBeInTheDocument()
@@ -101,7 +101,7 @@ describe('App navigation', () => {
     render(<App />)
 
     expect(screen.getByLabelText('ParaPoker lobby')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
     fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
 
     await waitFor(() => {
@@ -117,13 +117,13 @@ describe('App navigation', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Join table' })[0])
 
     expect(await screen.findByLabelText('Poker table')).toBeInTheDocument()
-    expect(screen.getByText('Seed admin-preview')).toBeInTheDocument()
+    expect(screen.getByText(/^Seed table-/)).toBeInTheDocument()
   })
 
   it('keeps multiple joined lobby tables active in the table layout', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await openAdmin()
     fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open lobby table' }))
 
@@ -169,3 +169,8 @@ describe('App navigation', () => {
     expect(screen.getByRole('button', { name: 'Next hand' })).toBeInTheDocument()
   })
 })
+
+async function openAdmin() {
+  fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
+  await screen.findByLabelText('Admin overview')
+}

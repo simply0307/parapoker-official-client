@@ -21,6 +21,8 @@ import { AdminStrategyCalibration } from './AdminStrategyCalibration'
 import { AdminStrategyIntent, StrategyCalibrationSummary } from './AdminStrategyIntent'
 import { createNpcStrategyCalibrationTarget } from '../npc/npcStrategyValidation'
 import type { NpcObservedStrategyEvidence } from '../npc/npcObservedStrategyStats'
+import { compileSimpleStrategyProfile, type NpcSimpleStrategyIntent } from '../npc/npcSimpleStrategy'
+import { AdminSimpleStrategyEditor } from './AdminSimpleStrategyEditor'
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'] as const
 const PREFLOP_ACTIONS: NpcPreflopAction[] = ['fold', 'check', 'call', 'raise', 'allIn']
@@ -39,6 +41,7 @@ export function AdminStrategyWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? '')
   const [sourceProfileId, setSourceProfileId] = useState('')
   const [draft, setDraft] = useState<NpcStrategyProfile | null>(null)
+  const [authoringMode, setAuthoringMode] = useState<'simple' | 'advanced'>('simple')
   const [activeStage, setActiveStage] = useState<WorkspaceStage>('Intent')
   const [editorMessage, setEditorMessage] = useState('Select a profile and create a new version to edit safely.')
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0]
@@ -77,6 +80,11 @@ export function AdminStrategyWorkspace({
     }
   }
 
+  function applySimpleIntent(intent: NpcSimpleStrategyIntent) {
+    setDraft((current) => current ? compileSimpleStrategyProfile(current, intent) : current)
+    setEditorMessage('Broad strategy changes applied to this draft. Review in Advanced mode or save the profile version.')
+  }
+
   return (
     <div className="strategy-workspace">
       <div className="strategy-toolbar">
@@ -107,21 +115,43 @@ export function AdminStrategyWorkspace({
       </div>
       <p className="muted" role="status">{editorMessage}</p>
 
-      <div className="strategy-stage-tabs" role="tablist" aria-label="Strategy workbench stages">
-        {WORKSPACE_STAGES.map((stage) => (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeStage === stage}
-            key={stage}
-            onClick={() => setActiveStage(stage)}
-          >
-            {stage}
-          </button>
-        ))}
+      <div className="strategy-authoring-heading">
+        <div>
+          <strong>Editing depth</strong>
+          <span>Start broad, then inspect or tune the generated rules when needed.</span>
+        </div>
+        <div className="strategy-authoring-mode" aria-label="Strategy editor mode">
+          <button type="button" aria-pressed={authoringMode === 'simple'} onClick={() => setAuthoringMode('simple')}>Simple</button>
+          <button type="button" aria-pressed={authoringMode === 'advanced'} onClick={() => setAuthoringMode('advanced')}>Advanced</button>
+        </div>
       </div>
 
-      {workingProfile && (
+      {workingProfile && authoringMode === 'simple' && (
+        <AdminSimpleStrategyEditor
+          key={`${workingProfile.id}:${workingProfile.version}`}
+          profile={workingProfile}
+          editable={Boolean(draft)}
+          onApply={applySimpleIntent}
+        />
+      )}
+
+      {authoringMode === 'advanced' && (
+        <div className="strategy-stage-tabs" role="tablist" aria-label="Strategy workbench stages">
+          {WORKSPACE_STAGES.map((stage) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeStage === stage}
+              key={stage}
+              onClick={() => setActiveStage(stage)}
+            >
+              {stage}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {workingProfile && authoringMode === 'advanced' && (
         <div className="strategy-stage-content" role="tabpanel" aria-label={`${activeStage} strategy stage`}>
           {activeStage === 'Intent' && (
             <AdminStrategyIntent

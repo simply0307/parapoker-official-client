@@ -83,7 +83,7 @@ export function createGameBlueprint(input: CreateGameBlueprintInput): GameBluepr
     startingStack: input.startingStack,
     smallBlind: input.smallBlind,
     bigBlind: input.bigBlind,
-    seedPolicy: input.seedPolicy ?? 'fixed',
+    seedPolicy: input.seedPolicy ?? (input.seed ? 'fixed' : 'random'),
     seed: input.seed ?? '',
     seats,
   }

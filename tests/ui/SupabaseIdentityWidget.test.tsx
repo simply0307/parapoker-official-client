@@ -31,7 +31,7 @@ describe('SupabaseIdentityWidget', () => {
         },
       })
     })
-    expect(screen.getByText('Check your email for the sign-in link.')).toBeInTheDocument()
+    expect(await screen.findByText('Check your email for the sign-in link.')).toBeInTheDocument()
   })
 
   it('shows the signed-in email and signs out through the Supabase client', async () => {

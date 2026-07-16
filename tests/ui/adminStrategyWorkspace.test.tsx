@@ -13,6 +13,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     expect(screen.getByRole('tab', { name: 'Intent' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
@@ -50,6 +51,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Preflop' }))
     fireEvent.click(screen.getByRole('gridcell', { name: 'AA' }))
@@ -71,6 +73,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     fireEvent.click(screen.getByRole('tab', { name: 'Decision Lab' }))
     expect(screen.getByRole('region', { name: 'NPC decision simulator' })).toHaveTextContent('MDF')
     expect(screen.getByRole('region', { name: 'NPC decision simulator' })).toHaveTextContent('Pot odds')
@@ -85,6 +88,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     fireEvent.click(screen.getByRole('tab', { name: 'Calibration' }))
 
     expect(screen.getByRole('region', { name: 'NPC strategy calibration' })).toBeInTheDocument()
@@ -104,6 +108,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     expect(screen.getByRole('region', { name: 'Strategy calibration intent' })).toBeInTheDocument()
     expect(screen.getByLabelText('Strategy calibration target')).toHaveValue('balanced')
     expect(screen.getByText('Strategy editor key and poker-theory guide')).toBeInTheDocument()
@@ -123,6 +128,7 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
     fireEvent.change(screen.getByLabelText('VPIP minimum'), { target: { value: '0.31' } })
 
@@ -154,7 +160,53 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    openAdvancedEditor()
     expect(screen.getByText('42 verified hands across 2 matches')).toBeInTheDocument()
     expect(screen.getByText('verified n=42')).toBeInTheDocument()
   })
+
+  it('starts in a readable Simple mode and requires an editable version before applying', () => {
+    render(
+      <AdminStrategyWorkspace
+        profiles={[structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])]}
+        onCreateVersion={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Simple' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name: 'Simple strategy editor' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Simple strategy summary')).toHaveTextContent('Play balanced preflop ranges')
+    expect(screen.getByRole('button', { name: 'Apply broad changes' })).toBeDisabled()
+    expect(screen.queryByRole('tab', { name: 'Preflop' })).not.toBeInTheDocument()
+  })
+
+  it('applies broad intent to a draft and keeps the result available in Advanced mode', async () => {
+    const onCreateVersion = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AdminStrategyWorkspace
+        profiles={[structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])]}
+        onCreateVersion={onCreateVersion}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
+    fireEvent.change(screen.getByLabelText('Preflop ranges'), { target: { value: 'loose' } })
+    fireEvent.change(screen.getByLabelText('Pressure'), { target: { value: 'high' } })
+    fireEvent.change(screen.getByLabelText('Postflop plan'), { target: { value: 'draw-pressure' } })
+    expect(screen.getByLabelText('Simple strategy change preview')).toHaveTextContent('draw selection')
+    fireEvent.click(screen.getByRole('button', { name: 'Apply broad changes' }))
+
+    openAdvancedEditor()
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }))
+    expect(screen.getByRole('spinbutton', { name: 'Preflop Looseness' })).toHaveValue(0.48)
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile version' }))
+
+    expect(onCreateVersion).toHaveBeenCalledTimes(1)
+    expect(onCreateVersion.mock.calls[0][1].policyConfig.preflopLooseness).toBe(0.48)
+    expect(onCreateVersion.mock.calls[0][1].calibrationTarget.presetId).toBe('draw-pressure')
+  })
 })
+
+function openAdvancedEditor() {
+  fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+}

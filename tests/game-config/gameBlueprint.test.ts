@@ -101,6 +101,18 @@ describe('game blueprint configuration', () => {
     expect(blueprint.seed).toBe('')
   })
 
+  it('defaults seedless reusable blueprints to a random seed policy', () => {
+    const blueprint = createGameBlueprint({
+      mode: 'heads-up',
+      startingStack: 200,
+      smallBlind: 1,
+      bigBlind: 2,
+    })
+
+    expect(blueprint.seedPolicy).toBe('random')
+    expect(blueprint.seed).toBe('')
+  })
+
   it('pins the selected NPC strategy profile id and version into each NPC seat', () => {
     const profile = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])
     profile.id = 'strategy-admin-custom-v5'

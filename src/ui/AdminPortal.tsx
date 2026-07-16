@@ -56,13 +56,13 @@ export function AdminPortal() {
     startingStack: 200,
     smallBlind: 1,
     bigBlind: 2,
-    seedPolicy: 'fixed',
-    seed: 'admin-preview',
+    seedPolicy: 'random',
+    seed: '',
     npcLineup: defaultNpcLineup('heads-up'),
   }))
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSessionRecord[]>([])
   const [selectedArchive, setSelectedArchive] = useState<ArchivedSessionDetail | null>(null)
-  const [lobbyTableFilter, setLobbyTableFilter] = useState<LobbyTableFilter>('all')
+  const [lobbyTableFilter, setLobbyTableFilter] = useState<LobbyTableFilter>('active')
   const [showStrategyWorkspace, setShowStrategyWorkspace] = useState(false)
   const [strategyEvidence, setStrategyEvidence] = useState<NpcObservedStrategyEvidence[]>([])
   const [operatorMessage, setOperatorMessage] = useState('Operator console is local-only; production access must be server-authorized.')
@@ -255,7 +255,7 @@ export function AdminPortal() {
 
   return (
     <main className="admin-shell">
-      <section className="admin-panel admin-heading" aria-label="Admin overview">
+      <section className="admin-panel admin-heading admin-overview-panel" aria-label="Admin overview">
         <div>
           <p className="eyebrow">ParaPoker Local Admin</p>
           <h1>NPC and Game Configuration</h1>
@@ -368,7 +368,7 @@ export function AdminPortal() {
         )}
       </section>
 
-      <section className="admin-panel" aria-label="NPC definitions">
+      <section className="admin-panel admin-npc-panel" aria-label="NPC definitions">
         <div className="section-heading">
           <h2>NPCs</h2>
           <span>{npcDefinitions.length} definitions</span>
@@ -414,7 +414,7 @@ export function AdminPortal() {
       </section>
 
       <section
-        className={`admin-panel strategy-panel ${showStrategyWorkspace ? 'editor-open' : ''}`}
+        className={`admin-panel strategy-panel admin-strategy-panel ${showStrategyWorkspace ? 'editor-open' : ''}`}
         aria-label="Strategy profiles"
       >
         <div className="section-heading">
@@ -458,7 +458,7 @@ export function AdminPortal() {
         )}
       </section>
 
-      <section className="admin-panel" aria-label="Game blueprint builder">
+      <section className="admin-panel admin-blueprint-panel" aria-label="Game blueprint builder">
         <div className="section-heading">
           <h2>Game Blueprint</h2>
           <span>{gameDraft.mode}</span>
@@ -536,7 +536,7 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="admin-panel" aria-label="Lobby table drafts">
+      <section className="admin-panel admin-lobby-panel" aria-label="Lobby table drafts">
         <div className="section-heading">
           <h2>Lobby Tables</h2>
           <label>
@@ -580,7 +580,7 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="admin-panel" aria-label="Saved game blueprints">
+      <section className="admin-panel admin-saved-panel" aria-label="Saved game blueprints">
         <div className="section-heading">
           <h2>Saved Blueprints</h2>
           <span>{blueprintRecords.length} records</span>
@@ -606,7 +606,7 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="admin-panel" aria-label="Configuration preview">
+      <section className="admin-panel admin-preview-panel" aria-label="Configuration preview">
         <div className="section-heading">
           <h2>Preview</h2>
           <span>{resolvedBlueprint.seats.length} seats</span>
