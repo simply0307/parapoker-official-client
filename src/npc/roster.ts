@@ -2,6 +2,7 @@ import type { SeatId } from '../poker-engine'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from './config'
 import { createPostflopStrategy } from './postflopStrategy'
 import { createMultiFormatPreflopStrategy } from './preflopRanges'
+import { createNpcStrategyCalibrationTarget } from './npcStrategyValidation'
 
 export interface LocalNpcPresentation {
   seatId: SeatId
@@ -19,6 +20,7 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     status: 'active',
     difficulty: 'steady',
     description: 'A measured baseline strategy that continues with fair prices and avoids thin pressure.',
+    calibrationTarget: createNpcStrategyCalibrationTarget('balanced'),
     modules: [
       { id: 'preflop-range', enabled: true, weight: 0.55 },
       { id: 'draw-selection', enabled: true, weight: 0.45 },
@@ -67,6 +69,7 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     status: 'active',
     difficulty: 'steady',
     description: 'Applies more preflop pressure and uses larger raise targets.',
+    calibrationTarget: createNpcStrategyCalibrationTarget('pressure'),
     modules: [
       { id: 'preflop-pressure', enabled: true, weight: 0.8 },
       { id: 'value-pressure', enabled: true, weight: 0.65 },
@@ -128,6 +131,7 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     status: 'active',
     difficulty: 'steady',
     description: 'Weights postflop texture and draws more heavily than preflop initiative.',
+    calibrationTarget: createNpcStrategyCalibrationTarget('draw-pressure'),
     modules: [
       { id: 'postflop-made-hand', enabled: true, weight: 0.7 },
       { id: 'draw-selection', enabled: true, weight: 0.75 },
@@ -172,6 +176,7 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     status: 'active',
     difficulty: 'steady',
     description: 'Keeps marginal situations smaller and chooses fewer pressure lines.',
+    calibrationTarget: createNpcStrategyCalibrationTarget('pot-control'),
     modules: [
       { id: 'pot-control', enabled: true, weight: 0.85 },
       { id: 'preflop-range', enabled: true, weight: 0.5 },
@@ -233,6 +238,7 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     status: 'active',
     difficulty: 'steady',
     description: 'Prioritizes made-hand value and solid calls over speculative pressure.',
+    calibrationTarget: createNpcStrategyCalibrationTarget('value-first'),
     modules: [
       { id: 'postflop-made-hand', enabled: true, weight: 0.78 },
       { id: 'value-pressure', enabled: true, weight: 0.58 },

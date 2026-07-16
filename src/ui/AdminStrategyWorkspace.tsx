@@ -5,7 +5,9 @@ import type {
   NpcPreflopFormat,
   NpcPreflopStackDepth,
   NpcPreflopStrategy,
+  NpcStrategyCalibrationMetricId,
   NpcStrategyProfile,
+  NpcStrategyTargetPresetId,
 } from '../npc/config'
 import {
   simulatePostflopDefenseScenario,
@@ -16,10 +18,12 @@ import {
   updatePreflopHandActionFrequency,
 } from '../npc/strategyEditing'
 import { AdminStrategyCalibration } from './AdminStrategyCalibration'
+import { AdminStrategyIntent, StrategyCalibrationSummary } from './AdminStrategyIntent'
+import { createNpcStrategyCalibrationTarget } from '../npc/npcStrategyValidation'
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'] as const
 const PREFLOP_ACTIONS: NpcPreflopAction[] = ['fold', 'check', 'call', 'raise', 'allIn']
-const WORKSPACE_STAGES = ['Profile', 'Preflop', 'Postflop', 'Decision Lab', 'Calibration'] as const
+const WORKSPACE_STAGES = ['Intent', 'Profile', 'Preflop', 'Postflop', 'Decision Lab', 'Calibration'] as const
 type WorkspaceStage = typeof WORKSPACE_STAGES[number]
 
 export function AdminStrategyWorkspace({
@@ -32,7 +36,7 @@ export function AdminStrategyWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? '')
   const [sourceProfileId, setSourceProfileId] = useState('')
   const [draft, setDraft] = useState<NpcStrategyProfile | null>(null)
-  const [activeStage, setActiveStage] = useState<WorkspaceStage>('Profile')
+  const [activeStage, setActiveStage] = useState<WorkspaceStage>('Intent')
   const [editorMessage, setEditorMessage] = useState('Select a profile and create a new version to edit safely.')
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0]
   const workingProfile = draft ?? selectedProfile
@@ -49,6 +53,7 @@ export function AdminStrategyWorkspace({
     }
     setSourceProfileId(selectedProfile.id)
     setDraft(createStrategyProfileVersionDraft(selectedProfile))
+    setActiveStage('Intent')
     setEditorMessage(`Editing an independent v${selectedProfile.version + 1} draft.`)
   }
 
@@ -113,8 +118,26 @@ export function AdminStrategyWorkspace({
 
       {workingProfile && (
         <div className="strategy-stage-content" role="tabpanel" aria-label={`${activeStage} strategy stage`}>
+          {activeStage === 'Intent' && (
+            <AdminStrategyIntent
+              profile={workingProfile}
+              editable={Boolean(draft)}
+              onSelectPreset={(presetId: NpcStrategyTargetPresetId) => updateDraft(setDraft, (next) => {
+                next.calibrationTarget = createNpcStrategyCalibrationTarget(presetId)
+              })}
+              onUpdateBand={(metricId: NpcStrategyCalibrationMetricId, band) => updateDraft(setDraft, (next) => {
+                const target = next.calibrationTarget ?? createNpcStrategyCalibrationTarget('balanced')
+                target.presetId = 'custom'
+                const min = Math.max(0, Math.min(1.25, Number.isFinite(band.min) ? band.min : 0))
+                const max = Math.max(min, Math.min(1.25, Number.isFinite(band.max) ? band.max : 1))
+                target.bands[metricId] = { min, max }
+                next.calibrationTarget = target
+              })}
+            />
+          )}
           {activeStage === 'Profile' && (
             <>
+              <StrategyCalibrationSummary profile={workingProfile} onOpenCalibration={() => setActiveStage('Calibration')} />
               <ProfileIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
               <ModuleEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
             </>

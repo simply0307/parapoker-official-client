@@ -6,6 +6,8 @@ import {
   type NpcCalibrationFilters,
   type NpcCalibrationMetric,
 } from '../npc/npcStrategyCalibration'
+import { StrategyCalibrationSummary } from './AdminStrategyIntent'
+import { validateNpcStrategyBehavior } from '../npc/npcStrategyValidation'
 
 export function AdminStrategyCalibration({ profile, profiles }: {
   profile: NpcStrategyProfile
@@ -15,7 +17,8 @@ export function AdminStrategyCalibration({ profile, profiles }: {
   const [comparisonProfileId, setComparisonProfileId] = useState(
     profiles.find((candidate) => candidate.id !== profile.id)?.id ?? '',
   )
-  const report = useMemo(() => calibrateNpcStrategy(profile, filters), [filters, profile])
+  const validation = useMemo(() => validateNpcStrategyBehavior(profile, filters), [filters, profile])
+  const report = validation.calibration
   const comparisonProfile = profiles.find((candidate) => candidate.id === comparisonProfileId && candidate.id !== profile.id)
   const comparison = useMemo(
     () => comparisonProfile ? calibrateNpcStrategy(comparisonProfile, filters) : undefined,
@@ -38,6 +41,7 @@ export function AdminStrategyCalibration({ profile, profiles }: {
         <h3>Batch Calibration</h3>
         <span>{report.preflop.nodeCount} range nodes</span>
       </div>
+      <StrategyCalibrationSummary profile={profile} validation={validation} />
       <div className="calibration-toolbar">
         <CalibrationSelect
           label="Calibration format"
@@ -96,6 +100,7 @@ export function AdminStrategyCalibration({ profile, profiles }: {
         </label>
       </div>
       <div className="calibration-results-scroll">
+        <ValidationSampleTable validation={validation} />
         <CalibrationRateTable
           title="Preflop Projection"
           currentName={profile.name}
@@ -138,6 +143,32 @@ export function AdminStrategyCalibration({ profile, profiles }: {
           ]}
         />
       </div>
+    </section>
+  )
+}
+
+function ValidationSampleTable({ validation }: {
+  validation: ReturnType<typeof validateNpcStrategyBehavior>
+}) {
+  return (
+    <section className="calibration-table-section" aria-label="Deterministic behavior validation">
+      <h4>Target And Deterministic Sample</h4>
+      <table className="calibration-table validation-sample-table">
+        <thead>
+          <tr><th>Metric</th><th>Projected</th><th>Observed sample</th><th>Target</th></tr>
+        </thead>
+        <tbody>
+          {validation.metrics.map((metric) => (
+            <tr key={metric.id}>
+              <th scope="row">{metric.label}</th>
+              <td>{formatRate(metric.value)}</td>
+              <td>{formatRate(metric.observed)}</td>
+              <td className={metric.status}>{metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'Unbounded'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted">Observed samples use independent deterministic streams over bounded decision scenarios; they test reproducibility, not solver optimality.</p>
     </section>
   )
 }

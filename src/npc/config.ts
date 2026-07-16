@@ -2,6 +2,40 @@ import type { PositionLabel, SeatId } from '../poker-engine'
 import type { NpcPolicyConfig } from './basicNpc'
 
 export type NpcDefinitionStatus = 'draft' | 'active' | 'retired'
+export type NpcStrategyTargetPresetId =
+  | 'balanced'
+  | 'pressure'
+  | 'pot-control'
+  | 'value-first'
+  | 'draw-pressure'
+  | 'custom'
+export type NpcStrategyCalibrationMetricId =
+  | 'preflop.vpip'
+  | 'preflop.openRaise'
+  | 'preflop.threeBet'
+  | 'preflop.foldToThreeBet'
+  | 'defense.continue'
+  | 'defense.largeBetContinue'
+  | 'defense.drawContinue'
+  | 'proactive.bet'
+  | 'proactive.continuationBet'
+  | 'proactive.barrel'
+  | 'proactive.semiBluff'
+  | 'proactive.valueBet'
+  | 'proactive.bluffBet'
+  | 'proactive.averagePotFraction'
+
+export interface NpcStrategyCalibrationBand {
+  min: number
+  max: number
+}
+
+export interface NpcStrategyCalibrationTarget {
+  schemaVersion: 'npc-strategy-target-v1'
+  presetId: NpcStrategyTargetPresetId
+  bands: Partial<Record<NpcStrategyCalibrationMetricId, NpcStrategyCalibrationBand>>
+}
+
 export type NpcStrategyModuleId =
   | 'preflop-range'
   | 'preflop-pressure'
@@ -149,6 +183,7 @@ export interface NpcStrategyProfile {
   status: NpcDefinitionStatus
   difficulty: 'steady'
   modules: NpcStrategyModule[]
+  calibrationTarget?: NpcStrategyCalibrationTarget
   policyConfig: NpcPolicyConfig
   preflopStrategy?: NpcPreflopStrategy
   postflopStrategy?: NpcPostflopStrategy

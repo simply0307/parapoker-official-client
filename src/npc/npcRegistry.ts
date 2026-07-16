@@ -2,6 +2,7 @@ import type { NpcDefinition, NpcDefinitionStatus, NpcStrategyProfile } from './c
 import { validatePostflopStrategy } from './postflopStrategy'
 import { validatePreflopStrategy } from './preflopRanges'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from './roster'
+import { normalizeNpcStrategyCalibrationTarget } from './npcStrategyValidation'
 
 export const NPC_REGISTRY_DB_NAME = 'parapoker-npc-registry'
 export const NPC_REGISTRY_DB_VERSION = 1
@@ -296,6 +297,7 @@ export function normalizeStrategyProfile(profile: NpcStrategyProfile): NpcStrate
     ...profile,
     id,
     name,
+    calibrationTarget: normalizeNpcStrategyCalibrationTarget(profile.calibrationTarget),
   })
 }
 

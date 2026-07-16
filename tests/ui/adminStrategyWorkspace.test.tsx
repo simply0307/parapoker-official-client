@@ -13,9 +13,11 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
-    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Intent' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
+    fireEvent.change(screen.getByLabelText('Strategy calibration target'), { target: { value: 'pressure' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
       target: { value: 'Maven Teaching Defense' },
     })
@@ -35,6 +37,7 @@ describe('Admin strategy workspace', () => {
       name: 'Maven Teaching Defense',
     }))
     expect(saved.postflopStrategy.defense.foldBias).toBe(0.2)
+    expect(saved.calibrationTarget.presetId).toBe('pressure')
     expect(LOCAL_NPC_STRATEGY_PROFILES[0].name).toBe('Balanced Caller')
   })
 
@@ -88,6 +91,48 @@ describe('Admin strategy workspace', () => {
     expect(screen.getByLabelText('Calibration format')).toBeInTheDocument()
     expect(screen.getByLabelText('Comparison profile')).toBeInTheDocument()
     expect(screen.getByText('Projected VPIP')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Deterministic behavior validation' })).toBeInTheDocument()
+    expect(screen.getByText('Observed sample')).toBeInTheDocument()
     expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
+  })
+
+  it('starts with strategy intent, explains the model, and shows calibration again in Profile', () => {
+    render(
+      <AdminStrategyWorkspace
+        profiles={structuredClone(LOCAL_NPC_STRATEGY_PROFILES)}
+        onCreateVersion={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'Strategy calibration intent' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Strategy calibration target')).toHaveValue('balanced')
+    expect(screen.getByText('Strategy editor key and poker-theory guide')).toBeInTheDocument()
+    expect(screen.getByText(/MDF/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }))
+    expect(screen.getByRole('region', { name: 'Strategy target summary' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open full calibration' })).toBeInTheDocument()
+  })
+
+  it('turns a preset into a persisted custom target when its bands are edited', async () => {
+    const onCreateVersion = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AdminStrategyWorkspace
+        profiles={[structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])]}
+        onCreateVersion={onCreateVersion}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
+    fireEvent.change(screen.getByLabelText('VPIP minimum'), { target: { value: '0.31' } })
+
+    expect(screen.getByLabelText('Strategy calibration target')).toHaveValue('custom')
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile version' }))
+
+    expect(onCreateVersion).toHaveBeenCalledTimes(1)
+    expect(onCreateVersion.mock.calls[0][1].calibrationTarget).toEqual(expect.objectContaining({
+      presetId: 'custom',
+      bands: expect.objectContaining({ 'preflop.vpip': { min: 0.31, max: 0.48 } }),
+    }))
   })
 })
