@@ -42,8 +42,17 @@ describe('NPC domain configuration', () => {
       expect(profile?.postflopStrategy).toEqual(expect.objectContaining({
         schemaVersion: 'npc-postflop-v1',
         version: expect.any(Number),
+        defense: expect.objectContaining({
+          mdfAdherence: expect.any(Number),
+          foldBias: expect.any(Number),
+          potOddsDiscipline: expect.any(Number),
+        }),
       }))
+      expect(profile?.modules).toContainEqual(expect.objectContaining({ id: 'mdf-defense', enabled: true }))
     }
+
+    expect(new Set(LOCAL_NPC_STRATEGY_PROFILES.map((profile) =>
+      JSON.stringify(profile.postflopStrategy?.defense))).size).toBe(LOCAL_NPC_STRATEGY_PROFILES.length)
   })
 
   it('uses default lineups to map stable NPC identities onto table seats', () => {

@@ -199,8 +199,16 @@ function calculateEffectiveStackToPotRatio(view: PrivateSeatView): number {
 }
 
 function isInPosition(view: PrivateSeatView): boolean {
-  const position = view.seats.find((seat) => seat.id === view.heroSeatId)?.position
-  return position === 'BTN' || position === 'BTN/SB' || position === 'CO'
+  const dealerIndex = view.seats.findIndex((seat) => seat.isDealer)
+  if (dealerIndex < 0) {
+    const position = view.seats.find((seat) => seat.id === view.heroSeatId)?.position
+    return position === 'BTN' || position === 'BTN/SB'
+  }
+  const postflopOrder = [
+    ...view.seats.slice(dealerIndex + 1),
+    ...view.seats.slice(0, dealerIndex + 1),
+  ].filter((seat) => seat.status === 'active' && seat.stack > 0)
+  return postflopOrder.length > 1 && postflopOrder.at(-1)?.id === view.heroSeatId
 }
 
 function continueReason(assessment: NpcPostflopHandAssessment): NpcPostflopDefenseReason {

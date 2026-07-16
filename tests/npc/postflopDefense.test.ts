@@ -108,6 +108,22 @@ describe('NPC MDF-informed postflop defense', () => {
     expect(outOfPosition?.rangeDisadvantage).toBeGreaterThan(0)
   })
 
+  it('derives postflop position from active seat order instead of treating the cutoff as always in position', () => {
+    const strategy = createPostflopStrategy({
+      id: 'action-order-position',
+      aggression: 0.5,
+      defense: { positionBonus: 0.2, rangeDisadvantagePenalty: 0 },
+    })
+    const cutoffView = facingBetView({ potBeforeBet: 100, bet: 50, heroPosition: 'CO' })
+    const bigBlindView = facingBetView({ potBeforeBet: 100, bet: 50, heroPosition: 'BB' })
+    const assessment = { ...AIR, madeStrength: 0.4 }
+
+    const cutoff = decide(cutoffView, strategy, rangeState(), assessment, 0.99)
+    const bigBlind = decide(bigBlindView, strategy, rangeState(), assessment, 0.99)
+
+    expect(cutoff?.continueProbability).toBe(bigBlind?.continueProbability)
+  })
+
   it('reduces defense in multiway pots and increases commitment at low SPR', () => {
     const strategy = createPostflopStrategy({
       id: 'table-context-defense',
