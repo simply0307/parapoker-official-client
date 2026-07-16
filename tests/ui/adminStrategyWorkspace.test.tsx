@@ -13,11 +13,14 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
-    expect(screen.getByRole('spinbutton', { name: /fold bias/i })).toBeDisabled()
+    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
       target: { value: 'Maven Teaching Defense' },
     })
+    fireEvent.click(screen.getByRole('tab', { name: 'Postflop' }))
+    fireEvent.change(screen.getByLabelText('Postflop parameter group'), { target: { value: 'defense' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: /fold bias/i }), {
       target: { value: '0.2' },
     })
@@ -45,6 +48,7 @@ describe('Admin strategy workspace', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Create editable version' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Preflop' }))
     fireEvent.click(screen.getByRole('gridcell', { name: 'AA' }))
     const raise = screen.getByRole('spinbutton', { name: 'Raise' })
     fireEvent.change(raise, { target: { value: '0.8' } })
@@ -64,8 +68,26 @@ describe('Admin strategy workspace', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Decision Lab' }))
     expect(screen.getByRole('region', { name: 'NPC decision simulator' })).toHaveTextContent('MDF')
     expect(screen.getByRole('region', { name: 'NPC decision simulator' })).toHaveTextContent('Pot odds')
     expect(screen.getByRole('region', { name: 'NPC decision simulator' })).toHaveTextContent(/call|fold/i)
+  })
+
+  it('keeps calibration in a focused filterable stage', () => {
+    render(
+      <AdminStrategyWorkspace
+        profiles={structuredClone(LOCAL_NPC_STRATEGY_PROFILES)}
+        onCreateVersion={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Calibration' }))
+
+    expect(screen.getByRole('region', { name: 'NPC strategy calibration' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Calibration format')).toBeInTheDocument()
+    expect(screen.getByLabelText('Comparison profile')).toBeInTheDocument()
+    expect(screen.getByText('Projected VPIP')).toBeInTheDocument()
+    expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
   })
 })

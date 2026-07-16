@@ -15,9 +15,12 @@ import {
   createStrategyProfileVersionDraft,
   updatePreflopHandActionFrequency,
 } from '../npc/strategyEditing'
+import { AdminStrategyCalibration } from './AdminStrategyCalibration'
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'] as const
 const PREFLOP_ACTIONS: NpcPreflopAction[] = ['fold', 'check', 'call', 'raise', 'allIn']
+const WORKSPACE_STAGES = ['Profile', 'Preflop', 'Postflop', 'Decision Lab', 'Calibration'] as const
+type WorkspaceStage = typeof WORKSPACE_STAGES[number]
 
 export function AdminStrategyWorkspace({
   profiles,
@@ -29,6 +32,7 @@ export function AdminStrategyWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? '')
   const [sourceProfileId, setSourceProfileId] = useState('')
   const [draft, setDraft] = useState<NpcStrategyProfile | null>(null)
+  const [activeStage, setActiveStage] = useState<WorkspaceStage>('Profile')
   const [editorMessage, setEditorMessage] = useState('Select a profile and create a new version to edit safely.')
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0]
   const workingProfile = draft ?? selectedProfile
@@ -93,14 +97,39 @@ export function AdminStrategyWorkspace({
       </div>
       <p className="muted" role="status">{editorMessage}</p>
 
+      <div className="strategy-stage-tabs" role="tablist" aria-label="Strategy workbench stages">
+        {WORKSPACE_STAGES.map((stage) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeStage === stage}
+            key={stage}
+            onClick={() => setActiveStage(stage)}
+          >
+            {stage}
+          </button>
+        ))}
+      </div>
+
       {workingProfile && (
-        <>
-          <ProfileIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
-          <ModuleEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
-          <PreflopEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
-          <PostflopEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
-          <ScenarioSimulator profile={workingProfile} />
-        </>
+        <div className="strategy-stage-content" role="tabpanel" aria-label={`${activeStage} strategy stage`}>
+          {activeStage === 'Profile' && (
+            <>
+              <ProfileIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
+              <ModuleEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
+            </>
+          )}
+          {activeStage === 'Preflop' && (
+            <PreflopEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
+          )}
+          {activeStage === 'Postflop' && (
+            <PostflopEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
+          )}
+          {activeStage === 'Decision Lab' && <ScenarioSimulator profile={workingProfile} />}
+          {activeStage === 'Calibration' && (
+            <AdminStrategyCalibration profile={workingProfile} profiles={profiles} />
+          )}
+        </div>
       )}
     </div>
   )
@@ -207,6 +236,7 @@ function ModuleEditor({ profile, draft, setDraft }: EditorProps) {
 
 function PreflopEditor({ profile, draft, setDraft }: EditorProps) {
   const strategy = profile.preflopStrategy
+  const [editorMode, setEditorMode] = useState<'ranges' | 'sizing'>('ranges')
   const [format, setFormat] = useState<'all' | NpcPreflopFormat>('all')
   const [position, setPosition] = useState('all')
   const [stackDepth, setStackDepth] = useState<'all' | NpcPreflopStackDepth>('all')
@@ -256,75 +286,89 @@ function PreflopEditor({ profile, draft, setDraft }: EditorProps) {
         <h3>Preflop Range Construction</h3>
         <span>{strategy.nodes.length} nodes</span>
       </div>
-      <div className="strategy-filter-grid">
-        <SelectControl label="Format" value={format} onChange={(value) => setFormat(value as typeof format)} options={['all', 'heads-up', 'six-max']} />
-        <SelectControl label="Position" value={position} onChange={setPosition} options={['all', 'BTN/SB', 'BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO']} />
-        <SelectControl label="Stack" value={stackDepth} onChange={(value) => setStackDepth(value as typeof stackDepth)} options={['all', 'short', 'medium', 'deep']} />
-        <SelectControl label="Situation" value={situation} onChange={setSituation} options={['all', 'unopened', 'facingLimp', 'facingOpen', 'facingOpenWithCallers', 'facingRaiseAfterLimp', 'facingThreeBet', 'facingFourBet']} />
+      <div className="strategy-mode-switch" aria-label="Preflop editor mode">
+        <button type="button" aria-pressed={editorMode === 'ranges'} onClick={() => setEditorMode('ranges')}>Ranges</button>
+        <button type="button" aria-pressed={editorMode === 'sizing'} onClick={() => setEditorMode('sizing')}>Sizing</button>
       </div>
-      <label>
-        <span>Range node</span>
-        <select aria-label="Preflop range node" value={selectedNode?.id ?? ''} onChange={(event) => setSelectedNodeId(event.target.value)}>
-          {filteredNodes.map((node) => (
-            <option key={node.id} value={node.id}>{node.id}</option>
-          ))}
-        </select>
-      </label>
-      {selectedNode && (
-        <div className="range-editor-layout">
-          <div className="preflop-matrix" role="grid" aria-label="Preflop hand matrix">
-            {RANKS.flatMap((rowRank, rowIndex) => RANKS.map((columnRank, columnIndex) => {
-              const handClass = matrixHandClass(rowRank, columnRank, rowIndex, columnIndex)
-              const handMix = selectedNode.hands[handClass]
-              return (
-                <button
-                  type="button"
-                  role="gridcell"
-                  className={`${dominantMixClass(handMix)} ${selectedHandClass === handClass ? 'selected' : ''}`}
-                  aria-pressed={selectedHandClass === handClass}
-                  title={mixTitle(handMix)}
-                  key={handClass}
-                  onClick={() => setSelectedHandClass(handClass)}
-                >
-                  {handClass}
-                </button>
-              )
-            }))}
+      {editorMode === 'ranges' ? (
+        <>
+          <div className="strategy-filter-grid">
+            <SelectControl label="Format" value={format} onChange={(value) => setFormat(value as typeof format)} options={['all', 'heads-up', 'six-max']} />
+            <SelectControl label="Position" value={position} onChange={setPosition} options={['all', 'BTN/SB', 'BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO']} />
+            <SelectControl label="Stack" value={stackDepth} onChange={(value) => setStackDepth(value as typeof stackDepth)} options={['all', 'short', 'medium', 'deep']} />
+            <SelectControl label="Situation" value={situation} onChange={setSituation} options={['all', 'unopened', 'facingLimp', 'facingOpen', 'facingOpenWithCallers', 'facingRaiseAfterLimp', 'facingThreeBet', 'facingFourBet']} />
           </div>
-          <div className="hand-mix-editor">
-            <strong>{selectedHandClass}</strong>
-            {PREFLOP_ACTIONS.map((action) => (
-              <NumericControl
-                key={action}
-                label={humanize(action)}
-                value={mix.find((entry) => entry.action === action)?.frequency ?? 0}
-                min={0}
-                max={1}
-                step={0.01}
-                disabled={!draft}
-                onChange={(value) => updateMix(action, value)}
-              />
-            ))}
-          </div>
-        </div>
+          <label>
+            <span>Range node</span>
+            <select aria-label="Preflop range node" value={selectedNode?.id ?? ''} onChange={(event) => setSelectedNodeId(event.target.value)}>
+              {filteredNodes.map((node) => (
+                <option key={node.id} value={node.id}>{node.id}</option>
+              ))}
+            </select>
+          </label>
+          {selectedNode ? (
+            <div className="range-editor-layout">
+              <div className="preflop-matrix-scroll">
+                <div className="preflop-matrix" role="grid" aria-label="Preflop hand matrix">
+                  {RANKS.flatMap((rowRank, rowIndex) => RANKS.map((columnRank, columnIndex) => {
+                    const handClass = matrixHandClass(rowRank, columnRank, rowIndex, columnIndex)
+                    const handMix = selectedNode.hands[handClass]
+                    return (
+                      <button
+                        type="button"
+                        role="gridcell"
+                        className={`${dominantMixClass(handMix)} ${selectedHandClass === handClass ? 'selected' : ''}`}
+                        aria-pressed={selectedHandClass === handClass}
+                        title={mixTitle(handMix)}
+                        key={handClass}
+                        onClick={() => setSelectedHandClass(handClass)}
+                      >
+                        {handClass}
+                      </button>
+                    )
+                  }))}
+                </div>
+              </div>
+              <div className="hand-mix-editor">
+                <strong>{selectedHandClass}</strong>
+                {PREFLOP_ACTIONS.map((action) => (
+                  <NumericControl
+                    key={action}
+                    label={humanize(action)}
+                    value={mix.find((entry) => entry.action === action)?.frequency ?? 0}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    disabled={!draft}
+                    onChange={(value) => updateMix(action, value)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="muted">No range nodes match these filters.</p>
+          )}
+        </>
+      ) : (
+        <NumericObjectEditor
+          title="Preflop Sizing"
+          values={strategy.sizing}
+          disabled={!draft}
+          max={6}
+          onChange={(key, value) => updateDraft(setDraft, (next) => {
+            if (next.preflopStrategy) {
+              setNumeric(next.preflopStrategy.sizing, key, value)
+            }
+          })}
+        />
       )}
-      <NumericObjectEditor
-        title="Preflop Sizing"
-        values={strategy.sizing}
-        disabled={!draft}
-        max={6}
-        onChange={(key, value) => updateDraft(setDraft, (next) => {
-          if (next.preflopStrategy) {
-            setNumeric(next.preflopStrategy.sizing, key, value)
-          }
-        })}
-      />
     </section>
   )
 }
 
 function PostflopEditor({ profile, draft, setDraft }: EditorProps) {
   const strategy = profile.postflopStrategy
+  const [selectedGroup, setSelectedGroup] = useState<keyof Pick<NpcPostflopStrategy, 'frequencies' | 'sizing' | 'thresholds' | 'modifiers' | 'defense'>>('frequencies')
   if (!strategy) {
     return <section className="strategy-editor-band"><p className="muted">No postflop strategy configured.</p></section>
   }
@@ -335,34 +379,42 @@ function PostflopEditor({ profile, draft, setDraft }: EditorProps) {
     { title: 'Context Modifiers', key: 'modifiers', max: 1 },
     { title: 'MDF Defense', key: 'defense', min: 0, max: 1 },
   ]
+  const group = groups.find((candidate) => candidate.key === selectedGroup) ?? groups[0]
+  const values = strategy[group.key]
   return (
     <section className="strategy-editor-band" aria-label="Postflop strategy editor">
       <div className="section-heading">
         <h3>Postflop Strategy</h3>
         <span>{strategy.id}</span>
       </div>
-      {groups.map((group) => {
-        const values = strategy[group.key]
-        if (!values) {
-          return null
-        }
-        return (
-          <NumericObjectEditor
-            key={group.key}
-            title={group.title}
-            values={values}
-            min={group.min}
-            max={group.max}
-            disabled={!draft}
-            onChange={(key, value) => updateDraft(setDraft, (next) => {
-              const target = next.postflopStrategy?.[group.key]
-              if (target) {
-                setNumeric(target, key, value)
-              }
-            })}
-          />
-        )
-      })}
+      <label className="postflop-group-picker">
+        <span>Parameter group</span>
+        <select
+          aria-label="Postflop parameter group"
+          value={group.key}
+          onChange={(event) => setSelectedGroup(event.target.value as typeof selectedGroup)}
+        >
+          {groups.map((candidate) => (
+            <option key={candidate.key} value={candidate.key}>{candidate.title}</option>
+          ))}
+        </select>
+      </label>
+      {values && (
+        <NumericObjectEditor
+          key={group.key}
+          title={group.title}
+          values={values}
+          min={group.min}
+          max={group.max}
+          disabled={!draft}
+          onChange={(key, value) => updateDraft(setDraft, (next) => {
+            const target = next.postflopStrategy?.[group.key]
+            if (target) {
+              setNumeric(target, key, value)
+            }
+          })}
+        />
+      )}
     </section>
   )
 }
