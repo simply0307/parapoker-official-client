@@ -306,28 +306,39 @@ export function PokerTable({
   if (scene === 'setup' || !snapshot) {
     return (
       <main className="setup-shell">
-        <section className="setup-card" aria-label="Local match setup">
-          <p className="eyebrow">ParaPoker Play Money</p>
+        <header className="setup-header">
+          <p className="eyebrow">Create match</p>
           <h1>Start a Local Solo Match</h1>
-          <p className="setup-copy">Choose a heads-up or six-max freezeout before the table is created.</p>
-          <p className="setup-copy" aria-label="Current player identity">
-            {identityResolved ? (
-              <>Playing as <strong>{playerIdentity?.screenName ?? 'local guest'}</strong>.</>
-            ) : 'Loading player identity...'}
-          </p>
-          <SetupForm
-            setup={setup}
-            useRandomSeed={useRandomSeed}
-            setupError={setupError}
-            updateSetup={updateSetup}
-            setUseRandomSeed={setUseRandomSeed}
-            startMatch={() => void startSession(setup)}
-          />
-          {joinedTable && (
-            <p className="setup-copy">
-              Joined lobby table {joinedTable.tableId}; preparing pinned blueprint v{joinedTable.blueprintVersion}.
-            </p>
-          )}
+          <p>Configure a play-money freezeout and preview the field before cards are dealt.</p>
+        </header>
+        <section className="setup-layout" aria-label="Local match setup">
+          <div className="setup-card">
+            <div className="setup-section-heading">
+              <div>
+                <span>Match configuration</span>
+                <strong>{setup.mode === 'six-max' ? 'Six-max freezeout' : 'Heads-up freezeout'}</strong>
+              </div>
+              <p className="setup-copy" aria-label="Current player identity">
+                {identityResolved ? (
+                  <>Playing as <strong>{playerIdentity?.screenName ?? 'local guest'}</strong></>
+                ) : 'Loading player identity...'}
+              </p>
+            </div>
+            <SetupForm
+              setup={setup}
+              useRandomSeed={useRandomSeed}
+              setupError={setupError}
+              updateSetup={updateSetup}
+              setUseRandomSeed={setUseRandomSeed}
+              startMatch={() => void startSession(setup)}
+            />
+            {joinedTable && (
+              <p className="setup-copy">
+                Joined lobby table {joinedTable.tableId}; preparing pinned blueprint v{joinedTable.blueprintVersion}.
+              </p>
+            )}
+          </div>
+          <SetupPreview setup={setup} />
         </section>
       </main>
     )
@@ -446,7 +457,7 @@ function SetupForm({
 }) {
   return (
     <>
-      <div className="mode-switch" aria-label="Solo mode setup">
+      <div className="mode-switch" role="group" aria-label="Solo mode setup">
         <button
           type="button"
           className={setup.mode === 'heads-up' ? 'selected' : ''}
@@ -468,30 +479,70 @@ function SetupForm({
         <NumberField label="Stack" value={setup.startingStack} onChange={(value) => updateSetup('startingStack', value)} />
         <NumberField label="SB" value={setup.smallBlind} onChange={(value) => updateSetup('smallBlind', value)} />
         <NumberField label="BB" value={setup.bigBlind} onChange={(value) => updateSetup('bigBlind', value)} />
-        <label className="seed-field">
-          <span>Seed</span>
-          <input
-            value={String(setup.seed)}
-            disabled={useRandomSeed}
-            aria-label="Seed"
-            onChange={(event) => updateSetup('seed', event.target.value)}
-          />
-        </label>
-        <label className="toggle-field">
-          <input
-            type="checkbox"
-            checked={useRandomSeed}
-            onChange={(event) => setUseRandomSeed(event.target.checked)}
-          />
-          <span>Random local seed</span>
-        </label>
-        <button type="button" className="primary" onClick={startMatch}>
-          Start Match
-        </button>
+      </div>
+      <details className="setup-advanced">
+        <summary>Seed and reproducibility</summary>
+        <div>
+          <label className="seed-field">
+            <span>Seed</span>
+            <input
+              value={String(setup.seed)}
+              disabled={useRandomSeed}
+              aria-label="Seed"
+              onChange={(event) => updateSetup('seed', event.target.value)}
+            />
+          </label>
+          <label className="toggle-field">
+            <input
+              type="checkbox"
+              checked={useRandomSeed}
+              onChange={(event) => setUseRandomSeed(event.target.checked)}
+            />
+            <span>Random local seed</span>
+          </label>
+        </div>
+      </details>
+      <div className="setup-submit-row">
+        <span>{setup.startingStack} chips - {setup.smallBlind}/{setup.bigBlind} blinds</span>
+        <button type="button" className="primary" onClick={startMatch}>Start Match</button>
       </div>
       {setupError && <p className="error" role="alert">{setupError}</p>}
     </>
   )
+}
+
+function SetupPreview({ setup }: { setup: LocalSoloSessionConfig }) {
+  const lineup = setup.mode === 'six-max'
+    ? ['Maven', 'Quinn', 'Rook', 'Sol', 'Vega']
+    : ['Maven']
+
+  return (
+    <aside className="setup-preview" aria-label="Match preview">
+      <div className="setup-table-preview" aria-hidden="true">
+        {lineup.map((name, index) => <span key={name} className={`preview-seat preview-seat-${index + 1}`}>{name}</span>)}
+        <span className="preview-seat preview-hero">You</span>
+        <div className="preview-board"><i /><i /><i /></div>
+      </div>
+      <div className="setup-preview-copy">
+        <p className="eyebrow">Field preview</p>
+        <h2>{setup.mode === 'six-max' ? 'Six seats. One winner.' : 'One opponent. One winner.'}</h2>
+        <p>{setup.mode === 'six-max' ? 'A five-NPC lineup with independent strategy profiles.' : 'A direct heads-up test against Maven, the measured caller.'}</p>
+      </div>
+      <dl className="setup-preview-metrics">
+        <PreviewMetric label="Format" value={setup.mode === 'six-max' ? '6-max' : 'Heads-up'} />
+        <PreviewMetric label="Starting stack" value={setup.startingStack} />
+        <PreviewMetric label="Blinds" value={`${setup.smallBlind}/${setup.bigBlind}`} />
+      </dl>
+      <div className="setup-roster">
+        <span>Opponent roster</span>
+        <strong>{lineup.join(' / ')}</strong>
+      </div>
+    </aside>
+  )
+}
+
+function PreviewMetric({ label, value }: { label: string; value: string | number }) {
+  return <div><dt>{label}</dt><dd>{value}</dd></div>
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

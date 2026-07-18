@@ -287,6 +287,7 @@ function TableUtilityBar({
   setTableLayout: (layout: TableWindowLayout) => void
   changeSetup: () => void
 }) {
+  const hero = snapshot.publicView.seats.find((seat) => seat.id === snapshot.heroView.heroSeatId)
   return (
     <header className="table-utility-bar" aria-label="Table utility bar">
       <div className="utility-brand">
@@ -296,15 +297,16 @@ function TableUtilityBar({
       <dl className="utility-metrics">
         <Metric label="Hand" value={snapshot.publicView.handNumber} />
         <Metric label="Blinds" value={`${snapshot.config.smallBlind}/${snapshot.config.bigBlind}`} />
+        <Metric label="Pot" value={formatChips(snapshot.publicView.pot)} />
         <Metric label="To call" value={formatChips(toCall)} />
-        <Metric label="Lead" value={stackLead} />
       </dl>
       <div className="utility-status">
-        <span>{statusText}</span>
+        <strong>{statusText}</strong>
+        <span>{snapshot.publicView.street ? titleCase(snapshot.publicView.street) : 'Between hands'} - Hero {formatChips(hero?.stack ?? 0)}</span>
         <details>
           <summary>Details</summary>
           <p>Seed {String(snapshot.seed)}</p>
-          <p>{snapshot.blueprint.visibility}</p>
+          <p>{snapshot.blueprint.visibility} - {stackLead}</p>
         </details>
       </div>
       <label className="layout-picker">

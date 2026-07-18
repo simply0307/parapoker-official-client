@@ -260,7 +260,7 @@ export function AdminPortal() {
 
   return (
     <main className="admin-shell">
-      <section className="admin-panel admin-heading admin-overview-panel" aria-label="Admin overview">
+      <section id="admin-overview" className="admin-panel admin-heading admin-overview-panel" aria-label="Admin overview">
         <div>
           <p className="eyebrow">ParaPoker Local Admin</p>
           <h1>NPC and Game Configuration</h1>
@@ -268,7 +268,16 @@ export function AdminPortal() {
         <span className="status-pill">Local draft</span>
       </section>
 
-      <section className="admin-panel admin-history-panel" aria-label="Archived hand histories">
+      <nav className="admin-section-nav" aria-label="Admin sections">
+        <a href="#admin-overview">Overview</a>
+        <a href="#admin-histories">Hand Histories</a>
+        <a href="#admin-npcs">NPCs</a>
+        <a href="#admin-strategies">Strategies</a>
+        <a href="#admin-blueprints">Game Blueprints</a>
+        <a href="#admin-lobby">Lobby Tables</a>
+      </nav>
+
+      <section id="admin-histories" className="admin-panel admin-history-panel" aria-label="Archived hand histories">
         <div className="section-heading">
           <h2>Operator Hand Histories</h2>
           <span>{archivedSessions.length} archived matches</span>
@@ -376,7 +385,7 @@ export function AdminPortal() {
         )}
       </section>
 
-      <section className="admin-panel admin-npc-panel" aria-label="NPC definitions">
+      <section id="admin-npcs" className="admin-panel admin-npc-panel" aria-label="NPC definitions">
         <div className="section-heading">
           <h2>NPCs</h2>
           <span>{npcDefinitions.length} definitions</span>
@@ -422,6 +431,7 @@ export function AdminPortal() {
       </section>
 
       <section
+        id="admin-strategies"
         className={`admin-panel strategy-panel admin-strategy-panel ${showStrategyWorkspace ? 'editor-open' : ''}`}
         aria-label="Strategy profiles"
       >
@@ -467,7 +477,7 @@ export function AdminPortal() {
         )}
       </section>
 
-      <section className="admin-panel admin-blueprint-panel" aria-label="Game blueprint builder">
+      <section id="admin-blueprints" className="admin-panel admin-blueprint-panel" aria-label="Game blueprint builder">
         <div className="section-heading">
           <h2>Game Blueprint</h2>
           <span>{gameDraft.mode}</span>
@@ -545,7 +555,7 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="admin-panel admin-lobby-panel" aria-label="Lobby table drafts">
+      <section id="admin-lobby" className="admin-panel admin-lobby-panel" aria-label="Lobby table drafts">
         <div className="section-heading">
           <h2>Lobby Tables</h2>
           <label>

@@ -214,77 +214,90 @@ export function SupabaseIdentityWidget({
   }
 
   const currentEmail = session?.user.email ?? 'Signed in'
+  const accountLabel = profile?.screen_name || (session ? currentEmail : 'Guest')
 
   return (
     <section className="identity-widget" aria-label="Para identity">
-      {session ? (
-        <div className="identity-account-shell">
-          <div className="identity-account-summary">
-            <span>{profile?.screen_name || currentEmail}</span>
-            <button type="button" onClick={() => void signOut()} disabled={status === 'loading'}>
-              Sign out
-            </button>
-          </div>
-          <details className="identity-profile-details">
-            <summary>Profile</summary>
-            <form className="identity-profile-form" onSubmit={(event) => void saveProfile(event)} aria-label="Player profile shell">
+      <details className="identity-menu-details">
+        <summary aria-label="Account menu">
+          <span className={`identity-status-dot ${session ? 'online' : ''}`} aria-hidden="true" />
+          <span className="identity-summary-copy">
+            <strong>{accountLabel}</strong>
+            <small>{session ? 'Player profile' : 'Local guest'}</small>
+          </span>
+          <span className="identity-chevron" aria-hidden="true">+</span>
+        </summary>
+        <div className="identity-menu-panel">
+          {session ? (
+            <div className="identity-account-shell">
+              <div className="identity-account-summary">
+                <span>{profile?.screen_name ? currentEmail : 'Authenticated account'}</span>
+                <button type="button" onClick={() => void signOut()} disabled={status === 'loading'}>
+                  Sign out
+                </button>
+              </div>
+              <details className="identity-profile-details">
+                <summary>Profile</summary>
+                <form className="identity-profile-form" onSubmit={(event) => void saveProfile(event)} aria-label="Player profile shell">
+                  <label>
+                    <span>Screen name</span>
+                    <input
+                      aria-label="Player screen name"
+                      value={screenName}
+                      onChange={(event) => setScreenName(event.target.value)}
+                      disabled={status === 'loading'}
+                      minLength={3}
+                      maxLength={32}
+                    />
+                  </label>
+                  <label>
+                    <span>Avatar URL</span>
+                    <input
+                      aria-label="Player avatar URL"
+                      value={avatarUrl}
+                      onChange={(event) => setAvatarUrl(event.target.value)}
+                      disabled={status === 'loading'}
+                    />
+                  </label>
+                  <label>
+                    <span>Visibility</span>
+                    <select
+                      aria-label="Player profile visibility"
+                      value={visibility}
+                      onChange={(event) => setVisibility(event.target.value as PlayerProfileRow['visibility'])}
+                      disabled={status === 'loading'}
+                    >
+                      <option value="private">Private</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </label>
+                  <button type="submit" disabled={status === 'loading'}>
+                    Save profile
+                  </button>
+                </form>
+              </details>
+            </div>
+          ) : (
+            <form onSubmit={(event) => void submitEmail(event)}>
               <label>
-                <span>Screen name</span>
+                <span>Sign in by email</span>
                 <input
-                  aria-label="Player screen name"
-                  value={screenName}
-                  onChange={(event) => setScreenName(event.target.value)}
-                  disabled={status === 'loading'}
-                  minLength={3}
-                  maxLength={32}
+                  aria-label="Para identity email"
+                  type="email"
+                  placeholder="email@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={!client || status === 'loading'}
                 />
               </label>
-              <label>
-                <span>Avatar URL</span>
-                <input
-                  aria-label="Player avatar URL"
-                  value={avatarUrl}
-                  onChange={(event) => setAvatarUrl(event.target.value)}
-                  disabled={status === 'loading'}
-                />
-              </label>
-              <label>
-                <span>Visibility</span>
-                <select
-                  aria-label="Player profile visibility"
-                  value={visibility}
-                  onChange={(event) => setVisibility(event.target.value as PlayerProfileRow['visibility'])}
-                  disabled={status === 'loading'}
-                >
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
-                </select>
-              </label>
-              <button type="submit" disabled={status === 'loading'}>
-                Save profile
+              <button type="submit" disabled={!client || status === 'loading'}>
+                Send link
               </button>
             </form>
-          </details>
+          )}
+          <p>{message}</p>
         </div>
-      ) : (
-        <form onSubmit={(event) => void submitEmail(event)}>
-          <label>
-            <span>Para identity</span>
-            <input
-              aria-label="Para identity email"
-              type="email"
-              placeholder="email@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={!client || status === 'loading'}
-            />
-          </label>
-          <button type="submit" disabled={!client || status === 'loading'}>
-            Send link
-          </button>
-        </form>
-      )}
-      <p>{message}</p>
+      </details>
     </section>
   )
 }

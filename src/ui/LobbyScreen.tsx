@@ -8,12 +8,14 @@ import {
 interface LobbyScreenProps {
   activeTableIds: string[]
   onJoinTable: (table: LobbyTableInstance) => void
+  onOpenAdmin?: () => void
   storeFactory?: () => GameBlueprintStore
 }
 
 export function LobbyScreen({
   activeTableIds,
   onJoinTable,
+  onOpenAdmin = () => {},
   storeFactory = () => new IndexedDbGameBlueprintStore(),
 }: LobbyScreenProps) {
   const storeRef = useRef<GameBlueprintStore | null>(null)
@@ -30,11 +32,8 @@ export function LobbyScreen({
 
   const refreshLobby = useCallback(async () => {
     const store = storeRef.current
-    if (!store) {
-      return
-    }
-    const nextTables = await store.listLobbyTables()
-    setTables(nextTables)
+    if (!store) return
+    setTables(await store.listLobbyTables())
   }, [])
 
   useEffect(() => {
@@ -57,51 +56,69 @@ export function LobbyScreen({
 
   return (
     <main className="lobby-shell" aria-label="ParaPoker lobby">
-      <section className="lobby-panel lobby-hero">
+      <header className="lobby-header">
         <div>
-          <p className="eyebrow">ParaPoker Lobby</p>
+          <p className="eyebrow">Competition lobby</p>
           <h1>Open Tables</h1>
-          <p>Join operator-created local prototype tables. Multiplayer seat ownership still requires future server authority.</p>
+          <p>Choose an operator-created freezeout and take your seat.</p>
         </div>
-        <dl className="lobby-metrics">
-          <Metric label="Open" value={openTables.length} />
-          <Metric label="Active" value={`${activeCount}/4`} />
-        </dl>
-        <button type="button" onClick={() => void refreshLobby()}>
-          Refresh lobby
+        <button type="button" className="lobby-refresh" onClick={() => void refreshLobby()}>
+          <span aria-hidden="true">&#8635;</span> Refresh
         </button>
+      </header>
+
+      <section className="lobby-overview" aria-label="Lobby status">
+        <dl className="lobby-metrics">
+          <Metric label="Open tables" value={openTables.length} />
+          <Metric label="Active tables" value={`${activeCount}/4`} />
+          <Metric label="Client mode" value="Play money" />
+        </dl>
+        <p role="status">{message}</p>
       </section>
 
-      <section className="lobby-panel" aria-label="Open lobby tables">
+      <section className="lobby-tables" aria-label="Open lobby tables">
         <div className="section-heading">
-          <h2>Tables</h2>
-          <span>{message}</span>
+          <h2>Available now</h2>
+          <span>{openTables.length === 1 ? '1 table' : `${openTables.length} tables`}</span>
         </div>
         <div className="lobby-table-list">
           {openTables.length === 0 ? (
             <div className="empty-lobby">
-              <strong>No open lobby tables</strong>
-              <span>Use Admin to open a heads-up or six-max local table draft.</span>
+              <div className="empty-table-motif" aria-hidden="true"><span /><span /></div>
+              <div>
+                <strong>No tables are open</strong>
+                <span>Open a heads-up or six-max freezeout from the operator workspace.</span>
+              </div>
+              <button type="button" onClick={onOpenAdmin}>Open Admin</button>
             </div>
           ) : (
             openTables.map((table) => {
               const alreadyActive = activeTableIdSet.has(table.tableId)
+              const npcNames = table.blueprint.seats
+                .filter((seat) => seat.kind === 'npc')
+                .map((seat) => seat.displayName ?? formatNpcName(seat.npcDefinitionId))
+              const seated = table.blueprint.seats.length
+              const capacity = table.blueprint.mode === 'six-max' ? 6 : 2
               return (
                 <article className="lobby-table-card" key={table.tableId}>
-                  <div>
-                    <strong>{table.blueprint.name}</strong>
-                    <span>{table.tableId}</span>
-                  </div>
+                  <header>
+                    <div>
+                      <span className="format-badge">{table.blueprint.mode === 'six-max' ? '6-max' : 'Heads-up'}</span>
+                      <strong>{table.blueprint.name}</strong>
+                    </div>
+                    <span className="visibility-badge">{table.blueprint.visibility}</span>
+                  </header>
                   <dl>
-                    <Metric label="Mode" value={table.blueprint.mode} />
                     <Metric label="Blinds" value={`${table.blueprint.smallBlind}/${table.blueprint.bigBlind}`} />
-                    <Metric label="Stack" value={table.blueprint.startingStack} />
-                    <Metric label="Seats" value={table.blueprint.seats.length} />
+                    <Metric label="Starting stack" value={table.blueprint.startingStack} />
+                    <Metric label="Seated" value={`${seated}/${capacity}`} />
+                    <Metric label="Available" value={Math.max(0, capacity - seated)} />
                   </dl>
-                  <p>
-                    {table.blueprint.visibility} · blueprint v{table.blueprintVersion} ·{' '}
-                    {table.blueprint.seedPolicy === 'random' ? 'random seed' : `seed ${String(table.blueprint.seed)}`}
-                  </p>
+                  <div className="lobby-lineup">
+                    <span>Lineup</span>
+                    <strong>{npcNames.join(', ') || 'Human seats'}</strong>
+                  </div>
+                  <p>Blueprint v{table.blueprintVersion} - {table.blueprint.seedPolicy === 'random' ? 'random seed' : 'fixed seed'}</p>
                   <button
                     type="button"
                     className="primary"
@@ -121,10 +138,12 @@ export function LobbyScreen({
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  )
+  return <div><dt>{label}</dt><dd>{value}</dd></div>
+}
+
+function formatNpcName(npcDefinitionId?: string): string {
+  if (!npcDefinitionId) return 'NPC'
+  return npcDefinitionId.replace(/^npc-/, '').split('-')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
 }

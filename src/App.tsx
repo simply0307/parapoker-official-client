@@ -42,65 +42,78 @@ function App() {
   }
 
   return (
-    <>
-      <SupabaseIdentityWidget
-        onIdentityChange={handleIdentityChange}
-        onIdentityLoading={handleIdentityLoading}
-      />
-      <nav className="app-nav" aria-label="Client sections">
-        <button
-          type="button"
-          className={screen === 'lobby' ? 'selected' : ''}
-          aria-pressed={screen === 'lobby'}
-          onClick={() => setScreen('lobby')}
-        >
-          Lobby
-        </button>
-        <button
-          type="button"
-          className={screen === 'play' ? 'selected' : ''}
-          aria-pressed={screen === 'play'}
-          onClick={() => setScreen('play')}
-        >
-          Play
-        </button>
-        <button
-          type="button"
-          className={screen === 'admin' ? 'selected' : ''}
-          aria-pressed={screen === 'admin'}
-          onClick={() => setScreen('admin')}
-        >
-          Admin
-        </button>
-      </nav>
-      {screen === 'admin' && (
-        <Suspense fallback={<main className="admin-loading" aria-label="Loading admin">Loading Admin...</main>}>
-          <AdminPortal />
-        </Suspense>
-      )}
-      {screen === 'lobby' && (
-        <LobbyScreen
-          activeTableIds={activeTables.map((table) => table.tableId)}
-          onJoinTable={joinTable}
+    <div className="app-shell" data-screen={screen}>
+      <header className="app-topbar">
+        <div className="app-brand" aria-label="ParaPoker play-money client">
+          <span className="app-brand-mark" aria-hidden="true">P</span>
+          <span>
+            <strong>ParaPoker</strong>
+            <small>Competition client</small>
+          </span>
+        </div>
+        <nav className="app-nav" aria-label="Client sections">
+          <button
+            type="button"
+            className={screen === 'lobby' ? 'selected' : ''}
+            aria-pressed={screen === 'lobby'}
+            onClick={() => setScreen('lobby')}
+          >
+            Lobby
+          </button>
+          <button
+            type="button"
+            className={screen === 'play' ? 'selected' : ''}
+            aria-pressed={screen === 'play'}
+            onClick={() => setScreen('play')}
+          >
+            Play
+            {activeTables.length > 0 && <span className="nav-count" aria-hidden="true">{activeTables.length}</span>}
+          </button>
+          <button
+            type="button"
+            className={screen === 'admin' ? 'selected' : ''}
+            aria-pressed={screen === 'admin'}
+            onClick={() => setScreen('admin')}
+          >
+            Admin
+          </button>
+        </nav>
+        <SupabaseIdentityWidget
+          onIdentityChange={handleIdentityChange}
+          onIdentityLoading={handleIdentityLoading}
         />
-      )}
-      <div hidden={screen !== 'play'}>
-        <PokerTable
-          joinedTable={joinedTable}
-          joinedTables={activeTables}
-          playerIdentity={playerIdentity}
-          identityResolved={identityResolved}
-          openAdmin={() => setScreen('admin')}
-          onLeaveTable={leaveTable}
-          onActivateTable={(tableId) => {
-            const table = activeTables.find((candidate) => candidate.tableId === tableId)
-            if (table) {
-              setJoinedTable(table)
-            }
-          }}
-        />
+      </header>
+      <div className="app-content">
+        {screen === 'admin' && (
+          <Suspense fallback={<main className="admin-loading" aria-label="Loading admin">Loading Admin...</main>}>
+            <AdminPortal />
+          </Suspense>
+        )}
+        {screen === 'lobby' && (
+          <LobbyScreen
+            activeTableIds={activeTables.map((table) => table.tableId)}
+            onJoinTable={joinTable}
+            onOpenAdmin={() => setScreen('admin')}
+          />
+        )}
+        <div className="play-screen" hidden={screen !== 'play'}>
+          <PokerTable
+            joinedTable={joinedTable}
+            joinedTables={activeTables}
+            playerIdentity={playerIdentity}
+            identityResolved={identityResolved}
+            openAdmin={() => setScreen('admin')}
+            onLeaveTable={leaveTable}
+            onActivateTable={(tableId) => {
+              const table = activeTables.find((candidate) => candidate.tableId === tableId)
+              if (table) {
+                setJoinedTable(table)
+              }
+            }}
+          />
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
