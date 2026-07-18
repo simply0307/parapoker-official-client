@@ -135,6 +135,7 @@ export class LocalSoloSession {
       options.npcStrategyProfiles,
     )
     this.controller = new LocalSinglePlayerController(gameBlueprintToControllerConfig(this.blueprint, this.npcDefinitions, resolvedSeed), {
+      tableIdentity: { matchId: this.matchId, tableId: this.tableId },
       npcLineup: npcLineupForBlueprint(this.blueprint),
       npcDefinitions: this.npcDefinitions,
       npcStrategyProfiles: this.npcStrategyProfiles,

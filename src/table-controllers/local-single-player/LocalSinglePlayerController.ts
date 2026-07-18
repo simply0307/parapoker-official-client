@@ -7,7 +7,7 @@ import {
 } from '../../npc/basicNpc'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
 import { updateNpcRangeMemory } from '../../npc/rangeTracking'
-import type { NpcDecisionTrace } from '../../npc/npcDecisionTrace'
+import { npcDecisionTraceId, type NpcDecisionTrace } from '../../npc/npcDecisionTrace'
 import {
   DEFAULT_SIX_MAX_NPC_LINEUP,
   localNpcDefinition,
@@ -63,6 +63,10 @@ export interface LocalNpcRuntime {
 }
 
 export interface LocalSinglePlayerControllerOptions {
+  tableIdentity: {
+    matchId: string
+    tableId: string
+  }
   npcLineup?: NpcSeatAssignment[]
   npcDefinitions?: NpcDefinition[]
   npcStrategyProfiles?: NpcStrategyProfile[]
@@ -88,11 +92,17 @@ export class LocalSinglePlayerController {
   private state: GameState
   private readonly humanSeatId: SeatId
   private readonly npcControllers: Map<SeatId, NpcSeatController>
+  private readonly tableIdentity: LocalSinglePlayerControllerOptions['tableIdentity']
+  private nextNpcDecisionSequence = 1
   private lastError?: string
   private initialTransition: LocalSinglePlayerTransition
 
-  constructor(config: Partial<MatchConfig> = {}, options: LocalSinglePlayerControllerOptions = {}) {
+  constructor(config: Partial<MatchConfig>, options: LocalSinglePlayerControllerOptions) {
+    if (!options.tableIdentity.matchId.trim() || !options.tableIdentity.tableId.trim()) {
+      throw new Error('Local table controllers require explicit match and table identifiers.')
+    }
     this.state = createGame(config)
+    this.tableIdentity = structuredClone(options.tableIdentity)
     this.humanSeatId = config.seats?.find((seat) => seat.kind === 'human')?.id ?? 'human'
     this.npcControllers = new Map(
       this.state.seats
@@ -181,6 +191,7 @@ export class LocalSinglePlayerController {
       }
       const view = getSeatView(this.state, pendingSeatId)
       controller.memory = updateNpcRangeMemory(controller.memory, view)
+      const decisionSequence = this.nextNpcDecisionSequence
       const decision = controller.policy.chooseDecision(
         createNpcDecisionContext(
           view,
@@ -198,9 +209,19 @@ export class LocalSinglePlayerController {
               ...(controller.strategyProfile.teaching?.intendedTendencies.map((tendency) => tendency.id) ?? []),
             ],
           },
+          {
+            ...this.tableIdentity,
+            decisionSequence,
+          },
         ),
       )
-      traces.push(decision.trace)
+      this.nextNpcDecisionSequence += 1
+      traces.push({
+        ...decision.trace,
+        ...this.tableIdentity,
+        traceId: npcDecisionTraceId(this.tableIdentity.tableId, decisionSequence),
+        decisionSequence,
+      })
       const result = applyAction(this.state, decision.command)
       if (!result.ok) {
         this.lastError = result.error.message

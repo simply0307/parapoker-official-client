@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   chooseProactivePostflopDecision,
   createPostflopStrategy,
+  evaluateProactivePostflopDecision,
   validatePostflopStrategy,
   type NpcPostflopHandAssessment,
 } from '../../src/npc/postflopStrategy'
@@ -118,6 +119,36 @@ describe('NPC proactive postflop strategy', () => {
 
     expect(probe?.reason).toBe('probeBet')
     expect(barrel?.reason).toBe('turnBarrel')
+  })
+
+  it('applies the position bonus from active six-max action order', () => {
+    const strategy = createPostflopStrategy({
+      id: 'six-max-position-order',
+      aggression: 0.5,
+      frequencies: { cBetFlop: 0.4 },
+      modifiers: { positionBonus: 0.2 },
+    })
+    const outOfPosition = sixMaxCutoffView('active')
+    const inPosition = sixMaxCutoffView('folded')
+    const ranges = rangeState('flop', { heroInitiative: true, heroLastAggressiveStreet: 'preflop' })
+    const oopEvaluation = evaluateProactivePostflopDecision({
+      view: outOfPosition,
+      legalActions: outOfPosition.legalActions,
+      strategy,
+      rangeState: ranges,
+      assessment: AIR,
+      rng: fixedRng(0.99),
+    })
+    const ipEvaluation = evaluateProactivePostflopDecision({
+      view: inPosition,
+      legalActions: inPosition.legalActions,
+      strategy,
+      rangeState: ranges,
+      assessment: AIR,
+      rng: fixedRng(0.99),
+    })
+
+    expect((ipEvaluation?.probability ?? 0) - (oopEvaluation?.probability ?? 0)).toBeCloseTo(0.2)
   })
 
   it('raises strong value hands but leaves non-proactive defense to the fallback policy', () => {
@@ -240,6 +271,21 @@ function postflopView(street: Street, legalActions: LegalAction[] = [
   }
 }
 
+function sixMaxCutoffView(buttonStatus: 'active' | 'folded'): PrivateSeatView {
+  const view = postflopView('flop')
+  view.heroSeatId = 'hero'
+  view.pendingSeatId = 'hero'
+  view.seats = [
+    multiSeat('sb', 'SB'),
+    multiSeat('bb', 'BB'),
+    multiSeat('utg', 'UTG'),
+    multiSeat('hj', 'HJ'),
+    multiSeat('hero', 'CO'),
+    { ...multiSeat('button', 'BTN', true), status: buttonStatus },
+  ]
+  return view
+}
+
 function rangeState(
   street: Street,
   options: {
@@ -307,6 +353,26 @@ function seat(id: string, position: 'BTN' | 'BB'): PrivateSeatView['seats'][numb
     totalContribution: 0,
     isDealer: position === 'BTN',
     isSmallBlind: false,
+    isBigBlind: position === 'BB',
+  }
+}
+
+function multiSeat(
+  id: string,
+  position: NonNullable<PrivateSeatView['seats'][number]['position']>,
+  isDealer = false,
+): PrivateSeatView['seats'][number] {
+  return {
+    id,
+    name: id,
+    kind: 'npc',
+    position,
+    stack: 100,
+    status: 'active',
+    streetContribution: 0,
+    totalContribution: 0,
+    isDealer,
+    isSmallBlind: position === 'SB',
     isBigBlind: position === 'BB',
   }
 }

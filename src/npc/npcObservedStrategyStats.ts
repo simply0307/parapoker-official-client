@@ -73,10 +73,12 @@ export function deriveNpcStrategyEvidence(
       const hands = archive.hands.filter((hand) => hand.participantSeatIds.includes(participant.seatId))
       accumulator.handCount += hands.length
       for (const hand of hands) analyzeHand(hand.orderedPublicEvents, participant.seatId, accumulator.metrics)
-      accumulator.traces.push(...(archive.session.authorityArchive?.npcDecisionTraces ?? []).filter((trace) =>
-        trace.seatId === participant.seatId &&
-        trace.strategyProfileId === participant.npcStrategyProfileId &&
-        trace.strategyProfileVersion === participant.npcStrategyProfileVersion))
+      accumulator.traces.push(...(archive.session.authorityArchive?.npcDecisionTraces ?? [])
+        .map((trace, index) => traceWithArchiveAttribution(trace, archive.session.matchId, archive.session.tableId, index))
+        .filter((trace) =>
+          trace.seatId === participant.seatId &&
+          trace.strategyProfileId === participant.npcStrategyProfileId &&
+          trace.strategyProfileVersion === participant.npcStrategyProfileVersion))
       accumulators.set(key, accumulator)
     }
   }
@@ -108,7 +110,10 @@ function analyzeTeachingTraces(
   metrics: EvidenceAccumulator['teachingMetrics'],
 ): void {
   const ordered = [...traces].sort((left, right) =>
-    left.handNumber - right.handNumber || left.seatId.localeCompare(right.seatId))
+    left.matchId.localeCompare(right.matchId) ||
+    left.handNumber - right.handNumber ||
+    left.seatId.localeCompare(right.seatId) ||
+    left.decisionSequence - right.decisionSequence)
   for (const trace of ordered) {
     const aggressive = trace.selectedAction === 'bet' || trace.selectedAction === 'raise' || trace.selectedAction === 'allIn'
     const continued = trace.selectedAction !== 'fold'
@@ -141,16 +146,38 @@ function analyzeTeachingTraces(
 
   const byHandSeat = new Map<string, NpcDecisionTrace[]>()
   for (const trace of ordered) {
-    const key = `${trace.handNumber}:${trace.seatId}`
+    const key = `${trace.matchId}:${trace.handNumber}:${trace.seatId}`
     byHandSeat.set(key, [...(byHandSeat.get(key) ?? []), trace])
   }
   for (const decisions of byHandSeat.values()) {
-    const cbet = decisions.find((trace) => trace.reasonCode === 'continuationBet')
-    const turn = decisions.find((trace) => trace.street === 'turn')
-    if (cbet && turn) {
+    const cbetIndex = decisions.findIndex((trace) => trace.reasonCode === 'continuationBet')
+    const turn = cbetIndex >= 0
+      ? decisions.slice(cbetIndex + 1).find((trace) => trace.street === 'turn')
+      : undefined
+    if (turn) {
       const turnAggressive = turn.selectedAction === 'bet' || turn.selectedAction === 'raise' || turn.selectedAction === 'allIn'
       addTeachingOpportunity(metrics, 'teaching.flopCbetTurnGiveUp', !turnAggressive)
     }
+  }
+}
+
+function traceWithArchiveAttribution(
+  trace: NpcDecisionTrace,
+  matchId: string,
+  tableId: string,
+  index: number,
+): NpcDecisionTrace {
+  type LegacyTrace = Omit<NpcDecisionTrace, 'matchId' | 'tableId' | 'traceId' | 'decisionSequence'> &
+    Partial<Pick<NpcDecisionTrace, 'matchId' | 'tableId' | 'traceId' | 'decisionSequence'>>
+  const legacyTrace = trace as LegacyTrace
+  const resolvedTableId = legacyTrace.tableId ?? tableId
+  const decisionSequence = legacyTrace.decisionSequence ?? index + 1
+  return {
+    ...trace,
+    matchId: legacyTrace.matchId ?? matchId,
+    tableId: resolvedTableId,
+    traceId: legacyTrace.traceId ?? `${resolvedTableId}:legacy-npc-decision:${decisionSequence}`,
+    decisionSequence,
   }
 }
 

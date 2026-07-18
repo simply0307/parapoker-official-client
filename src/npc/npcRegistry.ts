@@ -202,25 +202,24 @@ export class IndexedDbNpcRegistryStore implements NpcRegistryStore {
 
   private async seedIfEmpty(): Promise<void> {
     const existingProfiles = await this.getAll<NpcStrategyProfile>('strategyProfiles')
+    const existingDefinitions = await this.getAll<NpcDefinition>('definitions')
+    const reconciled = reconcileBuiltInNpcRegistry({
+      definitions: existingDefinitions,
+      strategyProfiles: existingProfiles,
+    })
     const existingProfileIds = new Set(existingProfiles.map((profile) => profile.id))
-    await Promise.all(
-      LOCAL_NPC_STRATEGY_PROFILES
+    const existingById = new Map(existingDefinitions.map((definition) => [definition.id, definition]))
+    await Promise.all([
+      ...reconciled.strategyProfiles
         .filter((profile) => !existingProfileIds.has(profile.id))
         .map((profile) => this.put('strategyProfiles', profile)),
-    )
-    const existingDefinitions = await this.getAll<NpcDefinition>('definitions')
-    const existingById = new Map(existingDefinitions.map((definition) => [definition.id, definition]))
-    await Promise.all(LOCAL_NPC_DEFINITIONS.map((builtIn) => {
-      const existing = existingById.get(builtIn.id)
-      if (!existing) {
-        return this.put('definitions', builtIn)
-      }
-      const previousBuiltInProfileId = PREVIOUS_BUILT_IN_PROFILE_IDS[builtIn.id]
-      if (previousBuiltInProfileId && existing.strategyProfileId === previousBuiltInProfileId) {
-        return this.put('definitions', { ...existing, strategyProfileId: builtIn.strategyProfileId })
-      }
-      return Promise.resolve()
-    }))
+      ...reconciled.definitions
+        .filter((definition) => {
+          const existing = existingById.get(definition.id)
+          return !existing || existing.strategyProfileId !== definition.strategyProfileId
+        })
+        .map((definition) => this.put('definitions', definition)),
+    ])
   }
 
   private async put(storeName: StoreName, value: NpcDefinition | NpcStrategyProfile): Promise<void> {
@@ -356,6 +355,32 @@ const PREVIOUS_BUILT_IN_PROFILE_IDS: Record<string, string> = {
   'npc-quinn': 'strategy-board-watcher-v4',
   'npc-sol': 'strategy-pot-controller-v4',
   'npc-vega': 'strategy-value-hunter-v4',
+}
+
+export function reconcileBuiltInNpcRegistry(existing: NpcRegistrySnapshot): NpcRegistrySnapshot {
+  const strategyProfiles = clone(existing.strategyProfiles)
+  const profileIds = new Set(strategyProfiles.map((profile) => profile.id))
+  for (const builtIn of LOCAL_NPC_STRATEGY_PROFILES) {
+    if (!profileIds.has(builtIn.id)) {
+      strategyProfiles.push(clone(builtIn))
+    }
+  }
+
+  const definitions = clone(existing.definitions)
+  const definitionIndexes = new Map(definitions.map((definition, index) => [definition.id, index]))
+  for (const builtIn of LOCAL_NPC_DEFINITIONS) {
+    const index = definitionIndexes.get(builtIn.id)
+    if (index === undefined) {
+      definitions.push(clone(builtIn))
+      continue
+    }
+    const stored = definitions[index]
+    if (stored.strategyProfileId === PREVIOUS_BUILT_IN_PROFILE_IDS[builtIn.id]) {
+      definitions[index] = { ...stored, strategyProfileId: builtIn.strategyProfileId }
+    }
+  }
+
+  return { definitions, strategyProfiles }
 }
 
 function transaction<TResult = void>(

@@ -54,6 +54,37 @@ describe('observed NPC strategy statistics', () => {
     expect(first.every((sample) => sample.decisionCoverage.totalDecisions > 0)).toBe(true)
     expect(first.every((sample) => sample.teachingMetrics['teaching.fallbackDecision']?.opportunities === sample.decisionCoverage.totalDecisions)).toBe(true)
   })
+
+  it('never pairs a flop c-bet with a turn decision from another match', () => {
+    const flopArchive = archiveDetail('flop-match', [archivedHand('flop-match', 1, [])], [
+      teachingTrace('flop-match', 1, 'flop', 'continuationBet', 'bet'),
+    ])
+    const turnArchive = archiveDetail('turn-match', [archivedHand('turn-match', 1, [])], [
+      teachingTrace('turn-match', 1, 'turn', 'turnBarrel-declined', 'check'),
+    ])
+
+    const evidence = deriveNpcStrategyEvidence([turnArchive, flopArchive])
+      .find((sample) => sample.profileId === 'strategy-balanced-caller-v5')
+
+    expect(evidence?.matchIds).toEqual(['flop-match', 'turn-match'])
+    expect(evidence?.teachingMetrics['teaching.flopCbetTurnGiveUp']).toBeUndefined()
+  })
+
+  it('uses decision sequence to order teaching decisions within a hand', () => {
+    const detail = archiveDetail('ordered-match', [archivedHand('ordered-match', 1, [])], [
+      teachingTrace('ordered-match', 2, 'turn', 'turnBarrel-declined', 'check'),
+      teachingTrace('ordered-match', 1, 'flop', 'continuationBet', 'bet'),
+    ])
+
+    const evidence = deriveNpcStrategyEvidence([detail])
+      .find((sample) => sample.profileId === 'strategy-balanced-caller-v5')
+
+    expect(evidence?.teachingMetrics['teaching.flopCbetTurnGiveUp']).toEqual({
+      value: 1,
+      opportunities: 1,
+      successes: 1,
+    })
+  })
 })
 
 function runSixMaxEvidence(seed: string) {
@@ -62,7 +93,7 @@ function runSixMaxEvidence(seed: string) {
     startingStack: 500,
     smallBlind: 1,
     bigBlind: 2,
-  }))
+  }), { tableIdentity: { matchId: seed, tableId: `${seed}:table` } })
   const publicEvents = new Map<string, HandHistoryEvent>()
   const traces: NpcDecisionTrace[] = []
   record(controller.consumeInitialTransition(), publicEvents, traces)
@@ -89,6 +120,36 @@ function runSixMaxEvidence(seed: string) {
     completedAt: '2026-07-16T00:00:00.000Z',
   }))
   return deriveNpcStrategyEvidence([archiveDetail(seed, hands, traces)])
+}
+
+function teachingTrace(
+  matchId: string,
+  decisionSequence: number,
+  street: 'flop' | 'turn',
+  reasonCode: string,
+  selectedAction: 'bet' | 'check',
+): NpcDecisionTrace {
+  const tableId = `${matchId}:table`
+  return {
+    schemaVersion: 'npc-decision-trace-v1',
+    matchId,
+    tableId,
+    traceId: `${tableId}:npc-decision:${decisionSequence}`,
+    decisionSequence,
+    npcDefinitionId: 'npc-maven',
+    strategyProfileId: 'strategy-balanced-caller-v5',
+    strategyProfileVersion: 5,
+    handNumber: 1,
+    seatId: 'npc-1',
+    street,
+    decisionSource: 'proactive-postflop',
+    consideredActions: ['check', 'bet'],
+    selectedAction,
+    configuredValues: {},
+    calculatedValues: {},
+    reasonCode,
+    teachingTags: [],
+  }
 }
 
 function record(

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   IndexedDbNpcRegistryStore,
   InMemoryNpcRegistryStore,
+  reconcileBuiltInNpcRegistry,
   normalizeNpcDefinition,
   normalizeStrategyProfile,
 } from '../../src/npc/npcRegistry'
 import { createStrategyProfileVersionDraft } from '../../src/npc/strategyEditing'
+import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
 
 describe('NPC registry store', () => {
   it('seeds definitions and strategy profiles from the built-in roster', async () => {
@@ -119,6 +121,53 @@ describe('NPC registry store', () => {
 
     source.teaching.intendedTendencies = [{ id: 'not-a-tendency' as 'overfolds-blinds' }]
     expect(() => normalizeStrategyProfile(source)).toThrow(/unknown npc teaching tendency/i)
+  })
+
+  it('seeds fresh registries with v5 only', () => {
+    const seeded = reconcileBuiltInNpcRegistry({ definitions: [], strategyProfiles: [] })
+
+    expect(seeded.strategyProfiles).toHaveLength(LOCAL_NPC_STRATEGY_PROFILES.length)
+    expect(seeded.strategyProfiles.every((profile) => profile.version === 5 && profile.id.endsWith('-v5'))).toBe(true)
+    expect(seeded.definitions).toEqual(LOCAL_NPC_DEFINITIONS)
+  })
+
+  it('retains stored v4 profiles while migrating built-in assignments to v5', () => {
+    const v5Profile = LOCAL_NPC_STRATEGY_PROFILES[0]
+    const v4Profile = {
+      ...structuredClone(v5Profile),
+      id: v5Profile.id.replace('-v5', '-v4'),
+      version: 4,
+    }
+    const v4Definition = {
+      ...structuredClone(LOCAL_NPC_DEFINITIONS[0]),
+      name: 'Stored Maven name',
+      strategyProfileId: v4Profile.id,
+    }
+
+    const migrated = reconcileBuiltInNpcRegistry({
+      definitions: [v4Definition],
+      strategyProfiles: [v4Profile],
+    })
+
+    expect(migrated.strategyProfiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: v4Profile.id, version: 4 }),
+      expect.objectContaining({ id: v5Profile.id, version: 5 }),
+    ]))
+    expect(migrated.definitions.find((definition) => definition.id === v4Definition.id)).toEqual(expect.objectContaining({
+      name: 'Stored Maven name',
+      strategyProfileId: v5Profile.id,
+    }))
+  })
+
+  it('keeps archived v4 strategy snapshots readable without upgrading them', () => {
+    const archived = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[1])
+    archived.id = archived.id.replace('-v5', '-v4')
+    archived.version = 4
+
+    expect(normalizeStrategyProfile(JSON.parse(JSON.stringify(archived)))).toEqual(expect.objectContaining({
+      id: archived.id,
+      version: 4,
+    }))
   })
 })
 

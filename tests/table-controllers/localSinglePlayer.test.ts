@@ -7,7 +7,9 @@ import {
 
 describe('local single-player controller', () => {
   it('keeps canonical state outside React and advances NPC turns', () => {
-    const controller = new LocalSinglePlayerController({ seed: 'controller' })
+    const controller = new LocalSinglePlayerController({ seed: 'controller' }, {
+      tableIdentity: { matchId: 'controller-test-match', tableId: 'controller-test-table' },
+    })
     const firstSnapshot = controller.getSnapshot()
 
     expect(firstSnapshot.publicView.pendingSeatId).toBe('human')
@@ -23,7 +25,9 @@ describe('local single-player controller', () => {
   })
 
   it('starts six-max solo mode with one human and five independent NPC seats', () => {
-    const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'six-max-controller' }))
+    const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'six-max-controller' }), {
+      tableIdentity: { matchId: 'six-max-controller-match', tableId: 'six-max-controller-table' },
+    })
     const snapshot = controller.getSnapshot()
     const state = controller.getCanonicalStateForTests()
 
@@ -40,6 +44,7 @@ describe('local single-player controller', () => {
   it('creates independent NPC policy runtimes from seat strategy profiles', () => {
     const created: Array<{ seatId: string; npcId: string; strategyProfileId: string; policy: NpcPolicy }> = []
     const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'npc-runtime-config' }), {
+      tableIdentity: { matchId: 'runtime-match', tableId: 'runtime-table' },
       npcPolicyFactory(runtime) {
         const policy: NpcPolicy = {
           chooseDecision(context: NpcDecisionContext) {
@@ -59,6 +64,10 @@ describe('local single-player controller', () => {
               command,
               trace: {
                 schemaVersion: 'npc-decision-trace-v1',
+                matchId: context.attribution.matchId,
+                tableId: context.attribution.tableId,
+                traceId: `${context.attribution.tableId}:npc-decision:${context.attribution.decisionSequence}`,
+                decisionSequence: context.attribution.decisionSequence,
                 npcDefinitionId: runtime.definition.id,
                 strategyProfileId: runtime.strategyProfile.id,
                 strategyProfileVersion: runtime.strategyProfile.version,
@@ -98,6 +107,12 @@ describe('local single-player controller', () => {
     expect(new Set(created.map((entry) => entry.policy)).size).toBe(created.length)
     expect(new Set(created.map((entry) => entry.strategyProfileId)).size).toBeGreaterThan(1)
     expect(created.find((entry) => entry.seatId === 'npc-2')?.npcId).toBe('npc-rook')
-    expect(controller.consumeInitialTransition().npcDecisionTraces.every((trace) => trace.schemaVersion === 'npc-decision-trace-v1')).toBe(true)
+    const traces = controller.consumeInitialTransition().npcDecisionTraces
+    expect(traces.every((trace) => trace.schemaVersion === 'npc-decision-trace-v1')).toBe(true)
+    expect(traces.every((trace) => trace.matchId === 'runtime-match' && trace.tableId === 'runtime-table')).toBe(true)
+    expect(traces.map((trace) => trace.decisionSequence)).toEqual(
+      traces.map((_, index) => index + 1),
+    )
+    expect(new Set(traces.map((trace) => trace.traceId)).size).toBe(traces.length)
   })
 })

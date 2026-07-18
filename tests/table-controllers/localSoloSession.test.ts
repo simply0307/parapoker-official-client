@@ -222,7 +222,7 @@ describe('local solo session integration', () => {
     }))
     const archiveBlueprint = createGameBlueprint({
       mode: 'heads-up',
-      startingStack: 1,
+      startingStack: 4,
       smallBlind: 1,
       bigBlind: 2,
       seed: 'admin-strategy-archive',
@@ -232,13 +232,24 @@ describe('local solo session integration', () => {
     })
     const completedSession = await LocalSoloSession.create({
       ...baseConfig,
-      startingStack: 1,
+      startingStack: 4,
       blueprint: archiveBlueprint,
     }, {
       archiveStore: new InMemoryHandHistoryArchiveStore(),
       npcDefinitions: [definition],
       npcStrategyProfiles: [profile],
     })
+    let safety = 0
+    while (!completedSession.getSnapshot().summary) {
+      safety += 1
+      if (safety > 20) throw new Error('Pinned-strategy archive fixture did not complete.')
+      const snapshot = completedSession.getSnapshot()
+      if (snapshot.canonicalStatus === 'handInProgress' && snapshot.heroView.pendingSeatId === snapshot.heroView.heroSeatId) {
+        await completedSession.submitHumanAction({ type: 'allIn' })
+      } else {
+        await completedSession.startNextHand()
+      }
+    }
     const completed = await completedSession.exportCompletedSessionPackage()
     const archived = await completedSession.getArchivedSession()
 
@@ -258,6 +269,16 @@ describe('local solo session integration', () => {
     ])
     expect(archived?.session.authorityArchive?.integrity.npcDecisionCount)
       .toBe(archived?.session.authorityArchive?.npcDecisionTraces.length)
+    expect(archived?.session.authorityArchive?.npcDecisionTraces.length).toBeGreaterThan(0)
+    expect(archived?.session.authorityArchive?.npcDecisionTraces.every((trace) =>
+      trace.matchId === archived.session.matchId &&
+      trace.tableId === archived.session.tableId &&
+      trace.traceId.length > 0 &&
+      trace.decisionSequence > 0
+    )).toBe(true)
+    expect(archived?.session.authorityArchive?.npcDecisionTraces.map((trace) => trace.decisionSequence)).toEqual(
+      archived?.session.authorityArchive?.npcDecisionTraces.map((_, index) => index + 1),
+    )
     expect(JSON.stringify(completed)).not.toMatch(/npcDecisionTrace|strategySnapshot/i)
   })
 })

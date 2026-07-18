@@ -6,6 +6,7 @@ import {
   type NpcPostflopHandAssessment,
 } from './postflopStrategy'
 import type { NpcRangeState } from './rangeTracking'
+import { isPostflopInPosition } from './postflopPosition'
 
 export interface NpcPostflopDefenseMetrics {
   potBeforeWager: number
@@ -104,7 +105,7 @@ export function choosePostflopDefenseDecision(
   }
   continueProbability -= Math.max(0, metrics.potOdds - equityProxy) * defense.potOddsDiscipline
 
-  if (isInPosition(view)) {
+  if (isPostflopInPosition(view)) {
     continueProbability += defense.positionBonus
   }
   continueProbability -= rangeDisadvantage * defense.rangeDisadvantagePenalty
@@ -196,19 +197,6 @@ function calculateEffectiveStackToPotRatio(view: PrivateSeatView): number {
     .map((seat) => seat.stack)
   const effectiveStack = Math.min(heroStack, Math.max(0, ...opponentStacks))
   return roundProbability(effectiveStack / Math.max(1, view.pot))
-}
-
-function isInPosition(view: PrivateSeatView): boolean {
-  const dealerIndex = view.seats.findIndex((seat) => seat.isDealer)
-  if (dealerIndex < 0) {
-    const position = view.seats.find((seat) => seat.id === view.heroSeatId)?.position
-    return position === 'BTN' || position === 'BTN/SB'
-  }
-  const postflopOrder = [
-    ...view.seats.slice(dealerIndex + 1),
-    ...view.seats.slice(0, dealerIndex + 1),
-  ].filter((seat) => seat.status === 'active' && seat.stack > 0)
-  return postflopOrder.length > 1 && postflopOrder.at(-1)?.id === view.heroSeatId
 }
 
 function continueReason(assessment: NpcPostflopHandAssessment): NpcPostflopDefenseReason {

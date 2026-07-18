@@ -495,6 +495,7 @@ Required coverage:
 - Persist NPC definitions and strategy profiles.
 - Version NPC and strategy records.
 - Keep poker decisions deterministic and non-LLM.
+- Registry migration contract: an existing IndexedDB registry retains its stored v4 profiles, while built-in NPC assignments that still reference the known v4 built-ins move to v5. A fresh registry seeds v5 profiles only. Restricted authority archives keep their pinned historical snapshots, and v4 snapshots remain readable without being rewritten as v5.
 
 ### Milestone 5: Persistent Game Blueprints and LobbyTable Instances
 

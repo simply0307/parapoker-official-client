@@ -14,8 +14,18 @@ export interface NpcDecisionIdentity {
   teachingTags: string[]
 }
 
+export interface NpcDecisionAttribution {
+  matchId: string
+  tableId: string
+  decisionSequence: number
+}
+
 export interface NpcDecisionTrace {
   schemaVersion: 'npc-decision-trace-v1'
+  matchId: string
+  tableId: string
+  traceId: string
+  decisionSequence: number
   npcDefinitionId: string
   strategyProfileId: string
   strategyProfileVersion: number
@@ -34,6 +44,10 @@ export interface NpcDecisionTrace {
   rngRoll?: number
   reasonCode: string
   teachingTags: string[]
+}
+
+export function npcDecisionTraceId(tableId: string, decisionSequence: number): string {
+  return `${tableId}:npc-decision:${decisionSequence}`
 }
 
 export interface NpcDecisionResult {

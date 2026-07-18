@@ -33,6 +33,7 @@ describe('NPC teaching strategy live-path integrity', () => {
       ...(profile.teaching?.intendedTendencies.map((tendency) => tendency.id) ?? []),
     ]
     const controller = new LocalSinglePlayerController({ seed: 'pinned-teaching-profile' }, {
+      tableIdentity: { matchId: 'pinned-profile-match', tableId: 'pinned-profile-table' },
       npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
       npcDefinitions: [definition],
       npcStrategyProfiles: [profile],
@@ -64,6 +65,7 @@ describe('NPC teaching strategy live-path integrity', () => {
       strategyProfileId: profile.id,
     }
     const controller = new LocalSinglePlayerController({ seed: 'teaching-fallback-source' }, {
+      tableIdentity: { matchId: 'fallback-match', tableId: 'fallback-table' },
       npcLineup: [{ seatId: 'npc-1', npcDefinitionId: definition.id }],
       npcDefinitions: [definition],
       npcStrategyProfiles: [profile],
@@ -80,7 +82,7 @@ function runControllerTraces(seed: string) {
   const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({
     seed,
     startingStack: 80,
-  }))
+  }), { tableIdentity: { matchId: seed, tableId: `${seed}:table` } })
   const traces = [...controller.consumeInitialTransition().npcDecisionTraces]
   let safety = 0
 

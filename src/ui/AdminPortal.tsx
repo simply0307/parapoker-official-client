@@ -693,7 +693,7 @@ function NpcDecisionTraceInspection({ traces }: { traces: NpcDecisionTrace[] }) 
           </dl>
           <div className="admin-list decision-trace-list">
             {traces.slice(-20).reverse().map((trace, index) => (
-              <article className="admin-row" key={`${trace.handNumber}:${trace.seatId}:${trace.selectedAction}:${index}`}>
+              <article className="admin-row" key={trace.traceId || `${trace.handNumber}:${trace.seatId}:${trace.selectedAction}:${index}`}>
                 <div><strong>Hand {trace.handNumber} · {trace.seatId}</strong><span>{trace.street} · {trace.decisionSource}</span></div>
                 <div><strong>{trace.selectedAction}{trace.selectedAmount !== undefined ? ` ${trace.selectedAmount}` : ''}</strong><span>{trace.reasonCode}</span></div>
                 <div><span>{trace.situationId ?? 'no situation id'}</span><span>{trace.handClass ?? 'no hand class'}</span></div>

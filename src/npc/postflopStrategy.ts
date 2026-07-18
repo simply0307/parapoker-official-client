@@ -9,6 +9,7 @@ import type {
   NpcPostflopThresholds,
 } from './config'
 import type { NpcRangeState } from './rangeTracking'
+import { isPostflopInPosition } from './postflopPosition'
 
 export interface NpcPostflopHandAssessment {
   madeStrength: number
@@ -345,8 +346,7 @@ function adjustedProbability(
   input: ProactivePostflopDecisionInput,
 ): number {
   const { strategy, rangeState, view } = input
-  const hero = view.seats.find((seat) => seat.id === view.heroSeatId)
-  const inPosition = hero?.position === 'BTN' || hero?.position === 'BTN/SB' || hero?.position === 'CO'
+  const inPosition = isPostflopInPosition(view)
   const activeOpponents = Object.values(rangeState.seats).filter((seat) =>
     seat.seatId !== view.heroSeatId && seat.active).length
   const bluffing = reason === 'continuationBet' || reason === 'delayedContinuationBet' ||

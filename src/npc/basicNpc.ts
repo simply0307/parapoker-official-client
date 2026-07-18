@@ -12,6 +12,8 @@ import { analyzePreflopSpot, choosePreflopRangeDecision } from './preflopRanges'
 import type { NpcRangeState } from './rangeTracking'
 import {
   commandAmount,
+  npcDecisionTraceId,
+  type NpcDecisionAttribution,
   type NpcDecisionIdentity,
   type NpcDecisionResult,
   type NpcDecisionSource,
@@ -39,6 +41,7 @@ export interface NpcDecisionContext {
   preflopStrategy?: NpcPreflopStrategy
   postflopStrategy?: NpcPostflopStrategy
   identity: NpcDecisionIdentity
+  attribution: NpcDecisionAttribution
 }
 
 export interface NpcPolicy {
@@ -83,6 +86,11 @@ export function createNpcDecisionContext(
     strategyProfileVersion: 1,
     teachingTags: [],
   },
+  attribution: NpcDecisionAttribution = {
+    matchId: 'direct-policy-match',
+    tableId: 'direct-policy-table',
+    decisionSequence: 1,
+  },
 ): NpcDecisionContext {
   return {
     view,
@@ -93,6 +101,7 @@ export function createNpcDecisionContext(
     ...(preflopStrategy ? { preflopStrategy } : {}),
     ...(postflopStrategy ? { postflopStrategy } : {}),
     identity: clone(identity),
+    attribution: clone(attribution),
   }
 }
 
@@ -202,6 +211,10 @@ function createTrace(
   const amount = commandAmount(command)
   return {
     schemaVersion: 'npc-decision-trace-v1',
+    matchId: context.attribution.matchId,
+    tableId: context.attribution.tableId,
+    traceId: npcDecisionTraceId(context.attribution.tableId, context.attribution.decisionSequence),
+    decisionSequence: context.attribution.decisionSequence,
     npcDefinitionId: context.identity.npcDefinitionId,
     strategyProfileId: context.identity.strategyProfileId,
     strategyProfileVersion: context.identity.strategyProfileVersion,
