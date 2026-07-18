@@ -7,6 +7,7 @@ import {
 import { completedSessionPackageToParaPokerSiteCsv } from '../../src/exports/paraPokerSiteCsv'
 import { createGameBlueprint } from '../../src/game-config/gameBlueprint'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
+import { InMemoryHandHistoryArchiveStore } from '../../src/persistence'
 
 const baseConfig: LocalSoloSessionConfig = {
   mode: 'heads-up',
@@ -57,8 +58,8 @@ describe('local solo session integration', () => {
         seatId: 'npc-1',
         kind: 'npc',
         npcDefinitionId: 'npc-vega',
-        npcStrategyProfileId: 'strategy-value-hunter-v4',
-        npcStrategyProfileVersion: 4,
+        npcStrategyProfileId: 'strategy-value-hunter-v5',
+        npcStrategyProfileVersion: 5,
       },
     ])
     expect(match?.seatAssignments).toEqual([
@@ -234,14 +235,29 @@ describe('local solo session integration', () => {
       startingStack: 1,
       blueprint: archiveBlueprint,
     }, {
+      archiveStore: new InMemoryHandHistoryArchiveStore(),
       npcDefinitions: [definition],
       npcStrategyProfiles: [profile],
     })
     const completed = await completedSession.exportCompletedSessionPackage()
+    const archived = await completedSession.getArchivedSession()
 
     expect(completed.participants[1]).toEqual(expect.objectContaining({
       npcStrategyProfileId: profile.id,
       npcStrategyProfileVersion: 11,
     }))
+    expect(archived?.session.authorityArchive?.npcStrategySnapshots).toEqual([
+      expect.objectContaining({
+        npcDefinitionId: definition.id,
+        strategyProfile: expect.objectContaining({
+          id: profile.id,
+          version: 11,
+          teaching: expect.objectContaining({ teachingObjective: expect.any(String) }),
+        }),
+      }),
+    ])
+    expect(archived?.session.authorityArchive?.integrity.npcDecisionCount)
+      .toBe(archived?.session.authorityArchive?.npcDecisionTraces.length)
+    expect(JSON.stringify(completed)).not.toMatch(/npcDecisionTrace|strategySnapshot/i)
   })
 })

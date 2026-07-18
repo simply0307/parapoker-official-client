@@ -32,7 +32,7 @@ describe('NPC registry store', () => {
       id: 'npc-maven',
       name: 'Maven Prime',
       archetypeLabel: 'Measured caller',
-      strategyProfileId: 'strategy-balanced-caller-v4',
+      strategyProfileId: 'strategy-balanced-caller-v5',
       status: 'active',
     })
     updated.name = 'Mutated'
@@ -77,7 +77,7 @@ describe('NPC registry store', () => {
       id: 'npc-maven',
       name: 'Maven Persisted',
       archetypeLabel: 'Measured caller',
-      strategyProfileId: 'strategy-balanced-caller-v4',
+      strategyProfileId: 'strategy-balanced-caller-v5',
       status: 'active',
     })
 
@@ -88,17 +88,53 @@ describe('NPC registry store', () => {
 
   it('creates immutable strategy versions without overwriting their source', async () => {
     const store = new InMemoryNpcRegistryStore()
-    const source = (await store.listStrategyProfiles()).find((profile) => profile.id === 'strategy-balanced-caller-v4')
+    const source = (await store.listStrategyProfiles()).find((profile) => profile.id === 'strategy-balanced-caller-v5')
     if (!source) {
       throw new Error('Expected source strategy profile.')
     }
-    const draft = createStrategyProfileVersionDraft(source, { id: 'strategy-registry-custom-v5' })
+    const draft = createStrategyProfileVersionDraft(source, { id: 'strategy-registry-custom-v6' })
 
     const created = await store.createStrategyProfileVersion(source.id, draft)
 
-    expect(created.id).toBe('strategy-registry-custom-v5')
-    expect(created.version).toBe(5)
+    expect(created.id).toBe('strategy-registry-custom-v6')
+    expect(created.version).toBe(6)
     expect((await store.listStrategyProfiles()).find((profile) => profile.id === source.id)).toEqual(source)
     await expect(store.createStrategyProfileVersion(source.id, draft)).rejects.toThrow(/already exists/i)
   })
+
+  it('accepts intentional teaching leaks but rejects malformed teaching metadata', () => {
+    const source = structuredClone(requireBuiltInProfile())
+    source.teaching = {
+      teachingObjective: 'Practice identifying an opponent who overfolds blinds.',
+      conceptTags: ['blind defense', 'blind defense'],
+      intendedTendencies: [{ id: 'overfolds-blinds' }],
+      intentionallyExploitable: true,
+      fallbackWarningThreshold: 0.25,
+    }
+
+    expect(normalizeStrategyProfile(source).teaching).toEqual(expect.objectContaining({
+      conceptTags: ['blind defense'],
+      intentionallyExploitable: true,
+    }))
+
+    source.teaching.intendedTendencies = [{ id: 'not-a-tendency' as 'overfolds-blinds' }]
+    expect(() => normalizeStrategyProfile(source)).toThrow(/unknown npc teaching tendency/i)
+  })
 })
+
+function requireBuiltInProfile() {
+  return normalizeStrategyProfile({
+    id: 'strategy-teaching-fixture-v1',
+    version: 1,
+    name: 'Teaching fixture',
+    status: 'draft',
+    difficulty: 'steady',
+    modules: [],
+    policyConfig: {
+      preflopAggression: 0.5,
+      preflopLooseness: 0.5,
+      postflopAggression: 0.5,
+      pressureRaiseMultiplier: 2.5,
+    },
+  })
+}

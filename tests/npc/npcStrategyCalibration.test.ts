@@ -4,6 +4,14 @@ import {
   DEFAULT_NPC_CALIBRATION_FILTERS,
 } from '../../src/npc/npcStrategyCalibration'
 import { LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
+import { compileSimpleStrategyProfile, type NpcSimpleStrategyIntent } from '../../src/npc/npcSimpleStrategy'
+
+const TEACHING_COMPARISON_FILTERS = {
+  ...DEFAULT_NPC_CALIBRATION_FILTERS,
+  texture: 'dry' as const,
+  tableShape: 'heads-up' as const,
+  betSize: 'medium' as const,
+}
 
 describe('NPC strategy calibration', () => {
   it('produces deterministic bounded reports without canonical poker secrets', () => {
@@ -38,12 +46,12 @@ describe('NPC strategy calibration', () => {
 
   it('makes meaningful profile differences visible in batch behavior', () => {
     const balanced = calibrateNpcStrategy(
-      LOCAL_NPC_STRATEGY_PROFILES.find((profile) => profile.id === 'strategy-balanced-caller-v4')!,
-      DEFAULT_NPC_CALIBRATION_FILTERS,
+      LOCAL_NPC_STRATEGY_PROFILES.find((profile) => profile.id === 'strategy-balanced-caller-v5')!,
+      TEACHING_COMPARISON_FILTERS,
     )
     const pressure = calibrateNpcStrategy(
-      LOCAL_NPC_STRATEGY_PROFILES.find((profile) => profile.id === 'strategy-pressure-raiser-v4')!,
-      DEFAULT_NPC_CALIBRATION_FILTERS,
+      LOCAL_NPC_STRATEGY_PROFILES.find((profile) => profile.id === 'strategy-pressure-raiser-v5')!,
+      TEACHING_COMPARISON_FILTERS,
     )
 
     expect(pressure.preflop.openRaiseRate.value).toBeGreaterThan(balanced.preflop.openRaiseRate.value)
@@ -64,6 +72,72 @@ describe('NPC strategy calibration', () => {
 
     expect(stickyReport.postflopDefense.expectedContinueRate)
       .toBeGreaterThan(cautiousReport.postflopDefense.expectedContinueRate)
+  })
+
+  it('proves the required teaching tendencies across identical deterministic scenario batches', () => {
+    const source = LOCAL_NPC_STRATEGY_PROFILES[0]
+    const report = (intent: Partial<NpcSimpleStrategyIntent>) => calibrateNpcStrategy(
+      compileSimpleStrategyProfile(source, {
+        preflopStyle: 'balanced',
+        pressure: 'balanced',
+        postflopPlan: 'balanced',
+        defense: 'balanced',
+        sizing: 'mixed',
+        context: 'position-aware',
+        ...intent,
+      }),
+      TEACHING_COMPARISON_FILTERS,
+    )
+    const tight = report({ preflopStyle: 'tight' })
+    const loose = report({ preflopStyle: 'loose' })
+    const passive = report({ pressure: 'low' })
+    const pressure = report({ pressure: 'high' })
+    const selective = report({ defense: 'selective' })
+    const sticky = report({ defense: 'sticky' })
+    const drawPressure = report({ postflopPlan: 'draw-pressure' })
+    const valueFirst = report({ postflopPlan: 'value-first' })
+    const potControl = report({ postflopPlan: 'pot-control', sizing: 'small' })
+    const large = report({ sizing: 'large' })
+    const oneAndDoneProfile = compileSimpleStrategyProfile(source, {
+      preflopStyle: 'balanced',
+      pressure: 'balanced',
+      postflopPlan: 'balanced',
+      defense: 'balanced',
+      sizing: 'mixed',
+      context: 'position-aware',
+    })
+    const persistentProfile = structuredClone(oneAndDoneProfile)
+    oneAndDoneProfile.postflopStrategy!.frequencies.turnBarrel = 0.12
+    oneAndDoneProfile.postflopStrategy!.frequencies.riverBarrel = 0.08
+    persistentProfile.postflopStrategy!.frequencies.turnBarrel = 0.72
+    persistentProfile.postflopStrategy!.frequencies.riverBarrel = 0.6
+    const oneAndDone = calibrateNpcStrategy(oneAndDoneProfile, TEACHING_COMPARISON_FILTERS)
+    const persistent = calibrateNpcStrategy(persistentProfile, TEACHING_COMPARISON_FILTERS)
+
+    expect(tight.preflop.vpipRate.value).toBeLessThan(loose.preflop.vpipRate.value)
+    expect(pressure.preflop.openRaiseRate.value).toBeGreaterThan(passive.preflop.openRaiseRate.value)
+    expect(sticky.postflopDefense.expectedContinueRate).toBeGreaterThan(selective.postflopDefense.expectedContinueRate)
+    expect(oneAndDone.postflopProactive.continuationBetRate).toBe(persistent.postflopProactive.continuationBetRate)
+    expect(oneAndDone.postflopProactive.barrelRate).toBeLessThan(persistent.postflopProactive.barrelRate)
+    expect(drawPressure.postflopProactive.semiBluffRate).toBeGreaterThan(valueFirst.postflopProactive.semiBluffRate)
+    expect(potControl.postflopProactive.barrelRate).toBeLessThan(pressure.postflopProactive.barrelRate)
+    expect(potControl.postflopProactive.averagePotFraction).toBeLessThan(large.postflopProactive.averagePotFraction)
+  })
+
+  it('compares the shipped Pressure Raiser, Pot Controller, and Balanced Caller profiles', () => {
+    const byName = (name: string) => calibrateNpcStrategy(
+      LOCAL_NPC_STRATEGY_PROFILES.find((profile) => profile.name === name)!,
+      TEACHING_COMPARISON_FILTERS,
+    )
+    const pressure = byName('Pressure Raiser')
+    const potControl = byName('Pot Controller')
+    const balanced = byName('Balanced Caller')
+
+    expect(pressure.preflop.openRaiseRate.value).toBeGreaterThan(balanced.preflop.openRaiseRate.value)
+    expect(pressure.postflopProactive.betRate).toBeGreaterThan(balanced.postflopProactive.betRate)
+    expect(potControl.postflopProactive.barrelRate).toBeLessThan(balanced.postflopProactive.barrelRate)
+    expect(potControl.postflopProactive.averagePotFraction).toBeLessThan(pressure.postflopProactive.averagePotFraction)
+    expect(balanced.postflopDefense.expectedContinueRate).toBeGreaterThan(pressure.postflopDefense.expectedContinueRate)
   })
 })
 

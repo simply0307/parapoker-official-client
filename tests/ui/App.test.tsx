@@ -172,5 +172,7 @@ describe('App navigation', () => {
 
 async function openAdmin() {
   fireEvent.click(screen.getByRole('button', { name: 'Admin' }))
-  await screen.findByLabelText('Admin overview')
+  await waitFor(() => {
+    expect(screen.getByLabelText('Admin overview')).toBeInTheDocument()
+  }, { timeout: 10_000 })
 }

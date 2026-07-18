@@ -157,8 +157,8 @@ describe('game blueprint store', () => {
     const upgraded = normalizeGameBlueprint(legacy)
 
     expect(upgraded.seats[1]).toEqual(expect.objectContaining({
-      npcStrategyProfileId: 'strategy-balanced-caller-v4',
-      npcStrategyProfileVersion: 4,
+      npcStrategyProfileId: 'strategy-balanced-caller-v5',
+      npcStrategyProfileVersion: 5,
     }))
   })
 

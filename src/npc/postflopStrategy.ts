@@ -40,6 +40,15 @@ export interface NpcProactivePostflopDecision {
   potFraction?: number
 }
 
+export interface NpcProactivePostflopEvaluation {
+  decision?: NpcProactivePostflopDecision
+  reason: NpcProactivePostflopReason
+  probability: number
+  roll?: number
+  rangeAdvantage: number
+  effectiveStackToPotRatio: number
+}
+
 export interface CreatePostflopStrategyInput {
   id: string
   version?: number
@@ -169,6 +178,12 @@ export function resolvePostflopDefenseConfig(strategy: NpcPostflopStrategy): Npc
 export function chooseProactivePostflopDecision(
   input: ProactivePostflopDecisionInput,
 ): NpcProactivePostflopDecision | undefined {
+  return evaluateProactivePostflopDecision(input)?.decision
+}
+
+export function evaluateProactivePostflopDecision(
+  input: ProactivePostflopDecisionInput,
+): NpcProactivePostflopEvaluation | undefined {
   const { view, legalActions, strategy, rangeState, assessment } = input
   if (!view.street || view.street === 'preflop' || view.street === 'showdown') {
     return undefined
@@ -184,10 +199,10 @@ export function chooseProactivePostflopDecision(
 
   if (call && raise) {
     if (assessment.madeStrength >= strategy.thresholds.valueRaiseStrength) {
-      return maybeRaise(input, 'valueRaise', strategy.frequencies.valueRaise, rangeAdvantage, raise)
+      return evaluateRaise(input, 'valueRaise', strategy.frequencies.valueRaise, rangeAdvantage, raise)
     }
     if (assessment.hasStrongDraw && heroRange.lastAction === 'check') {
-      return maybeRaise(input, 'checkRaise', strategy.frequencies.checkRaise, rangeAdvantage, raise)
+      return evaluateRaise(input, 'checkRaise', strategy.frequencies.checkRaise, rangeAdvantage, raise)
     }
     return undefined
   }
@@ -216,7 +231,12 @@ export function chooseProactivePostflopDecision(
   }
 
   if (baseProbability <= 0) {
-    return undefined
+    return {
+      reason,
+      probability: 0,
+      rangeAdvantage,
+      effectiveStackToPotRatio,
+    }
   }
   const probability = adjustedProbability(
     baseProbability,
@@ -224,9 +244,18 @@ export function chooseProactivePostflopDecision(
     rangeAdvantage,
     input,
   )
+  if (probability <= 0) {
+    return { reason, probability, rangeAdvantage, effectiveStackToPotRatio }
+  }
   const roll = input.rng.next()
   if (roll >= probability) {
-    return undefined
+    return {
+      reason,
+      probability,
+      roll,
+      rangeAdvantage,
+      effectiveStackToPotRatio,
+    }
   }
   const potFraction = potFractionFor(
     view.street,
@@ -236,7 +265,7 @@ export function chooseProactivePostflopDecision(
     effectiveStackToPotRatio,
   )
   const amount = clampAmount(Math.round(view.pot * potFraction), bet.min, bet.max)
-  return {
+  const decision: NpcProactivePostflopDecision = {
     command: { type: 'bet', seatId: view.heroSeatId, amount, source: 'npc' },
     reason,
     probability,
@@ -245,6 +274,7 @@ export function chooseProactivePostflopDecision(
     effectiveStackToPotRatio,
     potFraction,
   }
+  return { decision, reason, probability, roll, rangeAdvantage, effectiveStackToPotRatio }
 }
 
 function proactiveLine(
@@ -273,34 +303,39 @@ function proactiveLine(
   return { reason: 'pureBluff', probability: strategy.frequencies.pureBluff }
 }
 
-function maybeRaise(
+function evaluateRaise(
   input: ProactivePostflopDecisionInput,
   reason: 'valueRaise' | 'checkRaise',
   baseProbability: number,
   rangeAdvantage: number,
   raise: Extract<LegalAction, { type: 'raise' }>,
-): NpcProactivePostflopDecision | undefined {
+): NpcProactivePostflopEvaluation {
+  const effectiveStackToPotRatio = calculateEffectiveStackToPotRatio(input.view)
   if (baseProbability <= 0) {
-    return undefined
+    return { reason, probability: 0, rangeAdvantage, effectiveStackToPotRatio }
   }
   const probability = adjustedProbability(baseProbability, reason, rangeAdvantage, input)
+  if (probability <= 0) {
+    return { reason, probability, rangeAdvantage, effectiveStackToPotRatio }
+  }
   const roll = input.rng.next()
   if (roll >= probability) {
-    return undefined
+    return { reason, probability, roll, rangeAdvantage, effectiveStackToPotRatio }
   }
   const amount = clampAmount(
     Math.round(input.view.currentBet * input.strategy.sizing.raiseToMultiplier),
     raise.min,
     raise.max,
   )
-  return {
+  const decision: NpcProactivePostflopDecision = {
     command: { type: 'raise', seatId: input.view.heroSeatId, amount, source: 'npc' },
     reason,
     probability,
     roll,
     rangeAdvantage,
-    effectiveStackToPotRatio: calculateEffectiveStackToPotRatio(input.view),
+    effectiveStackToPotRatio,
   }
+  return { decision, reason, probability, roll, rangeAdvantage, effectiveStackToPotRatio }
 }
 
 function adjustedProbability(

@@ -1,6 +1,8 @@
 import type { CompletedSessionPackage } from '../exports/completedSessionPackage'
 import type { GameBlueprint } from '../game-config/gameBlueprint'
 import type { HandHistoryEvent, SeatId } from '../poker-engine'
+import type { NpcStrategyProfile } from '../npc/config'
+import type { NpcDecisionTrace } from '../npc/npcDecisionTrace'
 import type {
   ArchivedHandRecord,
   ArchivedParticipant,
@@ -58,6 +60,7 @@ export interface ActiveTableJournal {
   commands: AuthorityCommandRecord[]
   events: AuthorityEventRecord[]
   completedHands: ArchivedHandRecord[]
+  npcDecisionTraces: NpcDecisionTrace[]
   lastPersistedTableSequence: number
 }
 
@@ -88,6 +91,11 @@ export interface CompletedTableArchive {
   seatPrivateHands: SeatPrivateHandArchive[]
   commands: AuthorityCommandRecord[]
   events: AuthorityEventRecord[]
+  npcDecisionTraces: NpcDecisionTrace[]
+  npcStrategySnapshots: Array<{
+    npcDefinitionId: string
+    strategyProfile: NpcStrategyProfile
+  }>
   result: CompletedSessionPackage['result']
   closure: {
     reason: TableClosureReason
@@ -102,6 +110,7 @@ export interface CompletedTableArchive {
     commandCount: number
     eventCount: number
     handCount: number
+    npcDecisionCount: number
   }
 }
 
@@ -123,8 +132,18 @@ export function createActiveTableJournal(input: {
     commands: [],
     events: [],
     completedHands: [],
+    npcDecisionTraces: [],
     lastPersistedTableSequence: 0,
   }
+}
+
+export function appendNpcDecisionTraces(
+  journal: ActiveTableJournal,
+  traces: readonly NpcDecisionTrace[],
+): ActiveTableJournal {
+  const next = clone(journal)
+  next.npcDecisionTraces.push(...clone(traces))
+  return next
 }
 
 export function appendAuthorityEvents(journal: ActiveTableJournal, records: EventRecord[]): ActiveTableJournal {
@@ -180,6 +199,7 @@ export function finalizeCompletedTableArchive(input: {
   privateHands?: SeatPrivateHandArchive[]
   publicPackage: CompletedSessionPackage
   blueprint?: Pick<GameBlueprint, 'id' | 'name' | 'mode' | 'visibility'>
+  npcStrategySnapshots?: Array<{ npcDefinitionId: string; strategyProfile: NpcStrategyProfile }>
   reason?: TableClosureReason
   closedAt?: string
 }): CompletedTableArchive {
@@ -208,6 +228,8 @@ export function finalizeCompletedTableArchive(input: {
     seatPrivateHands: clone(input.privateHands ?? []),
     commands: clone(input.journal.commands),
     events: clone(input.journal.events),
+    npcDecisionTraces: clone(input.journal.npcDecisionTraces),
+    npcStrategySnapshots: clone(input.npcStrategySnapshots ?? []),
     result: clone(input.publicPackage.result),
     closure: {
       reason: input.reason ?? 'match-complete',
@@ -225,6 +247,7 @@ export function finalizeCompletedTableArchive(input: {
       commandCount: input.journal.commands.length,
       eventCount: input.journal.events.length,
       handCount: input.journal.completedHands.length,
+      npcDecisionCount: input.journal.npcDecisionTraces.length,
     },
   }
 }
@@ -240,6 +263,7 @@ export function buildAuthorityJournalFromRecords(input: {
   events: EventRecord[]
   commands?: CommandRecord[]
   completedHands?: ArchivedHandRecord[]
+  npcDecisionTraces?: NpcDecisionTrace[]
   createdAt?: string
 }): ActiveTableJournal {
   let journal = createActiveTableJournal({
@@ -250,6 +274,7 @@ export function buildAuthorityJournalFromRecords(input: {
   })
   journal = appendAuthorityEvents(journal, input.events)
   journal = appendAuthorityCommands(journal, input.commands ?? [])
+  journal = appendNpcDecisionTraces(journal, input.npcDecisionTraces ?? [])
   for (const hand of input.completedHands ?? []) {
     journal = recordCompletedAuthorityHand(journal, hand)
   }

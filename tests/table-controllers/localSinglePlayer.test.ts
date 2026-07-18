@@ -42,7 +42,7 @@ describe('local single-player controller', () => {
     const controller = new LocalSinglePlayerController(createSixMaxSoloConfig({ seed: 'npc-runtime-config' }), {
       npcPolicyFactory(runtime) {
         const policy: NpcPolicy = {
-          chooseAction(context: NpcDecisionContext) {
+          chooseDecision(context: NpcDecisionContext) {
             expect(context.config).toEqual(runtime.strategyProfile.policyConfig)
             expect(context.preflopStrategy).toEqual(runtime.strategyProfile.preflopStrategy)
             expect(context.postflopStrategy).toEqual(runtime.strategyProfile.postflopStrategy)
@@ -54,7 +54,26 @@ describe('local single-player controller', () => {
             expect(Object.values(context.memory.rangeState?.seats ?? {})
               .filter((seat) => seat.seatId !== runtime.seatId)
               .every((seat) => seat.knownHandClass === undefined)).toBe(true)
-            return { type: 'fold', seatId: context.view.heroSeatId, source: 'npc' }
+            const command = { type: 'fold' as const, seatId: context.view.heroSeatId, source: 'npc' as const }
+            return {
+              command,
+              trace: {
+                schemaVersion: 'npc-decision-trace-v1',
+                npcDefinitionId: runtime.definition.id,
+                strategyProfileId: runtime.strategyProfile.id,
+                strategyProfileVersion: runtime.strategyProfile.version,
+                handNumber: context.view.handNumber,
+                seatId: context.view.heroSeatId,
+                street: context.view.street ?? 'preflop',
+                decisionSource: 'safety-fallback',
+                consideredActions: context.legalActions.map((action) => action.type),
+                selectedAction: command.type,
+                configuredValues: {},
+                calculatedValues: {},
+                reasonCode: 'test-policy-fold',
+                teachingTags: [],
+              },
+            }
           },
         }
         created.push({
@@ -79,5 +98,6 @@ describe('local single-player controller', () => {
     expect(new Set(created.map((entry) => entry.policy)).size).toBe(created.length)
     expect(new Set(created.map((entry) => entry.strategyProfileId)).size).toBeGreaterThan(1)
     expect(created.find((entry) => entry.seatId === 'npc-2')?.npcId).toBe('npc-rook')
+    expect(controller.consumeInitialTransition().npcDecisionTraces.every((trace) => trace.schemaVersion === 'npc-decision-trace-v1')).toBe(true)
   })
 })

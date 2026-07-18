@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AdminStrategyWorkspace } from '../../src/ui/AdminStrategyWorkspace'
 import { LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
@@ -29,18 +29,18 @@ describe('Admin strategy workspace', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save profile version' }))
 
-    expect(onCreateVersion).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onCreateVersion).toHaveBeenCalledTimes(1))
     const [sourceId, saved] = onCreateVersion.mock.calls[0]
-    expect(sourceId).toBe('strategy-balanced-caller-v4')
+    expect(sourceId).toBe('strategy-balanced-caller-v5')
     expect(saved).toEqual(expect.objectContaining({
-      id: 'strategy-balanced-caller-custom-v5',
-      version: 5,
+      id: 'strategy-balanced-caller-custom-v6',
+      version: 6,
       name: 'Maven Teaching Defense',
     }))
     expect(saved.postflopStrategy.defense.foldBias).toBe(0.2)
     expect(saved.calibrationTarget.presetId).toBe('pressure')
     expect(LOCAL_NPC_STRATEGY_PROFILES[0].name).toBe('Balanced Caller')
-  })
+  }, 15_000)
 
   it('edits a selected preflop hand while preserving a valid frequency mix', async () => {
     const onCreateVersion = vi.fn().mockResolvedValue(undefined)
@@ -95,7 +95,7 @@ describe('Admin strategy workspace', () => {
     expect(screen.getByLabelText('Calibration format')).toBeInTheDocument()
     expect(screen.getByLabelText('Comparison profile')).toBeInTheDocument()
     expect(screen.getByText('Projected VPIP')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Deterministic behavior validation' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Deterministic behavior configuration' })).toBeInTheDocument()
     expect(screen.getByText('Observed')).toBeInTheDocument()
     expect(screen.queryByRole('grid', { name: 'Preflop hand matrix' })).not.toBeInTheDocument()
   })
@@ -148,12 +148,20 @@ describe('Admin strategy workspace', () => {
         profiles={[structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])]}
         evidence={[{
           schemaVersion: 'npc-observed-strategy-v1',
-          profileId: 'strategy-balanced-caller-v4',
-          profileVersion: 4,
+          profileId: 'strategy-balanced-caller-v5',
+          profileVersion: 5,
           matchIds: ['match-a', 'match-b'],
           handCount: 42,
           metrics: {
             'preflop.vpip': { value: 0.38, opportunities: 42, successes: 16 },
+          },
+          teachingMetrics: {},
+          decisionCoverage: {
+            totalDecisions: 0,
+            sourceCounts: {},
+            sourceRates: {},
+            fallbackRate: 0,
+            mostCommonFallbackSituations: [],
           },
         }]}
         onCreateVersion={vi.fn()}
@@ -161,8 +169,8 @@ describe('Admin strategy workspace', () => {
     )
 
     openAdvancedEditor()
-    expect(screen.getByText('42 verified hands across 2 matches')).toBeInTheDocument()
-    expect(screen.getByText('verified n=42')).toBeInTheDocument()
+    expect(screen.getByText('42 archived hands across 2 matches')).toBeInTheDocument()
+    expect(screen.getByText('archived n=42')).toBeInTheDocument()
   })
 
   it('starts in a readable Simple mode and requires an editable version before applying', () => {

@@ -8,7 +8,10 @@ import type {
   NpcStrategyCalibrationMetricId,
   NpcStrategyProfile,
   NpcStrategyTargetPresetId,
+  NpcTeachingProfile,
+  NpcTeachingTendencyId,
 } from '../npc/config'
+import { NPC_TEACHING_TENDENCY_IDS } from '../npc/config'
 import {
   simulatePostflopDefenseScenario,
   type NpcPostflopDefenseScenario,
@@ -132,6 +135,7 @@ export function AdminStrategyWorkspace({
           profile={workingProfile}
           editable={Boolean(draft)}
           onApply={applySimpleIntent}
+          evidence={workingEvidence}
         />
       )}
 
@@ -174,6 +178,7 @@ export function AdminStrategyWorkspace({
           {activeStage === 'Profile' && (
             <>
               <StrategyCalibrationSummary profile={workingProfile} evidence={workingEvidence} onOpenCalibration={() => setActiveStage('Calibration')} />
+              <TeachingIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
               <ProfileIdentityEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
               <ModuleEditor profile={workingProfile} draft={draft} setDraft={setDraft} />
             </>
@@ -255,42 +260,124 @@ function ProfileIdentityEditor({
 }
 
 function ModuleEditor({ profile, draft, setDraft }: EditorProps) {
+  void draft
+  void setDraft
   return (
     <section className="strategy-editor-band" aria-label="Strategy modules">
       <div className="section-heading">
-        <h3>Safe Modules</h3>
-        <span>{profile.modules.filter((module) => module.enabled).length} enabled</span>
+        <h3>Descriptive Coverage Tags</h3>
+        <span>read-only metadata</span>
       </div>
+      <p className="muted">These labels describe intended coverage. Runtime behavior is controlled by the executable preflop and postflop fields below.</p>
       <div className="module-control-grid">
         {profile.modules.map((module, index) => (
           <div className="module-control" key={`${module.id}-${index}`}>
-            <label className="toggle-field">
-              <input
-                type="checkbox"
-                checked={module.enabled}
-                disabled={!draft}
-                onChange={(event) => updateDraft(setDraft, (next) => {
-                  next.modules[index].enabled = event.target.checked
-                })}
-              />
-              <span>{humanize(module.id)}</span>
-            </label>
-            <NumericControl
-              label="Weight"
-              value={module.weight}
-              min={0}
-              max={1}
-              step={0.01}
-              disabled={!draft}
-              onChange={(value) => updateDraft(setDraft, (next) => {
-                next.modules[index].weight = value
-              })}
-            />
+            <strong>{humanize(module.id)}</strong>
+            <span>{module.enabled ? 'described coverage' : 'not claimed'}</span>
           </div>
         ))}
       </div>
     </section>
   )
+}
+
+function TeachingIdentityEditor({ profile, draft, setDraft }: EditorProps) {
+  const teaching = profile.teaching ?? defaultTeachingProfile()
+  return (
+    <section className="strategy-editor-band teaching-identity-editor" aria-label="Teaching identity editor">
+      <div className="section-heading">
+        <h3>Teaching Identity</h3>
+        <span>{teaching.intentionallyExploitable ? 'intentional weakness' : 'no declared leak'}</span>
+      </div>
+      <label>
+        <span>Teaching objective</span>
+        <textarea
+          aria-label="Teaching objective"
+          value={teaching.teachingObjective}
+          disabled={!draft}
+          onChange={(event) => updateTeaching(setDraft, (next) => { next.teachingObjective = event.target.value })}
+        />
+      </label>
+      <div className="strategy-field-grid">
+        <label>
+          <span>Concept tags (comma separated)</span>
+          <input
+            aria-label="Teaching concept tags"
+            value={teaching.conceptTags.join(', ')}
+            disabled={!draft}
+            onChange={(event) => updateTeaching(setDraft, (next) => {
+              next.conceptTags = event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean)
+            })}
+          />
+        </label>
+        <label>
+          <span>Player lesson</span>
+          <input
+            aria-label="Teaching player lesson"
+            value={teaching.playerLesson ?? ''}
+            disabled={!draft}
+            onChange={(event) => updateTeaching(setDraft, (next) => { next.playerLesson = event.target.value })}
+          />
+        </label>
+        <NumericControl
+          label="Fallback warning threshold"
+          value={teaching.fallbackWarningThreshold ?? 0.25}
+          min={0}
+          max={1}
+          step={0.01}
+          disabled={!draft}
+          onChange={(value) => updateTeaching(setDraft, (next) => { next.fallbackWarningThreshold = value })}
+        />
+        <label className="toggle-field">
+          <input
+            type="checkbox"
+            checked={teaching.intentionallyExploitable}
+            disabled={!draft}
+            onChange={(event) => updateTeaching(setDraft, (next) => { next.intentionallyExploitable = event.target.checked })}
+          />
+          <span>Intentionally exploitable</span>
+        </label>
+      </div>
+      <fieldset className="teaching-tendency-grid" disabled={!draft}>
+        <legend>Intended tendencies</legend>
+        {NPC_TEACHING_TENDENCY_IDS.map((id) => (
+          <label className="toggle-field" key={id}>
+            <input
+              type="checkbox"
+              checked={teaching.intendedTendencies.some((tendency) => tendency.id === id)}
+              onChange={(event) => updateTeaching(setDraft, (next) => {
+                next.intendedTendencies = event.target.checked
+                  ? [...next.intendedTendencies.filter((tendency) => tendency.id !== id), { id }]
+                  : next.intendedTendencies.filter((tendency) => tendency.id !== id)
+              })}
+            />
+            <span>{humanize(id)}</span>
+          </label>
+        ))}
+      </fieldset>
+    </section>
+  )
+}
+
+function updateTeaching(
+  setDraft: EditorProps['setDraft'],
+  mutate: (teaching: NpcTeachingProfile) => void,
+) {
+  updateDraft(setDraft, (next) => {
+    const teaching = structuredClone(next.teaching ?? defaultTeachingProfile())
+    mutate(teaching)
+    next.teaching = teaching
+  })
+}
+
+function defaultTeachingProfile(): NpcTeachingProfile {
+  return {
+    teachingObjective: 'Configure a recognizable teaching tendency.',
+    conceptTags: [],
+    intendedTendencies: [] as Array<{ id: NpcTeachingTendencyId }>,
+    intentionallyExploitable: false,
+    fallbackWarningThreshold: 0.25,
+  }
 }
 
 function PreflopEditor({ profile, draft, setDraft }: EditorProps) {

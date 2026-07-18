@@ -18,18 +18,19 @@ import {
   LocalSinglePlayerController,
   type LocalSinglePlayerTransition,
 } from '../../src/table-controllers/local-single-player/LocalSinglePlayerController'
+import type { NpcDecisionTrace } from '../../src/npc/npcDecisionTrace'
 
 describe('observed NPC strategy statistics', () => {
   it('derives version-pinned public behavior metrics from completed archives', () => {
     const detail = archiveDetail('observed-match', syntheticHands())
     const first = deriveNpcStrategyEvidence([detail])
     const second = deriveNpcStrategyEvidence([structuredClone(detail)])
-    const evidence = first.find((sample) => sample.profileId === 'strategy-balanced-caller-v4')
+    const evidence = first.find((sample) => sample.profileId === 'strategy-balanced-caller-v5')
 
     expect(first).toEqual(second)
     expect(evidence).toEqual(expect.objectContaining({
       schemaVersion: 'npc-observed-strategy-v1',
-      profileVersion: 4,
+      profileVersion: 5,
       handCount: 2,
       matchIds: ['observed-match'],
     }))
@@ -50,6 +51,8 @@ describe('observed NPC strategy statistics', () => {
     expect(first.every((sample) => sample.handCount >= 8)).toBe(true)
     expect(first.every((sample) => (sample.metrics['preflop.vpip']?.opportunities ?? 0) >= 8)).toBe(true)
     expect(first.some((sample) => (sample.metrics['proactive.continuationBet']?.opportunities ?? 0) > 0)).toBe(true)
+    expect(first.every((sample) => sample.decisionCoverage.totalDecisions > 0)).toBe(true)
+    expect(first.every((sample) => sample.teachingMetrics['teaching.fallbackDecision']?.opportunities === sample.decisionCoverage.totalDecisions)).toBe(true)
   })
 })
 
@@ -61,7 +64,8 @@ function runSixMaxEvidence(seed: string) {
     bigBlind: 2,
   }))
   const publicEvents = new Map<string, HandHistoryEvent>()
-  record(controller.consumeInitialTransition(), publicEvents)
+  const traces: NpcDecisionTrace[] = []
+  record(controller.consumeInitialTransition(), publicEvents, traces)
   let safety = 0
 
   while (completedHandCount(publicEvents) < 12 && controller.getSnapshot().canonicalStatus !== 'complete') {
@@ -69,9 +73,9 @@ function runSixMaxEvidence(seed: string) {
     if (safety > 500) throw new Error('Six-max observed behavior simulation exceeded safety limit.')
     const snapshot = controller.getSnapshot()
     if (snapshot.canonicalStatus === 'handInProgress' && snapshot.heroView.pendingSeatId === snapshot.heroView.heroSeatId) {
-      record(controller.submitHumanAction(humanCommand(snapshot.heroView.legalActions.map((action) => action.type))), publicEvents)
+      record(controller.submitHumanAction(humanCommand(snapshot.heroView.legalActions.map((action) => action.type))), publicEvents, traces)
     } else if (snapshot.canonicalStatus !== 'complete') {
-      record(controller.startNextHand(), publicEvents)
+      record(controller.startNextHand(), publicEvents, traces)
     }
   }
 
@@ -84,13 +88,18 @@ function runSixMaxEvidence(seed: string) {
     publicEvents: events,
     completedAt: '2026-07-16T00:00:00.000Z',
   }))
-  return deriveNpcStrategyEvidence([archiveDetail(seed, hands)])
+  return deriveNpcStrategyEvidence([archiveDetail(seed, hands, traces)])
 }
 
-function record(transition: LocalSinglePlayerTransition, events: Map<string, HandHistoryEvent>): void {
+function record(
+  transition: LocalSinglePlayerTransition,
+  events: Map<string, HandHistoryEvent>,
+  traces: NpcDecisionTrace[],
+): void {
   for (const event of transition.events) {
     if (event.visibility === 'public') events.set(event.eventId, event)
   }
+  traces.push(...transition.npcDecisionTraces)
 }
 
 function completedHandCount(events: Map<string, HandHistoryEvent>): number {
@@ -164,11 +173,15 @@ function archivedHand(matchId: string, handNumber: number, orderedPublicEvents: 
   }
 }
 
-function archiveDetail(matchId: string, hands: ReturnType<typeof archivedHand>[]): ArchivedSessionDetail {
+function archiveDetail(
+  matchId: string,
+  hands: ReturnType<typeof archivedHand>[],
+  traces: NpcDecisionTrace[] = [],
+): ArchivedSessionDetail {
   const participants: ArchivedParticipant[] = hands[0]?.participantSeatIds.length === 2
     ? [
-        { seatId: 'npc-1', displayName: 'Maven', kind: 'npc', npcDefinitionId: 'npc-maven', npcStrategyProfileId: 'strategy-balanced-caller-v4', npcStrategyProfileVersion: 4 },
-        { seatId: 'npc-2', displayName: 'Rook', kind: 'npc', npcDefinitionId: 'npc-rook', npcStrategyProfileId: 'strategy-pressure-raiser-v4', npcStrategyProfileVersion: 4 },
+        { seatId: 'npc-1', displayName: 'Maven', kind: 'npc', npcDefinitionId: 'npc-maven', npcStrategyProfileId: 'strategy-balanced-caller-v5', npcStrategyProfileVersion: 5 },
+        { seatId: 'npc-2', displayName: 'Rook', kind: 'npc', npcDefinitionId: 'npc-rook', npcStrategyProfileId: 'strategy-pressure-raiser-v5', npcStrategyProfileVersion: 5 },
       ]
     : sixMaxParticipants()
   return {
@@ -189,6 +202,7 @@ function archiveDetail(matchId: string, hands: ReturnType<typeof archivedHand>[]
       participants,
       handCount: hands.length,
       startedAt: '2026-07-16T00:00:00.000Z',
+      authorityArchive: { npcDecisionTraces: structuredClone(traces) } as never,
     },
     hands,
     privateHands: [],

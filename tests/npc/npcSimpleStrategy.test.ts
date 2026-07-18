@@ -7,6 +7,7 @@ import {
   type NpcSimpleStrategyIntent,
 } from '../../src/npc/npcSimpleStrategy'
 import { LOCAL_NPC_STRATEGY_PROFILES } from '../../src/npc/roster'
+import { NPC_STRATEGY_CONTROL_MAPPINGS } from '../../src/npc/npcStrategyControls'
 
 const aggressiveDrawIntent: NpcSimpleStrategyIntent = {
   preflopStyle: 'loose',
@@ -76,6 +77,22 @@ describe('simple NPC strategy compilation', () => {
     expect(preview.metrics).toHaveLength(6)
     expect(preview.metrics.find((metric) => metric.label === 'VPIP')?.after).toBeGreaterThan(0)
     expect(preview.changedModules).toContain('draw selection')
+    expect(preview.controlChanges.map((change) => change.control)).toEqual([
+      'Preflop ranges',
+      'Pressure',
+      'Postflop plan',
+      'Bet sizing',
+      'Context awareness',
+    ])
+    expect(preview.controlChanges.every((change) => change.runtimeChanges.length > 0)).toBe(true)
     expect(preview.warnings).toEqual(expect.any(Array))
+  })
+
+  it('classifies every visible strategy control and leaves no behavioral module weight editable', () => {
+    expect(NPC_STRATEGY_CONTROL_MAPPINGS.some((mapping) => mapping.effect === 'unused')).toBe(false)
+    expect(NPC_STRATEGY_CONTROL_MAPPINGS.find((mapping) => mapping.controlId === 'modules[*].weight'))
+      .toEqual(expect.objectContaining({ effect: 'metadata', runtimeTargets: ['none; read-only compatibility metadata'] }))
+    expect(NPC_STRATEGY_CONTROL_MAPPINGS.filter((mapping) => mapping.controlId.startsWith('simple.'))
+      .every((mapping) => mapping.effect === 'compiled' && mapping.runtimeTargets.length > 0)).toBe(true)
   })
 })

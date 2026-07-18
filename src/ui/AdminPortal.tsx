@@ -27,6 +27,7 @@ import {
 } from '../persistence'
 import { completedSessionPackageToParaPokerSiteCsv } from '../exports/paraPokerSiteCsv'
 import { AdminStrategyWorkspace } from './AdminStrategyWorkspace'
+import type { NpcDecisionTrace } from '../npc/npcDecisionTrace'
 
 interface AdminGameDraft {
   mode: GameBlueprintMode
@@ -95,6 +96,10 @@ export function AdminPortal() {
   const filteredLobbyTables = useMemo(
     () => lobbyTables.filter((table) => matchesLobbyTableFilter(table, lobbyTableFilter)),
     [lobbyTableFilter, lobbyTables],
+  )
+  const currentStrategyProfiles = useMemo(
+    () => latestStrategyProfiles(strategyProfiles),
+    [strategyProfiles],
   )
 
   const refreshArchives = useCallback(async () => {
@@ -339,18 +344,21 @@ export function AdminPortal() {
               </button>
             </div>
             {selectedArchive.session.authorityArchive && (
-              <div className="strategy-card">
-                <div>
-                  <strong>Authority Archive</strong>
-                  <span>{selectedArchive.session.authorityArchive.integrity.checksum}</span>
+              <>
+                <div className="strategy-card">
+                  <div>
+                    <strong>Authority Archive</strong>
+                    <span>{selectedArchive.session.authorityArchive.integrity.checksum}</span>
+                  </div>
+                  <p>
+                    {selectedArchive.session.authorityArchive.authorityClass} - {selectedArchive.session.authorityArchive.closure.reason} - {selectedArchive.session.authorityArchive.integrity.eventCount} events
+                  </p>
+                  <p>
+                    Commands {selectedArchive.session.authorityArchive.integrity.commandCount} - Hands {selectedArchive.session.authorityArchive.integrity.handCount} - NPC decisions {selectedArchive.session.authorityArchive.integrity.npcDecisionCount ?? 0}
+                  </p>
                 </div>
-                <p>
-                  {selectedArchive.session.authorityArchive.authorityClass} - {selectedArchive.session.authorityArchive.closure.reason} - {selectedArchive.session.authorityArchive.integrity.eventCount} events
-                </p>
-                <p>
-                  Commands {selectedArchive.session.authorityArchive.integrity.commandCount} - Hands {selectedArchive.session.authorityArchive.integrity.handCount} - Closed {selectedArchive.session.authorityArchive.closure.closedAt}
-                </p>
-              </div>
+                <NpcDecisionTraceInspection traces={selectedArchive.session.authorityArchive.npcDecisionTraces ?? []} />
+              </>
             )}
             <div className="admin-list">
               {selectedArchive.hands.map((hand) => (
@@ -420,7 +428,7 @@ export function AdminPortal() {
         <div className="section-heading">
           <h2>Strategies</h2>
           <div className="section-heading-actions">
-            <span>{strategyProfiles.length} profiles</span>
+            <span>{currentStrategyProfiles.length} current / {strategyProfiles.length} versions</span>
             <button
               type="button"
               aria-expanded={showStrategyWorkspace}
@@ -431,7 +439,7 @@ export function AdminPortal() {
           </div>
         </div>
         <div className="strategy-grid">
-          {strategyProfiles.map((profile) => (
+          {currentStrategyProfiles.map((profile) => (
             <article className="strategy-card" key={profile.id}>
               <div>
                 <strong>
@@ -446,6 +454,7 @@ export function AdminPortal() {
                 <Metric label="Pressure" value={profile.policyConfig.pressureRaiseMultiplier.toFixed(1)} />
               </dl>
               <p>{profile.modules.filter((module) => module.enabled).map((module) => module.id).join(', ')}</p>
+              <p>{profile.teaching?.teachingObjective ?? 'No teaching objective configured.'}</p>
             </article>
           ))}
         </div>
@@ -648,6 +657,52 @@ function Metric({ label, value }: { label: string; value: string }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
+  )
+}
+
+function latestStrategyProfiles(profiles: readonly NpcStrategyProfile[]): NpcStrategyProfile[] {
+  const latest = new Map<string, NpcStrategyProfile>()
+  for (const profile of profiles) {
+    const current = latest.get(profile.name)
+    if (!current || profile.version > current.version) {
+      latest.set(profile.name, profile)
+    }
+  }
+  return [...latest.values()].sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function NpcDecisionTraceInspection({ traces }: { traces: NpcDecisionTrace[] }) {
+  const sourceCounts = Object.fromEntries(
+    ['preflop-range', 'proactive-postflop', 'postflop-defense', 'legacy-fallback', 'safety-fallback']
+      .map((source) => [source, traces.filter((trace) => trace.decisionSource === source).length]),
+  )
+  const fallbackCount = sourceCounts['legacy-fallback'] + sourceCounts['safety-fallback']
+  return (
+    <section className="decision-trace-inspection" aria-label="NPC decision trace inspection">
+      <div className="section-heading">
+        <h3>NPC Decision Evidence</h3>
+        <span>{traces.length} private traces</span>
+      </div>
+      {traces.length === 0 ? <p className="muted">No archived decision traces for this session.</p> : (
+        <>
+          <dl className="result-grid">
+            <Metric label="Preflop range" value={String(sourceCounts['preflop-range'])} />
+            <Metric label="Proactive" value={String(sourceCounts['proactive-postflop'])} />
+            <Metric label="Defense" value={String(sourceCounts['postflop-defense'])} />
+            <Metric label="Fallback" value={`${fallbackCount} (${(fallbackCount / traces.length * 100).toFixed(1)}%)`} />
+          </dl>
+          <div className="admin-list decision-trace-list">
+            {traces.slice(-20).reverse().map((trace, index) => (
+              <article className="admin-row" key={`${trace.handNumber}:${trace.seatId}:${trace.selectedAction}:${index}`}>
+                <div><strong>Hand {trace.handNumber} · {trace.seatId}</strong><span>{trace.street} · {trace.decisionSource}</span></div>
+                <div><strong>{trace.selectedAction}{trace.selectedAmount !== undefined ? ` ${trace.selectedAmount}` : ''}</strong><span>{trace.reasonCode}</span></div>
+                <div><span>{trace.situationId ?? 'no situation id'}</span><span>{trace.handClass ?? 'no hand class'}</span></div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 

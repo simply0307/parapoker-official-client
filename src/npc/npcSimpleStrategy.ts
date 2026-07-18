@@ -30,6 +30,13 @@ export interface NpcSimpleStrategyPreview {
   metrics: Array<{ label: string; before: number; after: number }>
   changedModules: string[]
   warnings: string[]
+  controlChanges: Array<{
+    control: string
+    before: string
+    after: string
+    runtimeChanges: string[]
+    projectedEffect: string
+  }>
 }
 
 export const DEFAULT_SIMPLE_STRATEGY_INTENT: NpcSimpleStrategyIntent = {
@@ -119,6 +126,7 @@ export function compileSimpleStrategyProfile(
 
   return {
     ...clone(source),
+    teaching: compileTeachingProfile(source, intent),
     calibrationTarget: createNpcStrategyCalibrationTarget(target),
     modules: compileModules(source.modules, intent),
     policyConfig: {
@@ -162,6 +170,28 @@ export function compileSimpleStrategyProfile(
   }
 }
 
+function compileTeachingProfile(
+  source: NpcStrategyProfile,
+  intent: NpcSimpleStrategyIntent,
+): NonNullable<NpcStrategyProfile['teaching']> {
+  const tendencies: NonNullable<NpcStrategyProfile['teaching']>['intendedTendencies'] = []
+  if (intent.preflopStyle === 'loose' || intent.defense === 'sticky') tendencies.push({ id: 'calls-too-wide' })
+  if (intent.pressure === 'high') tendencies.push({ id: 'raises-too-often' })
+  if (intent.postflopPlan === 'draw-pressure') tendencies.push({ id: 'chases-draws' })
+  if (intent.postflopPlan === 'pot-control') tendencies.push({ id: 'barrels-too-rarely' }, { id: 'avoids-thin-value' })
+  if (intent.postflopPlan === 'value-first') tendencies.push({ id: 'underbluffs-river' })
+  if (intent.sizing === 'small') tendencies.push({ id: 'uses-small-sizing' })
+  if (intent.sizing === 'large') tendencies.push({ id: 'uses-large-sizing' })
+  return {
+    teachingObjective: describeSimpleStrategyIntent(intent),
+    conceptTags: [intent.preflopStyle, intent.pressure, intent.postflopPlan, intent.defense, intent.sizing, intent.context],
+    intendedTendencies: tendencies,
+    intentionallyExploitable: tendencies.length > 0,
+    playerLesson: source.teaching?.playerLesson ?? 'Identify the configured tendency and choose a disciplined counter-strategy.',
+    fallbackWarningThreshold: source.teaching?.fallbackWarningThreshold ?? 0.25,
+  }
+}
+
 export function previewSimpleStrategyChange(
   source: NpcStrategyProfile,
   intent: NpcSimpleStrategyIntent,
@@ -171,6 +201,7 @@ export function previewSimpleStrategyChange(
   const compiledReport = validateNpcStrategyBehavior(compiled)
   const before = sourceReport.calibration
   const after = compiledReport.calibration
+  const priorIntent = inferSimpleStrategyIntent(source)
   return {
     sentence: describeSimpleStrategyIntent(intent),
     targetName: label(targetFor(intent)),
@@ -186,7 +217,36 @@ export function previewSimpleStrategyChange(
     warnings: compiledReport.issues
       .filter((issue) => issue.severity === 'error' || issue.severity === 'warning')
       .map((issue) => issue.message),
+    controlChanges: simpleControlChanges(priorIntent, intent),
   }
+}
+
+function simpleControlChanges(
+  before: NpcSimpleStrategyIntent,
+  after: NpcSimpleStrategyIntent,
+): NpcSimpleStrategyPreview['controlChanges'] {
+  const definitions: Array<{
+    key: keyof NpcSimpleStrategyIntent
+    control: string
+    runtimeChanges: string[]
+    projectedEffect: string
+  }> = [
+    { key: 'preflopStyle', control: 'Preflop ranges', runtimeChanges: ['preflopStrategy.nodes[*].hands', 'policyConfig.preflopLooseness'], projectedEffect: 'Changes how many starting-hand combinations continue or raise.' },
+    { key: 'pressure', control: 'Pressure', runtimeChanges: ['preflop range raise frequencies', 'preflopAggression', 'postflopAggression', 'pressureRaiseMultiplier'], projectedEffect: 'Changes first-in raising, fallback aggression, and raise size.' },
+    { key: 'postflopPlan', control: 'Postflop plan', runtimeChanges: ['postflopStrategy.frequencies', 'postflopStrategy.thresholds'], projectedEffect: 'Changes value, bluff, semi-bluff, continuation, and barrel selection.' },
+    { key: 'defense', control: 'Defense', runtimeChanges: ['mdfAdherence', 'foldBias', 'drawWeight', 'potOddsDiscipline'], projectedEffect: 'Changes the final continuation probability when facing a wager.' },
+    { key: 'sizing', control: 'Bet sizing', runtimeChanges: ['preflopStrategy.sizing', 'postflopStrategy.sizing'], projectedEffect: 'Changes legal opening, betting, and raising targets.' },
+    { key: 'context', control: 'Context awareness', runtimeChanges: ['positionBonus', 'multiwayPenalty', 'rangeAdvantageWeight'], projectedEffect: 'Changes position, multiway, and range-advantage adjustments.' },
+  ]
+  return definitions
+    .filter((definition) => before[definition.key] !== after[definition.key])
+    .map((definition) => ({
+      control: definition.control,
+      before: label(before[definition.key]),
+      after: label(after[definition.key]),
+      runtimeChanges: definition.runtimeChanges,
+      projectedEffect: definition.projectedEffect,
+    }))
 }
 
 export function inferSimpleStrategyIntent(profile: NpcStrategyProfile): NpcSimpleStrategyIntent {

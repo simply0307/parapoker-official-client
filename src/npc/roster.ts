@@ -14,11 +14,19 @@ export interface LocalNpcPresentation {
 
 export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
   {
-    id: 'strategy-balanced-caller-v4',
-    version: 4,
+    id: 'strategy-balanced-caller-v5',
+    version: 5,
     name: 'Balanced Caller',
     status: 'active',
     difficulty: 'steady',
+    teaching: {
+      teachingObjective: 'Practice value betting and disciplined bluff selection against a measured continuing range.',
+      conceptTags: ['balanced-defense', 'pot-odds', 'value-betting'],
+      intendedTendencies: [],
+      intentionallyExploitable: false,
+      playerLesson: 'Recognize when a fair-price caller can still release against sustained pressure.',
+      fallbackWarningThreshold: 0.2,
+    },
     description: 'A measured baseline strategy that continues with fair prices and avoids thin pressure.',
     calibrationTarget: createNpcStrategyCalibrationTarget('balanced'),
     modules: [
@@ -63,11 +71,19 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-pressure-raiser-v4',
-    version: 4,
+    id: 'strategy-pressure-raiser-v5',
+    version: 5,
     name: 'Pressure Raiser',
     status: 'active',
     difficulty: 'steady',
+    teaching: {
+      teachingObjective: 'Practice defending coherent ranges against frequent preflop and multi-street pressure.',
+      conceptTags: ['initiative', 'three-bet-pressure', 'barreling'],
+      intendedTendencies: [{ id: 'raises-too-often' }, { id: 'barrels-too-often' }, { id: 'uses-large-sizing' }],
+      intentionallyExploitable: true,
+      playerLesson: 'Continue with hands that retain equity and let the pressure range overextend.',
+      fallbackWarningThreshold: 0.2,
+    },
     description: 'Applies more preflop pressure and uses larger raise targets.',
     calibrationTarget: createNpcStrategyCalibrationTarget('pressure'),
     modules: [
@@ -125,11 +141,19 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-board-watcher-v4',
-    version: 4,
+    id: 'strategy-board-watcher-v5',
+    version: 5,
     name: 'Board Watcher',
     status: 'active',
     difficulty: 'steady',
+    teaching: {
+      teachingObjective: 'Practice recognizing draw-driven aggression on dynamic boards.',
+      conceptTags: ['draws', 'board-texture', 'semi-bluffing'],
+      intendedTendencies: [{ id: 'chases-draws' }],
+      intentionallyExploitable: true,
+      playerLesson: 'Price draws correctly and distinguish made-hand pressure from semi-bluffs.',
+      fallbackWarningThreshold: 0.2,
+    },
     description: 'Weights postflop texture and draws more heavily than preflop initiative.',
     calibrationTarget: createNpcStrategyCalibrationTarget('draw-pressure'),
     modules: [
@@ -170,11 +194,19 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-pot-controller-v4',
-    version: 4,
+    id: 'strategy-pot-controller-v5',
+    version: 5,
     name: 'Pot Controller',
     status: 'active',
     difficulty: 'steady',
+    teaching: {
+      teachingObjective: 'Practice taking initiative against capped, low-pressure lines.',
+      conceptTags: ['pot-control', 'delayed-pressure', 'thin-value'],
+      intendedTendencies: [{ id: 'barrels-too-rarely' }, { id: 'avoids-thin-value' }, { id: 'uses-small-sizing' }],
+      intentionallyExploitable: true,
+      playerLesson: 'Attack give-ups and value bet more thinly when the opponent keeps pots small.',
+      fallbackWarningThreshold: 0.2,
+    },
     description: 'Keeps marginal situations smaller and chooses fewer pressure lines.',
     calibrationTarget: createNpcStrategyCalibrationTarget('pot-control'),
     modules: [
@@ -232,11 +264,19 @@ export const LOCAL_NPC_STRATEGY_PROFILES: NpcStrategyProfile[] = [
     }),
   },
   {
-    id: 'strategy-value-hunter-v4',
-    version: 4,
+    id: 'strategy-value-hunter-v5',
+    version: 5,
     name: 'Value Hunter',
     status: 'active',
     difficulty: 'steady',
+    teaching: {
+      teachingObjective: 'Practice folding bluff-catchers against a value-heavy betting range.',
+      conceptTags: ['value-heavy', 'river-discipline', 'thin-value'],
+      intendedTendencies: [{ id: 'underbluffs-river' }, { id: 'overvalues-top-pair' }],
+      intentionallyExploitable: true,
+      playerLesson: 'Respect concentrated value while stealing pots when the value threshold is not met.',
+      fallbackWarningThreshold: 0.2,
+    },
     description: 'Prioritizes made-hand value and solid calls over speculative pressure.',
     calibrationTarget: createNpcStrategyCalibrationTarget('value-first'),
     modules: [
@@ -289,7 +329,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Measured caller',
     description: 'A careful regular who prefers clean prices and steady value.',
     avatarKey: 'maven',
-    strategyProfileId: 'strategy-balanced-caller-v4',
+    strategyProfileId: 'strategy-balanced-caller-v5',
     status: 'active',
   },
   {
@@ -298,7 +338,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pressure raiser',
     description: 'A table captain who tests passive lines before and after the flop.',
     avatarKey: 'rook',
-    strategyProfileId: 'strategy-pressure-raiser-v4',
+    strategyProfileId: 'strategy-pressure-raiser-v5',
     status: 'active',
   },
   {
@@ -307,7 +347,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Board watcher',
     description: 'A texture-aware opponent who respects coordinated boards.',
     avatarKey: 'quinn',
-    strategyProfileId: 'strategy-board-watcher-v4',
+    strategyProfileId: 'strategy-board-watcher-v5',
     status: 'active',
   },
   {
@@ -316,7 +356,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Pot controller',
     description: 'A low-variance opponent who keeps marginal spots contained.',
     avatarKey: 'sol',
-    strategyProfileId: 'strategy-pot-controller-v4',
+    strategyProfileId: 'strategy-pot-controller-v5',
     status: 'active',
   },
   {
@@ -325,7 +365,7 @@ export const LOCAL_NPC_DEFINITIONS: NpcDefinition[] = [
     archetypeLabel: 'Value hunter',
     description: 'A value-first opponent who leans into made hands.',
     avatarKey: 'vega',
-    strategyProfileId: 'strategy-value-hunter-v4',
+    strategyProfileId: 'strategy-value-hunter-v5',
     status: 'active',
   },
 ]

@@ -14,6 +14,7 @@ import {
   type HumanPlayerIdentity,
 } from '../../game-config/gameBlueprint'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
+import type { NpcDecisionTrace } from '../../npc/npcDecisionTrace'
 import {
   createEventRecordDrafts,
   buildAuthorityJournalFromRecords,
@@ -100,6 +101,7 @@ export class LocalSoloSession {
   private readonly archiveStore?: HandHistoryArchiveStore
   private readonly retainedHandNumbers = new Set<number>()
   private readonly heroPrivateEvents: HandHistoryEvent[] = []
+  private readonly npcDecisionTraces: NpcDecisionTrace[] = []
   private stats: DerivedStatsSnapshot[] = []
   private completed = false
   private archiveFinalized = false
@@ -171,6 +173,7 @@ export class LocalSoloSession {
         ),
         rulesContractVersion: 'para-poker-rules-v0',
         eventSchemaVersion: 'poker-event-v1',
+        npcStrategyProfiles: session.npcStrategyProfiles,
       })
     }
     await session.recordTransition(session.controller.consumeInitialTransition())
@@ -269,6 +272,7 @@ export class LocalSoloSession {
   }
 
   private async recordTransition(transition: LocalSinglePlayerTransition): Promise<void> {
+    this.npcDecisionTraces.push(...structuredClone(transition.npcDecisionTraces))
     const publicEvents = transition.events.filter((event) => event.visibility === 'public')
     const privateHeroEvents = transition.events.filter((event) => event.visibility === transition.heroView.heroSeatId)
     this.heroPrivateEvents.push(...privateHeroEvents)
@@ -364,6 +368,7 @@ export class LocalSoloSession {
             authorityClass: 'local-browser',
             events: [...publicEvents, ...privateEventRecords],
             completedHands: archiveDetail.hands,
+            npcDecisionTraces: this.npcDecisionTraces,
             createdAt: archiveDetail.session.startedAt,
           }),
           match,
@@ -371,6 +376,14 @@ export class LocalSoloSession {
           privateHands: archiveDetail.privateHands,
           publicPackage,
           blueprint: this.blueprint,
+          npcStrategySnapshots: this.npcDefinitions.map((definition) => ({
+            npcDefinitionId: definition.id,
+            strategyProfile: requirePinnedStrategySnapshot(
+              definition.id,
+              definition.strategyProfileId,
+              this.npcStrategyProfiles,
+            ),
+          })),
           reason: 'match-complete',
           closedAt: match.completedAt,
         })
@@ -398,6 +411,18 @@ export class LocalSoloSession {
       seed: this.config.seed,
     }
   }
+}
+
+function requirePinnedStrategySnapshot(
+  npcDefinitionId: string,
+  strategyProfileId: string,
+  profiles: readonly NpcStrategyProfile[],
+): NpcStrategyProfile {
+  const profile = profiles.find((candidate) => candidate.id === strategyProfileId)
+  if (!profile) {
+    throw new Error(`Missing pinned strategy snapshot for ${npcDefinitionId}.`)
+  }
+  return clone(profile)
 }
 
 export function createRandomLocalSeed(): string {

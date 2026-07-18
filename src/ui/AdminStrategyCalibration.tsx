@@ -103,6 +103,7 @@ export function AdminStrategyCalibration({ profile, profiles, evidence }: {
       </div>
       <div className="calibration-results-scroll">
         <ValidationSampleTable validation={validation} />
+        <ObservedTeachingEvidence evidence={evidence} />
         <CalibrationRateTable
           title="Preflop Projection"
           currentName={profile.name}
@@ -149,12 +150,59 @@ export function AdminStrategyCalibration({ profile, profiles, evidence }: {
   )
 }
 
+function ObservedTeachingEvidence({ evidence }: { evidence?: NpcObservedStrategyEvidence }) {
+  const labels: Record<string, string> = {
+    'teaching.blindFold': 'Blind-fold rate',
+    'teaching.flopCbetTurnGiveUp': 'Flop c-bet then turn give-up',
+    'teaching.drawContinue': 'Draw continuation',
+    'teaching.largeBetContinue': 'Large-bet continuation',
+    'teaching.riverAggression': 'River aggression',
+    'teaching.thinValueAttempt': 'Thin-value attempt',
+    'teaching.fallbackDecision': 'Fallback decision',
+  }
+  return (
+    <section className="calibration-table-section" aria-label="Observed teaching evidence">
+      <h4>Observed Archive Evidence</h4>
+      {!evidence ? <p className="muted">No completed archived games for this exact profile version.</p> : (
+        <>
+          <p className="muted">
+            {evidence.handCount} hands · {evidence.decisionCoverage?.totalDecisions ?? 0} traced decisions · {evidence.handCount < 20 ? 'insufficient sample for a tendency claim' : 'sample ready for review'}
+          </p>
+          <table className="calibration-table">
+            <thead><tr><th>Teaching metric</th><th>Actual rate</th><th>Opportunities</th><th>Reading</th></tr></thead>
+            <tbody>
+              {Object.entries(evidence.teachingMetrics ?? {}).map(([id, metric]) => (
+                <tr key={id}>
+                  <th scope="row">{labels[id] ?? id}</th>
+                  <td>{formatRate(metric.value)}</td>
+                  <td>{metric.opportunities}</td>
+                  <td>{metric.opportunities < 20 ? 'Insufficient sample' : 'Teaching tendency observed'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {evidence.decisionCoverage && (
+            <div className="coverage-evidence-grid">
+              <strong>Explicit strategy coverage</strong>
+              <span>Preflop range {formatRate(evidence.decisionCoverage.sourceRates['preflop-range'])}</span>
+              <span>Proactive {formatRate(evidence.decisionCoverage.sourceRates['proactive-postflop'])}</span>
+              <span>Defense {formatRate(evidence.decisionCoverage.sourceRates['postflop-defense'])}</span>
+              <span>Fallback {formatRate(evidence.decisionCoverage.fallbackRate)}</span>
+              <span>{evidence.decisionCoverage.mostCommonFallbackSituations.map((item) => `${item.situationId} (${item.count})`).join(', ') || 'No fallback situations'}</span>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 function ValidationSampleTable({ validation }: {
   validation: ReturnType<typeof validateNpcStrategyBehavior>
 }) {
   return (
-    <section className="calibration-table-section" aria-label="Deterministic behavior validation">
-      <h4>Target And Deterministic Sample</h4>
+    <section className="calibration-table-section" aria-label="Deterministic behavior configuration">
+      <h4>Configured Target And Deterministic Projection</h4>
       <table className="calibration-table validation-sample-table">
         <thead>
           <tr><th>Metric</th><th>Projected</th><th>Observed</th><th>Evidence</th><th>Target</th></tr>
@@ -165,7 +213,7 @@ function ValidationSampleTable({ validation }: {
               <th scope="row">{metric.label}</th>
               <td>{formatRate(metric.value)}</td>
               <td>{formatRate(metric.observed)}</td>
-              <td>{metric.observedSource === 'verified-match' ? `Verified n=${metric.observedSampleCount}` : `Scenario n=${metric.observedSampleCount}`}</td>
+              <td>{metric.observedSource === 'verified-match' ? `Archived n=${metric.observedSampleCount}` : `Scenario n=${metric.observedSampleCount}`}</td>
               <td className={metric.status}>{metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'Unbounded'}</td>
             </tr>
           ))}

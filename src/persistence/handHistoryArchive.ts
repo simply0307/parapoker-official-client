@@ -101,6 +101,8 @@ export interface ArchivedSessionRecord {
       npcDefinitionId: string
       strategyProfileId: string
       strategyProfileVersion: number
+      teachingObjective?: string
+      strategySnapshot?: NpcStrategyProfile
     }>
   }
   publicPackage?: CompletedSessionPackage
@@ -121,6 +123,7 @@ export interface CreateArchiveSessionInput {
   participants: ArchivedParticipant[]
   rulesContractVersion: string
   eventSchemaVersion: string
+  npcStrategyProfiles?: NpcStrategyProfile[]
   startedAt?: string
 }
 
@@ -177,11 +180,18 @@ export function buildArchiveParticipants(
 export function createArchivedSessionRecord(input: CreateArchiveSessionInput): ArchivedSessionRecord {
   const npcConfigurations = input.participants
     .filter((participant) => participant.kind === 'npc' && participant.npcDefinitionId && participant.npcStrategyProfileId)
-    .map((participant) => ({
-      npcDefinitionId: participant.npcDefinitionId ?? '',
-      strategyProfileId: participant.npcStrategyProfileId ?? '',
-      strategyProfileVersion: participant.npcStrategyProfileVersion ?? 1,
-    }))
+    .map((participant) => {
+      const profile = input.npcStrategyProfiles?.find((candidate) =>
+        candidate.id === participant.npcStrategyProfileId &&
+        candidate.version === participant.npcStrategyProfileVersion)
+      return {
+        npcDefinitionId: participant.npcDefinitionId ?? '',
+        strategyProfileId: participant.npcStrategyProfileId ?? '',
+        strategyProfileVersion: participant.npcStrategyProfileVersion ?? 1,
+        ...(profile?.teaching?.teachingObjective ? { teachingObjective: profile.teaching.teachingObjective } : {}),
+        ...(profile ? { strategySnapshot: clone(profile) } : {}),
+      }
+    })
 
   return {
     schemaVersion: HAND_HISTORY_ARCHIVE_SCHEMA_VERSION,

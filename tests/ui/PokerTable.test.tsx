@@ -283,6 +283,12 @@ describe('PokerTable', () => {
 
 async function playUntilSessionResult(maxHands = 20): Promise<HTMLElement> {
   for (let hand = 0; hand < maxHands; hand += 1) {
+    await waitFor(() => {
+      expect(
+        screen.queryByLabelText('Session result') ??
+        screen.queryByRole('button', { name: 'Next hand' }),
+      ).not.toBeNull()
+    })
     const result = screen.queryByLabelText('Session result')
     if (result) {
       return result

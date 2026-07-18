@@ -3,12 +3,20 @@ import { evaluateBestHand } from '../poker-engine'
 import type { Card, EngineCommand, LegalAction, PrivateSeatView, Rank, SeatId } from '../poker-engine'
 import type { NpcPostflopStrategy, NpcPreflopStrategy } from './config'
 import {
-  chooseProactivePostflopDecision,
+  evaluateProactivePostflopDecision,
+  resolvePostflopDefenseConfig,
   type NpcPostflopHandAssessment,
 } from './postflopStrategy'
 import { choosePostflopDefenseDecision } from './postflopDefense'
-import { choosePreflopRangeDecision } from './preflopRanges'
+import { analyzePreflopSpot, choosePreflopRangeDecision } from './preflopRanges'
 import type { NpcRangeState } from './rangeTracking'
+import {
+  commandAmount,
+  type NpcDecisionIdentity,
+  type NpcDecisionResult,
+  type NpcDecisionSource,
+  type NpcDecisionTrace,
+} from './npcDecisionTrace'
 
 export interface NpcPolicyConfig {
   preflopAggression: number
@@ -30,10 +38,11 @@ export interface NpcDecisionContext {
   rng: Rng
   preflopStrategy?: NpcPreflopStrategy
   postflopStrategy?: NpcPostflopStrategy
+  identity: NpcDecisionIdentity
 }
 
 export interface NpcPolicy {
-  chooseAction(context: NpcDecisionContext): EngineCommand
+  chooseDecision(context: NpcDecisionContext): NpcDecisionResult
 }
 
 export const DEFAULT_NPC_POLICY_CONFIG: NpcPolicyConfig = {
@@ -68,6 +77,12 @@ export function createNpcDecisionContext(
   memory: NpcTableMemory = {},
   preflopStrategy?: NpcPreflopStrategy,
   postflopStrategy?: NpcPostflopStrategy,
+  identity: NpcDecisionIdentity = {
+    npcDefinitionId: 'unassigned-npc',
+    strategyProfileId: 'legacy-default',
+    strategyProfileVersion: 1,
+    teachingTags: [],
+  },
 ): NpcDecisionContext {
   return {
     view,
@@ -77,30 +92,273 @@ export function createNpcDecisionContext(
     rng,
     ...(preflopStrategy ? { preflopStrategy } : {}),
     ...(postflopStrategy ? { postflopStrategy } : {}),
+    identity: clone(identity),
   }
 }
 
 export class BasicNpcPolicy implements NpcPolicy {
-  chooseAction(context: NpcDecisionContext): EngineCommand {
+  chooseDecision(context: NpcDecisionContext): NpcDecisionResult {
+    const rolls: number[] = []
+    const tracedContext: NpcDecisionContext = {
+      ...context,
+      rng: {
+        next: () => {
+          const roll = context.rng.next()
+          rolls.push(roll)
+          return roll
+        },
+        state: () => context.rng.state(),
+      },
+    }
     if (context.view.street === 'preflop' && context.view.holeCards.length === 2) {
       if (context.preflopStrategy) {
         const rangeDecision = choosePreflopRangeDecision({
           view: context.view,
           legalActions: context.legalActions,
           strategy: context.preflopStrategy,
-          rng: context.rng,
+          rng: tracedContext.rng,
         })
         if (rangeDecision) {
-          return rangeDecision.command
+          return {
+            command: rangeDecision.command,
+            trace: createTrace(context, rangeDecision.command, 'preflop-range', {
+              situationId: rangeDecision.nodeId,
+              handClass: rangeDecision.handClass,
+              configuredValues: {
+                legalFrequencyMix: JSON.stringify(rangeDecision.legalFrequencies),
+                selectedFrequency: rangeDecision.legalFrequencies.find((entry) => entry.action === rangeDecision.selectedAction)?.frequency ?? 0,
+                sizingProfileId: context.preflopStrategy.id,
+              },
+              calculatedValues: {
+                format: rangeDecision.spot.format,
+                position: rangeDecision.spot.position ?? 'unknown',
+                stackDepth: rangeDecision.spot.stackDepth,
+                situation: rangeDecision.spot.situation,
+                raiseSizeBucket: rangeDecision.spot.raiseSizeBucket,
+                effectiveStackBigBlinds: rangeDecision.spot.effectiveStackBigBlinds,
+              },
+              probability: rangeDecision.legalFrequencies.find((entry) => entry.action === rangeDecision.selectedAction)?.frequency,
+              rngRoll: rangeDecision.rngRoll,
+              reasonCode: `range-${rangeDecision.selectedAction}`,
+            }),
+          }
         }
       }
-      return choosePreflopAction(context)
+      const command = choosePreflopAction(tracedContext)
+      const spot = analyzePreflopSpot(context.view)
+      return legacyResult(context, command, 'legacy-fallback', `legacy-preflop-${classifyPreflop(context.view.holeCards)}-${command.type}`, rolls, {
+        handTier: classifyPreflop(context.view.holeCards),
+        effectiveStack: getEffectiveStack(context.view),
+        format: spot.format,
+        position: spot.position ?? 'unknown',
+        situation: spot.situation,
+        stackDepth: spot.stackDepth,
+      })
     }
     if (context.view.holeCards.length === 2 && context.view.communityCards.length >= 3) {
-      return choosePostflopAction(context)
+      const explicit = chooseExplicitPostflopDecision(tracedContext)
+      if (explicit) {
+        return explicit
+      }
+      const assessment = assessPostflop(context.view)
+      const command = choosePostflopAction(tracedContext)
+      return legacyResult(context, command, 'legacy-fallback', `legacy-postflop-${command.type}`, rolls, {
+        madeStrength: assessment.madeStrength,
+        hasStrongDraw: assessment.hasStrongDraw,
+        hasAnyDraw: assessment.hasAnyDraw,
+        boardWetness: assessment.boardWetness,
+        ...(context.postflopStrategy ? {
+          thinValueStrength: context.postflopStrategy.thresholds.thinValueStrength,
+          valueBetStrength: context.postflopStrategy.thresholds.valueBetStrength,
+        } : {}),
+      })
     }
 
-    return chooseFallbackAction(context)
+    const command = chooseFallbackAction(tracedContext)
+    return legacyResult(context, command, 'safety-fallback', `safety-${command.type}`, rolls, {})
+  }
+
+  chooseAction(context: NpcDecisionContext): EngineCommand {
+    return this.chooseDecision(context).command
+  }
+}
+
+interface TraceDetails {
+  situationId?: string
+  handClass?: string
+  configuredValues: Record<string, number | string | boolean>
+  calculatedValues: Record<string, number | string | boolean>
+  probability?: number
+  rngRoll?: number
+  reasonCode: string
+}
+
+function createTrace(
+  context: NpcDecisionContext,
+  command: EngineCommand,
+  decisionSource: NpcDecisionSource,
+  details: TraceDetails,
+): NpcDecisionTrace {
+  const amount = commandAmount(command)
+  return {
+    schemaVersion: 'npc-decision-trace-v1',
+    npcDefinitionId: context.identity.npcDefinitionId,
+    strategyProfileId: context.identity.strategyProfileId,
+    strategyProfileVersion: context.identity.strategyProfileVersion,
+    handNumber: context.view.handNumber,
+    seatId: context.view.heroSeatId,
+    street: context.view.street ?? 'between-hands',
+    decisionSource,
+    ...(details.situationId ? { situationId: details.situationId } : {}),
+    ...(details.handClass ? { handClass: details.handClass } : {}),
+    consideredActions: context.legalActions.map((action) => action.type),
+    selectedAction: command.type,
+    ...(amount !== undefined ? { selectedAmount: amount } : {}),
+    configuredValues: clone(details.configuredValues),
+    calculatedValues: clone(details.calculatedValues),
+    ...(details.probability !== undefined ? { probability: details.probability } : {}),
+    ...(details.rngRoll !== undefined ? { rngRoll: details.rngRoll } : {}),
+    reasonCode: details.reasonCode,
+    teachingTags: [...context.identity.teachingTags],
+  }
+}
+
+function legacyResult(
+  context: NpcDecisionContext,
+  command: EngineCommand,
+  source: Extract<NpcDecisionSource, 'legacy-fallback' | 'safety-fallback'>,
+  reasonCode: string,
+  rolls: number[],
+  calculatedValues: Record<string, number | string | boolean>,
+): NpcDecisionResult {
+  return {
+    command,
+    trace: createTrace(context, command, source, {
+      configuredValues: { ...context.config },
+      calculatedValues,
+      ...(rolls.length > 0 ? { rngRoll: rolls.at(-1) } : {}),
+      reasonCode,
+    }),
+  }
+}
+
+function proactiveConfiguredValues(
+  strategy: NpcPostflopStrategy,
+  reason: string,
+): Record<string, number | string | boolean> {
+  const frequencyKey: Partial<Record<string, keyof NpcPostflopStrategy['frequencies']>> = {
+    continuationBet: 'cBetFlop',
+    delayedContinuationBet: 'delayedCBetTurn',
+    probeBet: 'probeBet',
+    turnBarrel: 'turnBarrel',
+    riverBarrel: 'riverBarrel',
+    semiBluff: 'semiBluff',
+    pureBluff: 'pureBluff',
+    valueRaise: 'valueRaise',
+    checkRaise: 'checkRaise',
+  }
+  const key = frequencyKey[reason]
+  return {
+    strategyId: strategy.id,
+    reason,
+    ...(key ? { baseFrequency: strategy.frequencies[key] } : {}),
+    valueBetStrength: strategy.thresholds.valueBetStrength,
+    thinValueStrength: strategy.thresholds.thinValueStrength,
+    valueRaiseStrength: strategy.thresholds.valueRaiseStrength,
+    rangeAdvantageWeight: strategy.modifiers.rangeAdvantageWeight,
+    positionBonus: strategy.modifiers.positionBonus,
+    multiwayPenalty: strategy.modifiers.multiwayPenalty,
+    wetBoardBluffPenalty: strategy.modifiers.wetBoardBluffPenalty,
+  }
+}
+
+function chooseExplicitPostflopDecision(context: NpcDecisionContext): NpcDecisionResult | undefined {
+  if (!context.postflopStrategy || !context.memory.rangeState) {
+    return undefined
+  }
+  const assessment = assessPostflop(context.view)
+  const proactiveEvaluation = evaluateProactivePostflopDecision({
+    view: context.view,
+    legalActions: context.legalActions,
+    strategy: context.postflopStrategy,
+    rangeState: context.memory.rangeState,
+    assessment,
+    rng: context.rng,
+  })
+  const proactive = proactiveEvaluation?.decision
+  if (proactive) {
+    return {
+      command: proactive.command,
+      trace: createTrace(context, proactive.command, 'proactive-postflop', {
+        situationId: proactive.reason,
+        configuredValues: proactiveConfiguredValues(context.postflopStrategy, proactive.reason),
+        calculatedValues: {
+          madeStrength: assessment.madeStrength,
+          hasStrongDraw: assessment.hasStrongDraw,
+          hasAnyDraw: assessment.hasAnyDraw,
+          boardWetness: assessment.boardWetness,
+          rangeAdvantage: proactive.rangeAdvantage,
+          effectiveStackToPotRatio: proactive.effectiveStackToPotRatio,
+          ...(proactive.potFraction !== undefined ? { potFraction: proactive.potFraction } : {}),
+        },
+        probability: proactive.probability,
+        rngRoll: proactive.roll,
+        reasonCode: proactive.reason,
+      }),
+    }
+  }
+  const check = findAction(context.legalActions, 'check')
+  if (proactiveEvaluation && check && !findAction(context.legalActions, 'call')) {
+    const command: EngineCommand = { type: 'check', seatId: context.view.heroSeatId, source: 'npc' }
+    return {
+      command,
+      trace: createTrace(context, command, 'proactive-postflop', {
+        situationId: proactiveEvaluation.reason,
+        configuredValues: proactiveConfiguredValues(context.postflopStrategy, proactiveEvaluation.reason),
+        calculatedValues: {
+          madeStrength: assessment.madeStrength,
+          hasStrongDraw: assessment.hasStrongDraw,
+          hasAnyDraw: assessment.hasAnyDraw,
+          boardWetness: assessment.boardWetness,
+          rangeAdvantage: proactiveEvaluation.rangeAdvantage,
+          effectiveStackToPotRatio: proactiveEvaluation.effectiveStackToPotRatio,
+        },
+        probability: proactiveEvaluation.probability,
+        ...(proactiveEvaluation.roll !== undefined ? { rngRoll: proactiveEvaluation.roll } : {}),
+        reasonCode: `${proactiveEvaluation.reason}-declined`,
+      }),
+    }
+  }
+  const defense = choosePostflopDefenseDecision({
+    view: context.view,
+    legalActions: context.legalActions,
+    strategy: context.postflopStrategy,
+    rangeState: context.memory.rangeState,
+    assessment,
+    rng: context.rng,
+  })
+  if (!defense) {
+    return undefined
+  }
+  return {
+    command: defense.command,
+    trace: createTrace(context, defense.command, 'postflop-defense', {
+      situationId: `facing-${defense.metrics.betToPotRatio.toFixed(2)}-pot`,
+      configuredValues: { ...resolvePostflopDefenseConfig(context.postflopStrategy) },
+      calculatedValues: {
+        ...defense.metrics,
+        madeStrength: assessment.madeStrength,
+        hasStrongDraw: assessment.hasStrongDraw,
+        hasAnyDraw: assessment.hasAnyDraw,
+        boardWetness: assessment.boardWetness,
+        rangeDisadvantage: defense.rangeDisadvantage,
+        effectiveStackToPotRatio: defense.effectiveStackToPotRatio,
+        activeOpponentCount: defense.activeOpponentCount,
+      },
+      probability: defense.continueProbability,
+      rngRoll: defense.roll,
+      reasonCode: defense.reason,
+    }),
   }
 }
 
@@ -172,30 +430,6 @@ function choosePostflopAction(context: NpcDecisionContext): EngineCommand {
   const { view, legalActions } = context
   const seatId = view.heroSeatId
   const assessment = assessPostflop(view)
-  if (context.postflopStrategy && context.memory.rangeState) {
-    const proactiveDecision = chooseProactivePostflopDecision({
-      view,
-      legalActions,
-      strategy: context.postflopStrategy,
-      rangeState: context.memory.rangeState,
-      assessment,
-      rng: context.rng,
-    })
-    if (proactiveDecision) {
-      return proactiveDecision.command
-    }
-    const defenseDecision = choosePostflopDefenseDecision({
-      view,
-      legalActions,
-      strategy: context.postflopStrategy,
-      rangeState: context.memory.rangeState,
-      assessment,
-      rng: context.rng,
-    })
-    if (defenseDecision) {
-      return defenseDecision.command
-    }
-  }
   const call = findAction(legalActions, 'call')
   const fold = findAction(legalActions, 'fold')
   const check = findAction(legalActions, 'check')
@@ -473,4 +707,8 @@ function findAction<TType extends LegalAction['type']>(
   type: TType,
 ): Extract<LegalAction, { type: TType }> | undefined {
   return actions.find((action): action is Extract<LegalAction, { type: TType }> => action.type === type)
+}
+
+function clone<T>(value: T): T {
+  return structuredClone(value)
 }

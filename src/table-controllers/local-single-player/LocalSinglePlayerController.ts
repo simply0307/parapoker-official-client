@@ -7,6 +7,7 @@ import {
 } from '../../npc/basicNpc'
 import type { NpcDefinition, NpcSeatAssignment, NpcStrategyProfile } from '../../npc/config'
 import { updateNpcRangeMemory } from '../../npc/rangeTracking'
+import type { NpcDecisionTrace } from '../../npc/npcDecisionTrace'
 import {
   DEFAULT_SIX_MAX_NPC_LINEUP,
   localNpcDefinition,
@@ -42,6 +43,7 @@ export interface LocalSinglePlayerSnapshot {
 export interface LocalSinglePlayerTransition extends LocalSinglePlayerSnapshot {
   ok: boolean
   events: HandHistoryEvent[]
+  npcDecisionTraces: NpcDecisionTrace[]
   error?: EngineError
 }
 
@@ -128,6 +130,7 @@ export class LocalSinglePlayerController {
       ...this.getSnapshot(),
       ok: true,
       events: [],
+      npcDecisionTraces: [],
     }
     return transition
   }
@@ -152,31 +155,33 @@ export class LocalSinglePlayerController {
   }
 
   private acceptResult(result: EngineResult<GameState>, eventCursor: number): LocalSinglePlayerTransition {
+    let npcDecisionTraces: NpcDecisionTrace[] = []
     if (result.ok) {
       this.state = result.state
       this.lastError = undefined
-      this.runNpcTurns()
+      npcDecisionTraces = this.runNpcTurns()
     } else {
       this.lastError = result.error.message
     }
-    return this.transition(result.ok, eventCursor, result.ok ? undefined : result.error)
+    return this.transition(result.ok, eventCursor, npcDecisionTraces, result.ok ? undefined : result.error)
   }
 
-  private runNpcTurns(): void {
+  private runNpcTurns(): NpcDecisionTrace[] {
+    const traces: NpcDecisionTrace[] = []
     let safety = 0
     while (this.state.status === 'handInProgress' && safety < 200) {
       safety += 1
       const pendingSeatId = this.state.hand?.pendingSeatId
       if (!pendingSeatId || pendingSeatId === this.humanSeatId) {
-        return
+        return traces
       }
       const controller = this.npcControllers.get(pendingSeatId)
       if (!controller) {
-        return
+        return traces
       }
       const view = getSeatView(this.state, pendingSeatId)
       controller.memory = updateNpcRangeMemory(controller.memory, view)
-      const command = controller.policy.chooseAction(
+      const decision = controller.policy.chooseDecision(
         createNpcDecisionContext(
           view,
           controller.rng,
@@ -184,23 +189,40 @@ export class LocalSinglePlayerController {
           controller.memory,
           controller.strategyProfile.preflopStrategy,
           controller.strategyProfile.postflopStrategy,
+          {
+            npcDefinitionId: controller.definition.id,
+            strategyProfileId: controller.strategyProfile.id,
+            strategyProfileVersion: controller.strategyProfile.version,
+            teachingTags: [
+              ...(controller.strategyProfile.teaching?.conceptTags ?? []),
+              ...(controller.strategyProfile.teaching?.intendedTendencies.map((tendency) => tendency.id) ?? []),
+            ],
+          },
         ),
       )
-      const result = applyAction(this.state, command)
+      traces.push(decision.trace)
+      const result = applyAction(this.state, decision.command)
       if (!result.ok) {
         this.lastError = result.error.message
-        return
+        return traces
       }
       this.state = result.state
     }
+    return traces
   }
 
-  private transition(ok: boolean, eventCursor: number, error?: EngineError): LocalSinglePlayerTransition {
+  private transition(
+    ok: boolean,
+    eventCursor: number,
+    npcDecisionTraces: NpcDecisionTrace[],
+    error?: EngineError,
+  ): LocalSinglePlayerTransition {
     const snapshot = this.getSnapshot()
     return {
       ...snapshot,
       ok,
       events: snapshot.heroView.events.slice(eventCursor),
+      npcDecisionTraces: structuredClone(npcDecisionTraces),
       ...(error ? { error } : {}),
     }
   }
@@ -226,7 +248,11 @@ function resolveNpcRuntime(seatId: SeatId, options: LocalSinglePlayerControllerO
     throw new Error(`No NPC strategy profile configured for ${definition.id}.`)
   }
 
-  return { seatId, definition, strategyProfile }
+  return {
+    seatId,
+    definition: structuredClone(definition),
+    strategyProfile: structuredClone(strategyProfile),
+  }
 }
 
 function findNpcDefinition(

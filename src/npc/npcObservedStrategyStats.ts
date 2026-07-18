@@ -1,6 +1,24 @@
 import type { HandHistoryEvent, SeatId, Street } from '../poker-engine'
 import type { ArchivedSessionDetail } from '../persistence'
 import type { NpcStrategyCalibrationMetricId } from './config'
+import type { NpcDecisionSource, NpcDecisionTrace } from './npcDecisionTrace'
+
+export type NpcTeachingObservedMetricId =
+  | 'teaching.blindFold'
+  | 'teaching.flopCbetTurnGiveUp'
+  | 'teaching.drawContinue'
+  | 'teaching.largeBetContinue'
+  | 'teaching.riverAggression'
+  | 'teaching.thinValueAttempt'
+  | 'teaching.fallbackDecision'
+
+export interface NpcDecisionCoverageEvidence {
+  totalDecisions: number
+  sourceCounts: Record<NpcDecisionSource, number>
+  sourceRates: Record<NpcDecisionSource, number>
+  fallbackRate: number
+  mostCommonFallbackSituations: Array<{ situationId: string; count: number }>
+}
 
 export interface NpcObservedStrategyMetric {
   value: number
@@ -15,6 +33,8 @@ export interface NpcObservedStrategyEvidence {
   matchIds: string[]
   handCount: number
   metrics: Partial<Record<NpcStrategyCalibrationMetricId, NpcObservedStrategyMetric>>
+  teachingMetrics: Partial<Record<NpcTeachingObservedMetricId, NpcObservedStrategyMetric>>
+  decisionCoverage: NpcDecisionCoverageEvidence
 }
 
 interface MetricCounter {
@@ -28,6 +48,8 @@ interface EvidenceAccumulator {
   matchIds: Set<string>
   handCount: number
   metrics: Partial<Record<NpcStrategyCalibrationMetricId, MetricCounter>>
+  teachingMetrics: Partial<Record<NpcTeachingObservedMetricId, MetricCounter>>
+  traces: NpcDecisionTrace[]
 }
 
 export function deriveNpcStrategyEvidence(
@@ -44,16 +66,24 @@ export function deriveNpcStrategyEvidence(
         matchIds: new Set<string>(),
         handCount: 0,
         metrics: {},
+        teachingMetrics: {},
+        traces: [],
       }
       accumulator.matchIds.add(archive.session.matchId)
       const hands = archive.hands.filter((hand) => hand.participantSeatIds.includes(participant.seatId))
       accumulator.handCount += hands.length
       for (const hand of hands) analyzeHand(hand.orderedPublicEvents, participant.seatId, accumulator.metrics)
+      accumulator.traces.push(...(archive.session.authorityArchive?.npcDecisionTraces ?? []).filter((trace) =>
+        trace.seatId === participant.seatId &&
+        trace.strategyProfileId === participant.npcStrategyProfileId &&
+        trace.strategyProfileVersion === participant.npcStrategyProfileVersion))
       accumulators.set(key, accumulator)
     }
   }
   return [...accumulators.values()]
-    .map((accumulator) => ({
+    .map((accumulator) => {
+      analyzeTeachingTraces(accumulator.traces, accumulator.teachingMetrics)
+      return {
       schemaVersion: 'npc-observed-strategy-v1' as const,
       profileId: accumulator.profileId,
       profileVersion: accumulator.profileVersion,
@@ -67,8 +97,119 @@ export function deriveNpcStrategyEvidence(
           successes: counter.successes,
         },
       ])),
-    }))
+      teachingMetrics: metricsFromCounters(accumulator.teachingMetrics),
+      decisionCoverage: coverageFromTraces(accumulator.traces),
+    }})
     .sort((left, right) => profileKey(left.profileId, left.profileVersion).localeCompare(profileKey(right.profileId, right.profileVersion)))
+}
+
+function analyzeTeachingTraces(
+  traces: readonly NpcDecisionTrace[],
+  metrics: EvidenceAccumulator['teachingMetrics'],
+): void {
+  const ordered = [...traces].sort((left, right) =>
+    left.handNumber - right.handNumber || left.seatId.localeCompare(right.seatId))
+  for (const trace of ordered) {
+    const aggressive = trace.selectedAction === 'bet' || trace.selectedAction === 'raise' || trace.selectedAction === 'allIn'
+    const continued = trace.selectedAction !== 'fold'
+    const position = String(trace.calculatedValues.position ?? '')
+    const situation = String(trace.calculatedValues.situation ?? trace.situationId ?? '')
+    if (trace.street === 'preflop' && position === 'BB' && situation.startsWith('facing')) {
+      addTeachingOpportunity(metrics, 'teaching.blindFold', trace.selectedAction === 'fold')
+    }
+    if (trace.decisionSource === 'postflop-defense' && trace.calculatedValues.hasAnyDraw === true) {
+      addTeachingOpportunity(metrics, 'teaching.drawContinue', continued)
+    }
+    if (trace.decisionSource === 'postflop-defense' && Number(trace.calculatedValues.betToPotRatio ?? 0) >= 0.75) {
+      addTeachingOpportunity(metrics, 'teaching.largeBetContinue', continued)
+    }
+    if (trace.street === 'river') {
+      addTeachingOpportunity(metrics, 'teaching.riverAggression', aggressive)
+    }
+    const madeStrength = Number(trace.calculatedValues.madeStrength ?? -1)
+    const thinValueStrength = Number(trace.calculatedValues.thinValueStrength ?? trace.configuredValues.thinValueStrength ?? -1)
+    const valueBetStrength = Number(trace.calculatedValues.valueBetStrength ?? trace.configuredValues.valueBetStrength ?? -1)
+    if (madeStrength >= thinValueStrength && madeStrength < valueBetStrength && thinValueStrength >= 0) {
+      addTeachingOpportunity(metrics, 'teaching.thinValueAttempt', trace.reasonCode === 'thinValueBet')
+    }
+    addTeachingOpportunity(
+      metrics,
+      'teaching.fallbackDecision',
+      trace.decisionSource === 'legacy-fallback' || trace.decisionSource === 'safety-fallback',
+    )
+  }
+
+  const byHandSeat = new Map<string, NpcDecisionTrace[]>()
+  for (const trace of ordered) {
+    const key = `${trace.handNumber}:${trace.seatId}`
+    byHandSeat.set(key, [...(byHandSeat.get(key) ?? []), trace])
+  }
+  for (const decisions of byHandSeat.values()) {
+    const cbet = decisions.find((trace) => trace.reasonCode === 'continuationBet')
+    const turn = decisions.find((trace) => trace.street === 'turn')
+    if (cbet && turn) {
+      const turnAggressive = turn.selectedAction === 'bet' || turn.selectedAction === 'raise' || turn.selectedAction === 'allIn'
+      addTeachingOpportunity(metrics, 'teaching.flopCbetTurnGiveUp', !turnAggressive)
+    }
+  }
+}
+
+function coverageFromTraces(traces: readonly NpcDecisionTrace[]): NpcDecisionCoverageEvidence {
+  const sources: NpcDecisionSource[] = [
+    'preflop-range',
+    'proactive-postflop',
+    'postflop-defense',
+    'legacy-fallback',
+    'safety-fallback',
+  ]
+  const sourceCounts = Object.fromEntries(sources.map((source) => [source, 0])) as Record<NpcDecisionSource, number>
+  const fallbackSituations = new Map<string, number>()
+  for (const trace of traces) {
+    sourceCounts[trace.decisionSource] += 1
+    if (trace.decisionSource === 'legacy-fallback' || trace.decisionSource === 'safety-fallback') {
+      const situationId = trace.situationId ?? trace.reasonCode
+      fallbackSituations.set(situationId, (fallbackSituations.get(situationId) ?? 0) + 1)
+    }
+  }
+  const totalDecisions = traces.length
+  const sourceRates = Object.fromEntries(sources.map((source) => [
+    source,
+    totalDecisions > 0 ? round(sourceCounts[source] / totalDecisions) : 0,
+  ])) as Record<NpcDecisionSource, number>
+  return {
+    totalDecisions,
+    sourceCounts,
+    sourceRates,
+    fallbackRate: round(sourceRates['legacy-fallback'] + sourceRates['safety-fallback']),
+    mostCommonFallbackSituations: [...fallbackSituations.entries()]
+      .map(([situationId, count]) => ({ situationId, count }))
+      .sort((left, right) => right.count - left.count || left.situationId.localeCompare(right.situationId))
+      .slice(0, 5),
+  }
+}
+
+function metricsFromCounters<TId extends string>(
+  counters: Partial<Record<TId, MetricCounter>>,
+): Partial<Record<TId, NpcObservedStrategyMetric>> {
+  return Object.fromEntries(Object.entries(counters).map(([id, value]) => {
+    const counter = value as MetricCounter
+    return [id, {
+      value: counter.opportunities > 0 ? round(counter.successes / counter.opportunities) : 0,
+      opportunities: counter.opportunities,
+      successes: counter.successes,
+    }]
+  })) as Partial<Record<TId, NpcObservedStrategyMetric>>
+}
+
+function addTeachingOpportunity(
+  metrics: EvidenceAccumulator['teachingMetrics'],
+  id: NpcTeachingObservedMetricId,
+  success: boolean,
+): void {
+  const counter = metrics[id] ?? { opportunities: 0, successes: 0 }
+  counter.opportunities += 1
+  if (success) counter.successes += 1
+  metrics[id] = counter
 }
 
 function analyzeHand(

@@ -104,7 +104,7 @@ export function StrategyCalibrationSummary({
           <strong>{validation.targetName} target</strong>
         </div>
         <span>{evidence
-          ? `${evidence.handCount} verified hands across ${evidence.matchIds.length} matches`
+          ? `${evidence.handCount} archived hands across ${evidence.matchIds.length} matches${evidence.handCount < 20 ? ' · insufficient sample' : ''}`
           : `${Math.round(validation.score * 100)}% of bounded metrics inside target`}</span>
       </div>
       <div className="strategy-metric-strip">
@@ -113,7 +113,7 @@ export function StrategyCalibrationSummary({
             <span>{metric.label}</span>
             <strong>{formatRate(metric.observedSource === 'verified-match' ? metric.observed : metric.value)}</strong>
             <small>{metric.observedSource === 'verified-match'
-              ? `verified n=${metric.observedSampleCount}`
+              ? `archived n=${metric.observedSampleCount}${metric.observedSampleCount < 20 ? ' · small sample' : ''}`
               : metric.band ? `${formatRate(metric.band.min)}-${formatRate(metric.band.max)}` : 'No band'}</small>
           </div>
         ))}
@@ -122,7 +122,7 @@ export function StrategyCalibrationSummary({
         <ul className="strategy-issue-list">
           {visibleIssues.map((issue) => <li className={issue.severity} key={issue.code}>{issue.message}</li>)}
         </ul>
-      ) : <p className="strategy-validation-clear">No target or configuration warnings in this calibration view.</p>}
+      ) : <p className="strategy-validation-clear">Configuration valid; no target or structural warnings in this view.</p>}
       {onOpenCalibration && <button type="button" onClick={onOpenCalibration}>Open full calibration</button>}
     </section>
   )
@@ -142,7 +142,7 @@ function StrategyEditorGuide() {
         <GuideItem term="C-bet / barrel / probe" text="A continuation bet follows prior-street initiative; a barrel continues betting later; a probe attacks after the previous aggressor declines to bet." />
         <GuideItem term="Texture and range advantage" text="Connected or suited boards change draw density. Range advantage estimates which player retains more strong combinations after the action history." />
         <GuideItem term="Effective stack and SPR" text="Only chips that can be contested matter. Lower stack-to-pot ratios increase commitment and reduce room for multi-street maneuvering." />
-        <GuideItem term="Validation" text="Projected rates come from configured ranges and bounded decision scenarios. Deterministic samples check stability; they are not a GTO solve or an all-game-tree calculation." />
+        <GuideItem term="Configuration review" text="Projected rates come from configured ranges and bounded decision scenarios. Deterministic samples check stability; they are not a GTO solve or an all-game-tree calculation." />
       </div>
     </details>
   )

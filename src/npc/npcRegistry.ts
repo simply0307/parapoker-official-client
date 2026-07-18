@@ -1,4 +1,10 @@
-import type { NpcDefinition, NpcDefinitionStatus, NpcStrategyProfile } from './config'
+import {
+  NPC_TEACHING_TENDENCY_IDS,
+  type NpcDefinition,
+  type NpcDefinitionStatus,
+  type NpcStrategyProfile,
+  type NpcTeachingProfile,
+} from './config'
 import { validatePostflopStrategy } from './postflopStrategy'
 import { validatePreflopStrategy } from './preflopRanges'
 import { LOCAL_NPC_DEFINITIONS, LOCAL_NPC_STRATEGY_PROFILES } from './roster'
@@ -203,9 +209,18 @@ export class IndexedDbNpcRegistryStore implements NpcRegistryStore {
         .map((profile) => this.put('strategyProfiles', profile)),
     )
     const existingDefinitions = await this.getAll<NpcDefinition>('definitions')
-    if (existingDefinitions.length === 0) {
-      await Promise.all(LOCAL_NPC_DEFINITIONS.map((definition) => this.put('definitions', definition)))
-    }
+    const existingById = new Map(existingDefinitions.map((definition) => [definition.id, definition]))
+    await Promise.all(LOCAL_NPC_DEFINITIONS.map((builtIn) => {
+      const existing = existingById.get(builtIn.id)
+      if (!existing) {
+        return this.put('definitions', builtIn)
+      }
+      const previousBuiltInProfileId = PREVIOUS_BUILT_IN_PROFILE_IDS[builtIn.id]
+      if (previousBuiltInProfileId && existing.strategyProfileId === previousBuiltInProfileId) {
+        return this.put('definitions', { ...existing, strategyProfileId: builtIn.strategyProfileId })
+      }
+      return Promise.resolve()
+    }))
   }
 
   private async put(storeName: StoreName, value: NpcDefinition | NpcStrategyProfile): Promise<void> {
@@ -297,11 +312,51 @@ export function normalizeStrategyProfile(profile: NpcStrategyProfile): NpcStrate
     ...profile,
     id,
     name,
+    ...(profile.teaching ? { teaching: normalizeTeachingProfile(profile.teaching) } : {}),
     calibrationTarget: normalizeNpcStrategyCalibrationTarget(profile.calibrationTarget),
   })
 }
 
+function normalizeTeachingProfile(teaching: NpcTeachingProfile): NpcTeachingProfile {
+  const teachingObjective = teaching.teachingObjective.trim()
+  if (!teachingObjective) {
+    throw new Error('NPC teaching profile requires a teaching objective.')
+  }
+  const conceptTags = [...new Set(teaching.conceptTags.map((tag) => tag.trim()).filter(Boolean))]
+  const intendedTendencies = teaching.intendedTendencies.map((tendency) => {
+    if (!NPC_TEACHING_TENDENCY_IDS.includes(tendency.id)) {
+      throw new Error(`Unknown NPC teaching tendency: ${tendency.id}`)
+    }
+    return {
+      id: tendency.id,
+      ...(tendency.note?.trim() ? { note: tendency.note.trim() } : {}),
+    }
+  })
+  if (teaching.fallbackWarningThreshold !== undefined &&
+      (!Number.isFinite(teaching.fallbackWarningThreshold) || teaching.fallbackWarningThreshold < 0 || teaching.fallbackWarningThreshold > 1)) {
+    throw new Error('NPC teaching fallback warning threshold must be between zero and one.')
+  }
+  return {
+    teachingObjective,
+    conceptTags,
+    intendedTendencies,
+    intentionallyExploitable: Boolean(teaching.intentionallyExploitable),
+    ...(teaching.playerLesson?.trim() ? { playerLesson: teaching.playerLesson.trim() } : {}),
+    ...(teaching.fallbackWarningThreshold !== undefined
+      ? { fallbackWarningThreshold: teaching.fallbackWarningThreshold }
+      : {}),
+  }
+}
+
 type StoreName = 'definitions' | 'strategyProfiles'
+
+const PREVIOUS_BUILT_IN_PROFILE_IDS: Record<string, string> = {
+  'npc-maven': 'strategy-balanced-caller-v4',
+  'npc-rook': 'strategy-pressure-raiser-v4',
+  'npc-quinn': 'strategy-board-watcher-v4',
+  'npc-sol': 'strategy-pot-controller-v4',
+  'npc-vega': 'strategy-value-hunter-v4',
+}
 
 function transaction<TResult = void>(
   db: IDBDatabase,
@@ -326,7 +381,7 @@ function transaction<TResult = void>(
 }
 
 function compareStrategyProfiles(left: NpcStrategyProfile, right: NpcStrategyProfile): number {
-  return left.name.localeCompare(right.name) || left.version - right.version
+  return left.name.localeCompare(right.name) || right.version - left.version
 }
 
 function clone<T>(value: T): T {

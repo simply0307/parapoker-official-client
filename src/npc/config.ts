@@ -2,6 +2,52 @@ import type { PositionLabel, SeatId } from '../poker-engine'
 import type { NpcPolicyConfig } from './basicNpc'
 
 export type NpcDefinitionStatus = 'draft' | 'active' | 'retired'
+export type NpcTeachingTendencyId =
+  | 'overfolds-blinds'
+  | 'calls-too-wide'
+  | 'raises-too-often'
+  | 'cbet-one-and-done'
+  | 'barrels-too-often'
+  | 'barrels-too-rarely'
+  | 'chases-draws'
+  | 'overvalues-top-pair'
+  | 'underbluffs-river'
+  | 'overbluffs-river'
+  | 'uses-small-sizing'
+  | 'uses-large-sizing'
+  | 'avoids-thin-value'
+  | 'traps-strong-hands'
+
+export const NPC_TEACHING_TENDENCY_IDS: NpcTeachingTendencyId[] = [
+  'overfolds-blinds',
+  'calls-too-wide',
+  'raises-too-often',
+  'cbet-one-and-done',
+  'barrels-too-often',
+  'barrels-too-rarely',
+  'chases-draws',
+  'overvalues-top-pair',
+  'underbluffs-river',
+  'overbluffs-river',
+  'uses-small-sizing',
+  'uses-large-sizing',
+  'avoids-thin-value',
+  'traps-strong-hands',
+]
+
+export interface NpcTeachingTendency {
+  id: NpcTeachingTendencyId
+  note?: string
+}
+
+export interface NpcTeachingProfile {
+  teachingObjective: string
+  conceptTags: string[]
+  intendedTendencies: NpcTeachingTendency[]
+  intentionallyExploitable: boolean
+  playerLesson?: string
+  fallbackWarningThreshold?: number
+}
 export type NpcStrategyTargetPresetId =
   | 'balanced'
   | 'pressure'
@@ -182,6 +228,7 @@ export interface NpcStrategyProfile {
   description?: string
   status: NpcDefinitionStatus
   difficulty: 'steady'
+  teaching?: NpcTeachingProfile
   modules: NpcStrategyModule[]
   calibrationTarget?: NpcStrategyCalibrationTarget
   policyConfig: NpcPolicyConfig

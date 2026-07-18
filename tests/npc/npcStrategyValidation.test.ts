@@ -71,6 +71,14 @@ describe('NPC strategy validation', () => {
       metrics: {
         'preflop.vpip': { value: 0.4, opportunities: 40, successes: 16 },
       },
+      teachingMetrics: {},
+      decisionCoverage: {
+        totalDecisions: 0,
+        sourceCounts: {},
+        sourceRates: {},
+        fallbackRate: 0,
+        mostCommonFallbackSituations: [],
+      },
     }
 
     const report = validateNpcStrategyBehavior(profile, undefined, evidence)

@@ -198,7 +198,7 @@ export function validateNpcStrategyBehavior(
   })
   const issues = [
     ...metrics.flatMap((metric) => metricIssue(metric)),
-    ...configurationIssues(profile, calibration),
+    ...configurationIssues(profile, calibration, evidence),
   ]
   const bounded = metrics.filter((metric) => metric.status !== 'unbounded')
   const inside = bounded.filter((metric) => metric.status === 'inside').length
@@ -222,6 +222,7 @@ export function validateNpcStrategyBehavior(
 function configurationIssues(
   profile: NpcStrategyProfile,
   calibration: NpcStrategyCalibrationReport,
+  evidence?: NpcObservedStrategyEvidence,
 ): NpcStrategyValidationIssue[] {
   const issues: NpcStrategyValidationIssue[] = []
   const postflop = profile.postflopStrategy
@@ -231,6 +232,17 @@ function configurationIssues(
   if (!postflop) {
     issues.push(issue('missing-postflop', 'error', 'postflop', 'No postflop strategy is available for calibration.'))
     return issues
+  }
+  const fallbackThreshold = profile.teaching?.fallbackWarningThreshold
+  if (fallbackThreshold !== undefined && evidence?.decisionCoverage &&
+      evidence.decisionCoverage.totalDecisions >= 20 &&
+      evidence.decisionCoverage.fallbackRate > fallbackThreshold) {
+    issues.push(issue(
+      'fallback-coverage-high',
+      'warning',
+      'modules',
+      `Fallback coverage is ${Math.round(evidence.decisionCoverage.fallbackRate * 100)}%, above the configured ${Math.round(fallbackThreshold * 100)}% review threshold.`,
+    ))
   }
   if (postflop.thresholds.thinValueStrength > postflop.thresholds.valueBetStrength) {
     issues.push(issue('thin-value-order', 'error', 'postflop', 'Thin-value strength must not exceed the normal value-bet threshold.'))

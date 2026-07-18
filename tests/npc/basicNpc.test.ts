@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BasicNpcPolicy, createNpcDecisionContext } from '../../src/npc/basicNpc'
+import { traceContainsRestrictedState } from '../../src/npc/npcDecisionTrace'
 import { createPostflopStrategy } from '../../src/npc/postflopStrategy'
 import { updateNpcRangeMemory } from '../../src/npc/rangeTracking'
 import { createRng } from '../../src/shared/rng'
@@ -52,11 +53,18 @@ describe('basic NPC policy', () => {
 
     const view = getSeatView(afterHumanCall.state, 'npc-1')
     const context = createNpcDecisionContext(view, createRng('npc-test'))
-    const command = new BasicNpcPolicy().chooseAction(context)
-    const result = applyAction(afterHumanCall.state, command)
+    const decision = new BasicNpcPolicy().chooseDecision(context)
+    const result = applyAction(afterHumanCall.state, decision.command)
 
     expect(result.ok).toBe(true)
-    expect(command.seatId).toBe('npc-1')
+    expect(decision.command.seatId).toBe('npc-1')
+    expect(decision.trace).toEqual(expect.objectContaining({
+      schemaVersion: 'npc-decision-trace-v1',
+      seatId: 'npc-1',
+      selectedAction: decision.command.type,
+      decisionSource: 'legacy-fallback',
+    }))
+    expect(traceContainsRestrictedState(decision.trace)).toBe(false)
     expect(JSON.stringify(view)).not.toContain('deck')
     expect(JSON.stringify(view)).not.toContain('rngState')
   })
@@ -211,11 +219,95 @@ describe('basic NPC policy', () => {
       frequencies: { cBetFlop: 1, pureBluff: 0 },
       sizing: { dryFlopPotFraction: 0.45 },
     })
-    const command = new BasicNpcPolicy().chooseAction(
+    const decision = new BasicNpcPolicy().chooseDecision(
       createNpcDecisionContext(view, createRng('configured-cbet'), {}, memory, undefined, strategy),
     )
 
-    expect(command).toEqual({ type: 'bet', seatId: 'npc-1', amount: 5, source: 'npc' })
+    expect(decision.command).toEqual({ type: 'bet', seatId: 'npc-1', amount: 5, source: 'npc' })
+    expect(decision.trace).toEqual(expect.objectContaining({
+      decisionSource: 'proactive-postflop',
+      situationId: 'continuationBet',
+      reasonCode: 'continuationBet',
+    }))
+  })
+
+  it('records the check portion of an explicit c-bet frequency without falling back', () => {
+    let state = mustStart([
+      c('Q', 'clubs'),
+      c('7', 'spades'),
+      c('J', 'hearts'),
+      c('2', 'hearts'),
+      c('A', 'clubs'),
+      c('K', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('9', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    state = mustApply(state, { type: 'bet', seatId: 'npc-1', amount: 6, source: 'npc' })
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    const view = getSeatView(state, 'npc-1')
+    const memory = updateNpcRangeMemory({}, view)
+    const strategy = createPostflopStrategy({
+      id: 'integration-check-cbet',
+      aggression: 0,
+      frequencies: { cBetFlop: 0, pureBluff: 0 },
+    })
+    const decision = new BasicNpcPolicy().chooseDecision(createNpcDecisionContext(
+      view,
+      { next: () => 0.99, state: () => 99 },
+      {},
+      memory,
+      undefined,
+      strategy,
+    ))
+
+    expect(decision.command).toEqual({ type: 'check', seatId: 'npc-1', source: 'npc' })
+    expect(decision.trace).toEqual(expect.objectContaining({
+      decisionSource: 'proactive-postflop',
+      situationId: 'continuationBet',
+      reasonCode: 'continuationBet-declined',
+    }))
+    expect(decision.trace.probability).toBe(0)
+    expect(decision.trace.rngRoll).toBeUndefined()
+  })
+
+  it('turns configured sizing into different legal amounts through the live policy path', () => {
+    let state = mustStart([
+      c('Q', 'clubs'),
+      c('7', 'spades'),
+      c('J', 'hearts'),
+      c('2', 'hearts'),
+      c('A', 'clubs'),
+      c('K', 'diamonds'),
+      c('4', 'spades'),
+      c('8', 'hearts'),
+      c('9', 'clubs'),
+    ])
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    state = mustApply(state, { type: 'bet', seatId: 'npc-1', amount: 6, source: 'npc' })
+    state = mustApply(state, { type: 'call', seatId: 'human', source: 'human' })
+    const view = getSeatView(state, 'npc-1')
+    const memory = updateNpcRangeMemory({}, view)
+    const policy = new BasicNpcPolicy()
+    const strategy = (potFraction: number) => createPostflopStrategy({
+      id: `integration-size-${potFraction}`,
+      aggression: 0.5,
+      frequencies: { cBetFlop: 1, pureBluff: 0 },
+      sizing: { dryFlopPotFraction: potFraction },
+    })
+    const small = policy.chooseDecision(createNpcDecisionContext(
+      view, { next: () => 0, state: () => 0 }, {}, memory, undefined, strategy(0.35),
+    ))
+    const large = policy.chooseDecision(createNpcDecisionContext(
+      view, { next: () => 0, state: () => 0 }, {}, memory, undefined, strategy(0.8),
+    ))
+
+    expect(small.command.type).toBe('bet')
+    expect(large.command.type).toBe('bet')
+    expect('amount' in small.command && 'amount' in large.command && large.command.amount > small.command.amount).toBe(true)
+    expect(small.trace.configuredValues).toEqual(expect.objectContaining({ baseFrequency: 1 }))
+    expect(large.trace.calculatedValues).toEqual(expect.objectContaining({ potFraction: 0.8 }))
   })
 
   it('continues postflop with a strong draw at a fair price', () => {

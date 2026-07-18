@@ -11,8 +11,8 @@ describe('NPC strategy editing foundation', () => {
     const source = structuredClone(LOCAL_NPC_STRATEGY_PROFILES[0])
     const draft = createStrategyProfileVersionDraft(source)
 
-    expect(draft.id).toBe('strategy-balanced-caller-custom-v5')
-    expect(draft.version).toBe(5)
+    expect(draft.id).toBe('strategy-balanced-caller-custom-v6')
+    expect(draft.version).toBe(6)
     expect(draft.status).toBe('draft')
     expect(draft.preflopStrategy?.version).toBe((source.preflopStrategy?.version ?? 0) + 1)
     expect(draft.postflopStrategy?.version).toBe((source.postflopStrategy?.version ?? 0) + 1)

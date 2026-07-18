@@ -34,8 +34,8 @@ describe('game blueprint configuration', () => {
         seatId: 'npc-1',
         kind: 'npc',
         npcDefinitionId: 'npc-vega',
-        npcStrategyProfileId: 'strategy-value-hunter-v4',
-        npcStrategyProfileVersion: 4,
+        npcStrategyProfileId: 'strategy-value-hunter-v5',
+        npcStrategyProfileVersion: 5,
       },
     ])
     expect(npcLineupForBlueprint(blueprint)).toEqual([{ seatId: 'npc-1', npcDefinitionId: 'npc-vega' }])

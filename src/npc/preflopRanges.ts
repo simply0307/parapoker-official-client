@@ -70,6 +70,7 @@ export interface PreflopRangeDecision {
   spot: PreflopSpot
   selectedAction: NpcPreflopAction
   legalFrequencies: NpcPreflopActionFrequency[]
+  rngRoll: number
 }
 
 export function allPreflopHandClasses(): string[] {
@@ -319,12 +320,13 @@ export function choosePreflopRangeDecision(input: PreflopDecisionInput): Preflop
   if (legalFrequencies.length === 0) {
     return undefined
   }
-  const selectedAction = selectMixedAction(legalFrequencies, input.rng.next())
+  const rngRoll = input.rng.next()
+  const selectedAction = selectMixedAction(legalFrequencies, rngRoll)
   const command = commandFor(selectedAction, input.view, input.legalActions, input.strategy.sizing, spot)
   if (!command) {
     return undefined
   }
-  return { command, nodeId: node.id, handClass, spot, selectedAction, legalFrequencies }
+  return { command, nodeId: node.id, handClass, spot, selectedAction, legalFrequencies, rngRoll }
 }
 
 export function validatePreflopStrategy(strategy: NpcPreflopStrategy): void {
